@@ -63,6 +63,7 @@ namespace gucci::mcp::events {
             std::string report;
             bool reportOk = false;
             std::string render;  // the last render's record, as one string
+            bool rendering = false;  // a render was running
         };
         Seen g;
 
@@ -278,11 +279,24 @@ namespace gucci::mcp::events {
             g.reportOk = gb->fwAcOk;
         }
         {
+            // A render's start says "started": the record takes the new path
+            // then, while success still holds the last render's answer, which
+            // read as a "failed" (or a "finished") the moment a render began.
+            // "finished"/"failed" come once it has stopped and said which.
+            bool const rendering = SLRenderer::get()->isRecording();
             auto const& r = SLRenderer::get()->m_lastRender;
+            if (rendering != g.rendering) {
+                if (!first && rendering) {
+                    auto data = matjson::Value::object();
+                    data["path"] = r.path;
+                    add("render", "started", data);
+                }
+                g.rendering = rendering;
+            }
             std::string const key =
                 fmt::format("{}|{}|{}|{}|{}", r.success, r.path, r.fileSize, r.duration, r.width);
             if (key != g.render) {
-                if (!first && (!r.path.empty() || r.pending)) {
+                if (!first && !rendering && (!r.path.empty() || r.pending)) {
                     auto data = matjson::Value::object();
                     data["success"] = r.success;
                     data["path"] = r.path;

@@ -12,6 +12,7 @@
 //     run that has gone wrong while it is still wrong.
 
 #include "core/platform.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "mcp_server.hpp"
 
 #include "analysis/ac/framewindow.hpp"
@@ -234,7 +235,7 @@ namespace gucci::mcp {
         }
 
         fs::path screenshotsDir() {
-            auto const dir = Mod::get()->getSaveDir() / "screenshots";
+            auto const dir = gucci::stdPath(Mod::get()->getSaveDir()) / "screenshots";
             std::error_code ec;
             fs::create_directories(dir, ec);
             if (ec)
@@ -542,6 +543,9 @@ namespace gucci::mcp {
 
                 out["macro"] = gb->replay.m_replayName;
                 out["macro_actions"] = (int64_t)gb->replay.m_actionAtom.length();
+                out["macro_gd_version"] = gb->replay.m_madeOnGd;
+                out["macro_gb_version"] = gb->replay.m_madeWithGb;
+                out["gd_version_warning"] = gb->replay.gdVersionWarning();
                 out["macro_input_index"] = (int64_t)gb->replay.m_inputIndex;
 
                 auto* pl = PlayLayer::get();
@@ -731,7 +735,7 @@ namespace gucci::mcp {
                             e["name"] = it.path().stem().string();
                             e["ext"] = it.path().extension().string();
                         } catch (std::system_error const&) {
-                            unspellable.push(geode::utils::string::pathToString(it.path().filename()));
+                            unspellable.push(gucci::pathToString(it.path().filename()));
                             ++unspellableCount;
                             continue;
                         }
@@ -741,7 +745,7 @@ namespace gucci::mcp {
                     }
                 }
                 auto out = obj();
-                out["dir"] = geode::utils::string::pathToString(dir);
+                out["dir"] = gucci::pathToString(dir);
                 out["macros"] = arr;
                 if (unspellableCount > 0)
                     out["skipped_unspellable"] = unspellable;
@@ -805,7 +809,7 @@ namespace gucci::mcp {
                     if (name.size() < 4 || name.substr(name.size() - 4) != ".log")
                         throw ToolError("file must end in .log");
 
-                    auto path = Mod::get()->getSaveDir() / name;
+                    auto path = gucci::stdPath(Mod::get()->getSaveDir()) / name;
                     std::ifstream in(path);
                     if (!in.is_open())
                         throw ToolError("no such log: " + path.string());
@@ -895,7 +899,7 @@ namespace gucci::mcp {
                         st["pending"] = s.pending;
                         st["armed"] = s.armed;
                         st["frames_left"] = (int64_t)s.framesLeft;
-                        st["path"] = geode::utils::string::pathToString(s.path);
+                        st["path"] = gucci::pathToString(s.path);
                         st["width"] = (int64_t)s.width;
                         st["height"] = (int64_t)s.height;
                         st["ms"] = s.ms;
@@ -905,9 +909,9 @@ namespace gucci::mcp {
                         if (s.count > 1 || !s.manifest.empty()) {
                             auto files = matjson::Value::array();
                             for (auto const& f : s.files)
-                                files.push(geode::utils::string::pathToString(f));
+                                files.push(gucci::pathToString(f));
                             st["files"] = files;
-                            st["manifest"] = geode::utils::string::pathToString(s.manifest);
+                            st["manifest"] = gucci::pathToString(s.manifest);
                         }
                         return st;
                     };
@@ -1027,9 +1031,9 @@ namespace gucci::mcp {
                                     },
                                     {}, 3000};
                     out["pending"] = true;
-                    out["path"] = geode::utils::string::pathToString(first);
+                    out["path"] = gucci::pathToString(first);
                     if (b.manifest)
-                        out["manifest"] = geode::utils::string::pathToString(b.dir / (name + ".json"));
+                        out["manifest"] = gucci::pathToString(b.dir / (name + ".json"));
                     out["count"] = (int64_t)b.count;
                     out["armed"] = b.trigger != shot::Trigger::Now;
                     return out;
@@ -1425,7 +1429,7 @@ namespace gucci::mcp {
                                 if (!s.ok)
                                     throw ToolError("a shot failed: " + s.error);
                                 auto f = obj();
-                                f["path"] = geode::utils::string::pathToString(st->path);
+                                f["path"] = gucci::pathToString(st->path);
                                 f["scroll_y"] = std::round(st->shotScroll);
                                 f["rect"] = std::vector<double>{st->shotRect.x, st->shotRect.y, st->shotRect.z,
                                                                 st->shotRect.w};
@@ -1447,8 +1451,8 @@ namespace gucci::mcp {
                                     out["overlap"] = st->overlap;
                                     auto const manifest = st->dir / (st->shots + ".json");
                                     if (auto r = geode::utils::file::writeString(manifest, out.dump()); !r)
-                                        throw ToolError("couldn't write the manifest: " + r.unwrapErr());
-                                    out["manifest"] = geode::utils::string::pathToString(manifest);
+                                        throw ToolError("couldn't write the manifest: " + std::string(r.unwrapErr()));
+                                    out["manifest"] = gucci::pathToString(manifest);
                                     return out;
                                 }
                                 ui::probe::scrollTo(st->name, st->shotScroll + st->step);
@@ -2153,7 +2157,7 @@ namespace gucci::mcp {
                     // turns anything else down and keeps the macro before,
                     // which this answered as loaded.
                     auto const dir = GucciEngine::get()->getReplayDir();
-                    auto const utf8 = [](fs::path const& p) { return geode::utils::string::pathToString(p); };
+                    auto const utf8 = [](fs::path const& p) { return gucci::pathToString(p); };
                     auto const isGbr6 = [](fs::path const& p) {
                         std::ifstream f(p, std::ios::binary);
                         char magic[4] = {};
@@ -2302,6 +2306,14 @@ namespace gucci::mcp {
                 out["player1"] = playerJson(pl->m_player1);
                 if (pl->m_gameState.m_isDualMode && pl->m_player2)
                     out["player2"] = playerJson(pl->m_player2);
+                // The checkpoints a respawn could go back to: GucciBot's
+                // platformer and practice stacks, and GD's own array.
+                auto cps = obj();
+                auto const& pf = GucciEngine::get()->practiceFix;
+                cps["platformer"] = (int64_t)pf.m_platformerCheckpoints.size();
+                cps["practice"] = (int64_t)pf.m_savedCheckpoints.size();
+                cps["gd_array"] = (int64_t)(pl->m_checkpointArray ? pl->m_checkpointArray->count() : 0);
+                out["checkpoints"] = cps;
                 return out;
             },
         });
@@ -2648,7 +2660,7 @@ namespace gucci::mcp {
                     auto name = argStr(a, "name", "dump");
                     for (char& c : name)
                         if (!std::isalnum((unsigned char)c) && c != '_' && c != '-') c = '_';
-                    auto const path = Mod::get()->getSaveDir() / ("zz_gbtest_objects_" + name + ".txt");
+                    auto const path = gucci::stdPath(Mod::get()->getSaveDir()) / ("zz_gbtest_objects_" + name + ".txt");
                     std::ofstream f(path, std::ios::trunc);
                     int64_t i = 0;
                     if (pl->m_objects) {
@@ -2751,7 +2763,9 @@ namespace gucci::mcp {
             schemaOf({{"press", "boolean", "true to press, false to release (default true)"},
                       {"player2", "boolean", "player 2 instead of 1 (default false)"},
                       {"key", "boolean", "send Space (with player2: the Up arrow) through the keyboard "
-                                         "dispatcher (default false)"}}),
+                                         "dispatcher (default false)"},
+                      {"button", "integer", "without key: 1 jump (the default), 2 left, 3 right (platformer "
+                                            "walking)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 auto* pl = requireLevel();
@@ -2778,9 +2792,13 @@ namespace gucci::mcp {
                 // player2 is the player, queued on the side that moves it
                 // (see sideFor; Flip 2-Player Controls swaps them outside
                 // platformer).
-                pl->queueButton(1, press, GucciEngine::get()->replay.sideFor(pl, p2), 0.0);
+                int const button = (int)argInt(a, "button", 1);
+                if (button < 1 || button > 3)
+                    throw ToolError("button is 1 (jump), 2 (left) or 3 (right)");
+                pl->queueButton(button, press, GucciEngine::get()->replay.sideFor(pl, p2), 0.0);
                 auto out = obj();
                 out["queued"] = press ? "press" : "release";
+                out["button"] = (int64_t)button;
                 out["player2"] = p2;
                 out["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
                 return out;
@@ -3084,6 +3102,14 @@ namespace gucci::mcp {
                 which["description"] = "read: \"reference\" for the saved run (default: the recording)";
                 props["which"] = which;
             }
+            {
+                // For comparing runs across builds or GD versions (the 2.2081 vs 2.2091 macro traces): every
+                // number in its shortest exact form instead of rounded, so a drift shows from its first bit.
+                auto exact = obj();
+                exact["type"] = "boolean";
+                exact["description"] = "read: every number exact (shortest round-trip form) instead of rounded";
+                props["exact"] = exact;
+            }
             schema["type"] = "object";
             schema["properties"] = props;
             schema["required"] = std::vector<std::string>{"action"};
@@ -3109,6 +3135,15 @@ namespace gucci::mcp {
                                                      s.yVel2, s.mode2, (int)s.flags2)
                                        : std::string());
                     };
+                    auto fmtExact = [](uint32_t f, tickprobe::Sample const& s) {
+                        return fmt::format("{} x={} y={} vy={} r={}{}{} {} dt={}{} xd={} hid={:02x} rings={} btn=+{}-{}",
+                                           f, s.x, s.y, s.yVel, s.rot, s.held ? " H" : "", s.onGround ? " G" : "",
+                                           s.mode, s.dt, s.split ? " SPLIT" : "", s.extraDelta, s.hidden, s.rings,
+                                           s.pushes, s.releases) +
+                               (s.dual ? fmt::format(" | P2 x={} y={} vy={} {} f2={}", s.x2, s.y2, s.yVel2, s.mode2,
+                                                     (int)s.flags2)
+                                       : std::string());
+                    };
                     auto range = [](std::map<uint32_t, tickprobe::Sample> const& m) {
                         auto r = obj();
                         r["ticks"] = (int64_t)m.size();
@@ -3131,10 +3166,11 @@ namespace gucci::mcp {
                         size_t count = 0;
                         // `which`: "reference" reads the saved run instead.
                         auto const& src = argStr(a, "which") == "reference" ? tickprobe::saved : tickprobe::current;
+                        bool const exact = argBool(a, "exact", false);
                         for (auto const& [f, s] : src) {
                             if ((int64_t)f < from || (int64_t)f > to || ((int64_t)f - from) % every != 0)
                                 continue;
-                            rows.push(fmtSample(f, s));
+                            rows.push(exact ? fmtExact(f, s) : fmtSample(f, s));
                             if (++count >= 400)
                                 break;
                         }
@@ -3287,7 +3323,7 @@ namespace gucci::mcp {
             "the game or test the pathfinder on a list of levels.",
             schemaOf({{"name", "string", "a local level's name, exactly"},
                       {"id", "integer", "an online level's ID (instead of name)"},
-                      {"main", "integer", "one of RobTop's levels, 1 to 22 (instead of name)"}}),
+                      {"main", "integer", "one of RobTop's levels, 1 to 22, or The Tower's 5001 to 5004 (instead of name)"}}),
             [](matjson::Value const& a) {
                 if (PlayLayer::get() || LevelEditorLayer::get())
                     throw ToolError("leave the level (or the editor) first");
@@ -3299,8 +3335,10 @@ namespace gucci::mcp {
                 // 8, the secret coins collected).
                 if (a.contains("main")) {
                     int64_t const id = argInt(a, "main", 0);
-                    if (id < 1 || id > 22)
-                        throw ToolError("main is 1 to 22 (Stereo Madness to Dash)");
+                    // 5001 to 5004: The Tower's floors (platformer levels GD
+                    // also builds from its own files).
+                    if ((id < 1 || id > 22) && (id < 5001 || id > 5004))
+                        throw ToolError("main is 1 to 22 (Stereo Madness to Dash) or 5001 to 5004 (The Tower)");
                     auto* glm = GameLevelManager::get();
                     auto* level = glm ? glm->getMainLevel((int)id, false) : nullptr;
                     if (!level)
@@ -3310,7 +3348,7 @@ namespace gucci::mcp {
                     if (level->m_requiredCoins > coins)
                         throw ToolError(fmt::format("{} is locked: it needs {} secret coins and this account has {}",
                                                     std::string(level->m_levelName), level->m_requiredCoins, coins));
-                    auto* scene = PlayLayer::scene(level, false, false);
+                    auto* scene = gucci::playLayerScene<PlayLayer>(level);
                     CCDirector::sharedDirector()->replaceScene(CCTransitionFade::create(0.5f, scene));
                     auto out = obj();
                     out["main"] = id;
@@ -3336,7 +3374,7 @@ namespace gucci::mcp {
                         out["downloading"] = true;
                         return out;
                     }
-                    auto* scene = PlayLayer::scene(level, false, false);
+                    auto* scene = gucci::playLayerScene<PlayLayer>(level);
                     CCDirector::sharedDirector()->replaceScene(CCTransitionFade::create(0.5f, scene));
                     out["opening"] = std::string(level->m_levelName);
                     return out;
@@ -3354,7 +3392,7 @@ namespace gucci::mcp {
                 }
                 if (!found)
                     throw ToolError("no local level called \"" + name + "\"");
-                auto* scene = PlayLayer::scene(found, false, false);
+                auto* scene = gucci::playLayerScene<PlayLayer>(found);
                 CCDirector::sharedDirector()->replaceScene(CCTransitionFade::create(0.5f, scene));
                 auto out = obj();
                 out["opening"] = name;

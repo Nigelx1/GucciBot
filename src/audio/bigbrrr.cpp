@@ -1,4 +1,5 @@
 #include <cstdio>
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "audio/bigbrrr.hpp"
 #include "audio/gameaudiomute.hpp"
 #include "ui/ui.hpp"
@@ -48,7 +49,7 @@ namespace gucci {
     }
 
     std::filesystem::path BigBrrrManager::getBrrrDir() const {
-        return Mod::get()->getSaveDir() / "brrr";
+        return gucci::stdPath(Mod::get()->getSaveDir()) / "brrr";
     }
 
     void BigBrrrManager::openBrrrFolder() {
@@ -61,7 +62,7 @@ namespace gucci {
     static bool isPlayableAudioFile(std::filesystem::path const& p) {
         // Not path.string(): on Windows it throws for a name the ANSI code
         // page can't spell, and this runs over every file in the folder.
-        auto ext = geode::utils::string::pathToString(p.extension());
+        auto ext = gucci::pathToString(p.extension());
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         return ext == ".mp3" || ext == ".wav" || ext == ".ogg";
     }
@@ -117,7 +118,7 @@ namespace gucci {
                 std::string themeTrack = ui::activeThemeAudio().file;
                 if (themeTrack.empty())
                     themeTrack = "big_brrr.mp3";
-                auto bundled = Mod::get()->getResourcesDir() / themeTrack;
+                auto bundled = gucci::stdPath(Mod::get()->getResourcesDir()) / themeTrack;
                 if (std::filesystem::exists(bundled, ec))
                     path = bundled;
             }
@@ -134,7 +135,7 @@ namespace gucci {
         }
 
         // FMOD takes UTF-8 file names (path.string() is the ANSI code page).
-        std::string const name = geode::utils::string::pathToString(path);
+        std::string const name = gucci::pathToString(path);
         if (system->createSound(
                 name.c_str(), FMOD_CREATESAMPLE | FMOD_LOOP_NORMAL, nullptr, &sound) !=
                 FMOD_OK ||
@@ -146,7 +147,7 @@ namespace gucci {
         sound->setMode(FMOD_LOOP_NORMAL);
         system->playSound(sound, nullptr, false, &channel);
         if (channel) {
-            track = geode::utils::string::pathToString(path.filename());
+            track = gucci::pathToString(path.filename());
             channel->setVolume(1.f);
             channel->setPosition((unsigned int)(kStartOffsetSec() * 1000.0), FMOD_TIMEUNIT_MS);
             GameAudioMute::acquire();

@@ -107,7 +107,7 @@ namespace world {
     X(interpRelatedTrue, m_someInterpValue2RelatedTrue)       \
     X(unk204, m_unkInt204)
 
-#ifdef GEODE_IS_WINDOWS // Windows layouts only (core/platform.hpp)
+#if GB_WORLD_LAYOUTS // Windows layouts only (core/platform.hpp)
 #define WORLD_CMD_OFFSET(field, member) \
     static_assert(offsetof(WCmd, field) == offsetof(GroupCommandObject2, member), "WCmd." #field);
 WORLD_CMD_FIELDS(WORLD_CMD_OFFSET)
@@ -281,7 +281,7 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
     // key order already).
     {
         std::vector<WEventListener> events;
-        for (const auto& [key, list] : gs.m_unkMapPairGJGameEventIntVectorEventTriggerInstance) {
+        for (const auto& [key, list] : gs.GB_FIELD(m_unkMapPairGJGameEventIntVectorEventTriggerInstance, m_gameEventTriggers)) {
             for (const EventTriggerInstance& e : list) {
                 WEventListener w;
                 w.event = (int)key.first;
@@ -296,7 +296,7 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
         }
         importShared(ws.eventListeners, std::move(events), lastEvents);
         std::vector<WEventStamp> stamps;
-        for (const auto& [key, index] : gs.m_unkMapPairGJGameEventIntInt) {
+        for (const auto& [key, index] : gs.GB_FIELD(m_unkMapPairGJGameEventIntInt, m_gameEventCounts)) {
             stamps.push_back(WEventStamp{(int)key.first, key.second, index});
         }
         importShared(ws.eventStamps, std::move(stamps), lastStamps);

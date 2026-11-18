@@ -8,6 +8,7 @@
 // Written fresh for 2.0.
 
 #include "ui/kit.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include "ui/look.hpp"
 #include "ui/search.hpp"
 #include "ui/ui.hpp"
@@ -106,7 +107,7 @@ namespace gucci::ui::pages {
             Picked got;
             got.ready = true;
             if (result.isOk())
-                got.path = std::move(result).unwrap();
+                got.path = gucci::stdPath(std::move(result).unwrap());
             else
                 got.error = std::move(result).unwrapErr();
             geode::queueInMainThread([got = std::move(got)]() mutable {

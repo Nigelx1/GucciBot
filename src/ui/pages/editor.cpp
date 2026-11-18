@@ -973,6 +973,15 @@ namespace gucci::ui::pages {
                     ImGui::SameLine();
                     kit::Chip(gb->replayName.c_str(), Tone::Plain);
                 }
+                // The GD version it was made on, when the file says: warm
+                // when it isn't this one (2026-11-17).
+                if (!gb->replay.m_madeOnGd.empty()) {
+                    auto const gdWarn = gb->replay.gdVersionWarning();
+                    ImGui::SameLine();
+                    kit::Chip(("GD " + gb->replay.m_madeOnGd).c_str(), gdWarn.empty() ? Tone::Muted : Tone::Warn);
+                    if (!gdWarn.empty() && ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s", gdWarn.c_str());
+                }
             }
             kit::Gap(0.3f);
 

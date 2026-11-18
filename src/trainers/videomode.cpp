@@ -2,6 +2,7 @@
 // videomode.hpp for the shape of it.
 
 #include "render/gl_compat.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "trainers/videomode.hpp"
 
 #include "core/GucciBot.hpp"
@@ -63,7 +64,7 @@ namespace gucci::videomode {
 
         fs::path pathOf(Source s) {
             if (s == Source::Jmf)
-                return Mod::get()->getResourcesDir() / kVideoFile;
+                return gucci::stdPath(Mod::get()->getResourcesDir()) / kVideoFile;
             return fromUtf8(GucciEngine::get()->trainerVideoPath);
         }
 
@@ -97,7 +98,7 @@ namespace gucci::videomode {
             std::lock_guard lock(g_logMutex);
             auto const mode = g_logStarted ? std::ios::app : std::ios::trunc;
             g_logStarted = true;
-            std::ofstream f(Mod::get()->getSaveDir() / "guccibot_videomode.log", std::ios::out | mode);
+            std::ofstream f(gucci::stdPath(Mod::get()->getSaveDir()) / "guccibot_videomode.log", std::ios::out | mode);
             if (f)
                 f << text << '\n';
         }
@@ -143,7 +144,7 @@ namespace gucci::videomode {
             else if (!fs::exists(path, ec))
                 why = bundled ? fmt::format("{} isn't in the mod's resources folder.", kVideoFile)
                               : fmt::format("The video isn't there any more: {}",
-                                            geode::utils::string::pathToString(path));
+                                            gucci::pathToString(path));
             else if (!decoder.open(path))
                 why = "FFmpeg couldn't open the video. The Geode log has its reason.";
 
@@ -162,7 +163,7 @@ namespace gucci::videomode {
             }
             // UTF-8 for the log. path.string() throws on Windows for a name the
             // ANSI code page can't spell, and on this thread that ends the game.
-            std::string const name = geode::utils::string::pathToString(path);
+            std::string const name = gucci::pathToString(path);
             if (!why.empty()) {
                 logLine("open failed: " + why + " (" + name + ")");
                 return;

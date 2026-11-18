@@ -1,4 +1,5 @@
 #include "core/platform.hpp"
+#include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 #include "core/GucciBot.hpp"
 #include "core/standdown.hpp"
 #include "render/renderer.hpp"
@@ -22,11 +23,13 @@
 #include "hacks/hitboxes.hpp"
 #include "hacks/hitborders.hpp"
 #include "hacks/noclip_accuracy.hpp"
+#include "hacks/safemode.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/binding/EndLevelLayer.hpp>
 #if GB_NATIVE_ENGINE
 #include <safetyhook.hpp>
 #else
@@ -134,6 +137,12 @@ namespace {
                Pathfinder::get()->active || absense::judge::active() || gucci::ai::job::holdsGame();
     }
 
+    // True for the length of PlayLayer::resetLevelFromStart: a restart from
+    // the start (the end screen's Replay and every full reset go through it,
+    // as does leaving practice and the pause menu's full restart), never back
+    // to a platformer checkpoint. Read by handleResetWithCheckpoints.
+    bool g_resetFromStart = false;
+
 #if !GB_NATIVE_ENGINE
     // The R / Shift+R restart keeping a held mouse or touch, off Windows
     // (GBPortableRestartHold, at the end of this file; Windows does it with
@@ -201,7 +210,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         addToSection(obj->m_physicalCheckpointObject);
         if (this->m_activatedCheckpoint) {
             gb->practiceFix.m_platformerCheckpoints.push_back(
-                std::make_pair(obj, (CheckpointObject*)this->m_activatedCheckpoint));
+                std::make_pair(obj, this->m_activatedCheckpoint));
             return;
         }
         // Captured here, in the same instant GD built `obj`, and labelled with
@@ -305,7 +314,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             removeCheckpoint(false);
     }
 
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
         auto* gb = GucciEngine::get();
         // GucciBot (2026-10-23): Silicate's PlayLayer::init and onQuit both
         // clear the practice fix's lists of the level's objects (removeAll);
@@ -320,7 +329,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         gucci::SLRenderer::get()->m_quittingLayer = nullptr;  // a new level (see onQuit)
         ++gucci::SLRenderer::get()->m_levelGen;  // and a new one for drawScene's check
         if (!gb->enabled)
-            return PlayLayer::init(level, useReplay, dontCreateObjects);
+            return PlayLayer::init(GB_PLAYLAYER_INIT_ARGS);
 
         gb->practiceFix.clearStoredFrames();
         gb->practiceFix.clearPlatformer(false);
@@ -331,7 +340,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // A new level's attempts start from none (countGdAttempts); GD's
         // first one, if it counts it during init, is counted just below.
         g_attemptsSeen = 0;
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         countGdAttempts(this, !gb->isPlaying());
 
@@ -410,7 +419,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             gb->practiceFix.clearPlatformer(true);
             resetLevel();
         } else if (upd.m_expectsDeath) {
-            if (auto* ell = getChildByID("EndLevelLayer"))
+            if (auto* ell = getChildByType<EndLevelLayer>(0))  // see resetLevel
                 ell->removeFromParent();
             m_gameState.m_totalTime = 0.0;
             m_gameState.m_levelTime = 0.0;
@@ -423,7 +432,15 @@ class $modify(GB7PlayLayer, PlayLayer) {
             gb->practiceFix.clearPlatformer(true);
             resetLevel();
         } else {
+            // A full reset is a restart from the start. GD's fullReset calls
+            // resetLevelFromStart (hooked below) on Windows 2.2081; set here as
+            // well in case a build of GD inlines that call into fullReset, where
+            // the hook would never run and the reset could land on a platformer
+            // checkpoint.
+            bool const was = g_resetFromStart;
+            g_resetFromStart = true;
             PlayLayer::fullReset();
+            g_resetFromStart = was;
             gb->practiceFix.clearPlatformer(true);
             upd.m_frameOnLastAttempt = 0;
         }
@@ -488,9 +505,40 @@ class $modify(GB7PlayLayer, PlayLayer) {
             m_checkpointArray->addObject(pf.m_storedFrames.back().state.m_checkpoint);
             return true;
         }
+        // Plain play (no recording, no macro playing, nothing of GucciBot's
+        // own resetting): a death or a restart after a platformer checkpoint
+        // goes back to that checkpoint, as plain GD does. GucciBot's
+        // storeCheckpoint keeps platformer checkpoints out of GD's own list
+        // (m_checkpointArray), so before this every death in plain play went
+        // back to the level start. Recording and playback are untouched:
+        // there a plain death is a restart from the start, as in Silicate.
+        // A restart from the start (resetLevelFromStart) still is one.
+        // Last on purpose: the order of the branches above is load-bearing
+        // (CLAUDE.md section 4), and this one only takes what none of them
+        // took. Safe mode keeps the attempt's cheat mark through this respawn
+        // (noteCheckpointRespawn in resetLevel).
+        if (!pf.m_platformerCheckpoints.empty() && !g_resetFromStart && !gb->isRecording() &&
+            !gb->isPlaying() && !engineReset(gb)) {
+            // The frame carries on from the death, as the intentional path
+            // does; nothing records in plain play.
+            upd.m_frameOnLastAttempt = deathFrame + 1;
+            m_checkpointArray->addObject(pf.m_platformerCheckpoints.back().first);
+            pf.m_shouldLoadPlatformer = true;
+            return true;
+        }
         upd.m_frameOnLastAttempt = 0;
         pf.clearPlatformer(true);
         return false;
+    }
+
+    // See g_resetFromStart.
+    void resetLevelFromStart() {
+        if (!GucciEngine::get()->enabled)
+            return PlayLayer::resetLevelFromStart();
+        bool const was = g_resetFromStart;
+        g_resetFromStart = true;
+        PlayLayer::resetLevelFromStart();
+        g_resetFromStart = was;
     }
 
     void updateRandomSeedOnReset() {
@@ -793,7 +841,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
         putRestartKeyHoldBack("PlayLayer::resetLevel");
 #endif
 
-        if (auto* ell = getChildByID("EndLevelLayer"))
+        // GD's end screen, by its type: the ID "EndLevelLayer" is only there
+        // when the geode.node-ids mod is installed, so without it a macro's
+        // restart after a completion left the end screen over the level.
+        // (Silicate's 2.2091 release finds it by type too.)
+        if (auto* ell = getChildByType<EndLevelLayer>(0))
             ell->removeFromParent();
 
         m_practiceMusicSync = true;
@@ -810,6 +862,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
         checkIfResetWasExpected(deathFrame);
         bool hasAddedCheckpoint = handleResetWithCheckpoints(deathFrame);
+        // Safe mode's taint (hacks/safemode.cpp) is kept through a respawn at
+        // a checkpoint; set here, before GD's reset, so its resetLevel hook
+        // sees it whichever order the two hooks run in.
+        if (hasAddedCheckpoint)
+            gucci::safemode::noteCheckpointRespawn();
         upd.resetFrame();
         cps::clear();
 
@@ -944,7 +1001,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
     void fakeFullReset() {
         auto winSize = CCDirector::sharedDirector()->getWinSize();
         m_gameState.m_totalTime = 0.0;
-        m_gameState.m_unkDouble3 = 0.0;
+        m_gameState.GB_FIELD(m_unkDouble3, m_bestTime) = 0.0;
         m_gameState.m_levelTime = 0.0;
         if (m_player1)
             m_player1->m_totalTime = 0.0;
@@ -1397,6 +1454,12 @@ class $modify(GBPortableCheckpoint, PlayLayer) {
 // isn't cleared there. On Android this only matters with a hardware keyboard;
 // iOS GD takes no keys. The log says once that it kept a hold. Untested on a
 // device.
+//
+// GD 2.2091 on Windows (the Geode 6 build) has no UILayer::handleKeypress to
+// hook: the bindings mark it inline there (RobTop's new keybind system took
+// its job, docs/PORT_2209_ASSESSMENT.md). Until the restart key's new home is
+// found, that build doesn't keep the held touch through the restart key.
+#if !(GB_GEODE6 && defined(GEODE_IS_WINDOWS))
 class $modify(GBPortableRestartHold, UILayer) {
     void handleKeypress(cocos2d::enumKeyCodes key, bool down, double timestamp) {
         auto& h = s_restartKeyHold;
@@ -1409,4 +1472,5 @@ class $modify(GBPortableRestartHold, UILayer) {
         h.ui = nullptr;
     }
 };
+#endif // handleKeypress hookable
 #endif

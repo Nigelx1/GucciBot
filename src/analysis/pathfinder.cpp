@@ -1,4 +1,5 @@
 #include "core/platform.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include "analysis/pathfinder.hpp"
 
 #include "analysis/trajectory.hpp"
@@ -1585,6 +1586,8 @@ namespace gucci {
                 return a.m_frame < b.m_frame;
             });
             gb->replay.m_actionAtom.m_actions = committed;
+            // Found on this game: what Save says the macro was made on.
+            gb->replay.stampMadeHere();
             // GucciBot (2026-10-23): the frame windows in memory were measured
             // on the clicks this replaces. Saved below with the search's
             // macro, they would stand on clicks they were never measured on.
@@ -1599,7 +1602,7 @@ namespace gucci {
             // GucciBot (2026-11-10): unless a macro file already has it (a
             // loaded macro keeps its name here): the search's result went over
             // that file. It goes beside it as "<name> pathfinder" instead.
-            auto dir = Mod::get()->getSaveDir() / "replays";
+            auto dir = gucci::stdPath(Mod::get()->getSaveDir()) / "replays";
             std::string ext = ui::macroExtension();
             if (!gb->replayName.empty()) {
                 std::error_code ec;

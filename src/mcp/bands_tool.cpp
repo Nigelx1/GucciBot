@@ -10,6 +10,7 @@
 #include "analysis/ac/shim.hpp"
 #include "hacks/safemode.hpp"
 #include "ui/band_files.hpp"
+#include "core/geode_compat.hpp" // pathToString on both Geodes
 
 #include <Geode/Geode.hpp>
 
@@ -97,8 +98,8 @@ namespace gucci::mcp {
                 out["sounds"] = sounds;
                 out["images"] = images;
                 out["pack_name"] = bf::packName();
-                out["folder"] = geode::utils::string::pathToString(bf::folder());
-                out["packs_folder"] = geode::utils::string::pathToString(bf::packsFolder());
+                out["folder"] = gucci::pathToString(bf::folder());
+                out["packs_folder"] = gucci::pathToString(bf::packsFolder());
                 out["card_note"] = bf::note();
                 auto bands = matjson::Value::array();
                 for (auto const& t : SLSettings::get()->frameWindow.tiers) {

@@ -72,6 +72,20 @@ namespace gucci::mcp {
             return &inst;
         }
 
+        // GucciBot (2026-11-17): the game closing with Assistant Access on.
+        // Nothing stops the server at exit, and by the time this static is
+        // destroyed (the DLL's atexit, inside ExitProcess) Windows has already
+        // ended the socket thread, so m_thread is still joinable and
+        // std::thread's destructor called std::terminate: an abort on every
+        // exit (0xc0000409 in ucrtbase, in Windows' event log; Geode 6 also
+        // writes a crash log for it). Let go of the handle instead. Ported
+        // from the 2.2091 branch (c730662).
+        ~Server() {
+            m_running = false;
+            if (m_thread.joinable())
+                m_thread.detach();
+        }
+
         bool start(int port);
         void stop();
         bool running() const {

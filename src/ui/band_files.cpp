@@ -41,7 +41,7 @@ namespace gucci::ui::bandfiles {
         constexpr uintmax_t kMaxFolderBytes = 256ull << 20;
 
         fs::path u8path(std::string const& s) { return fs::path(std::u8string(s.begin(), s.end())); }
-        std::string utf8(fs::path const& p) { return geode::utils::string::pathToString(p); }
+        std::string utf8(fs::path const& p) { return gucci::pathToString(p); }
 
         std::string lower(std::string s) {
             for (auto& c : s)
@@ -172,7 +172,7 @@ namespace gucci::ui::bandfiles {
         // config folder ("bands/x.ogg"), which is where a relative one is
         // looked for first.
         std::string bandPath(fs::path const& file) {
-            if (auto const rel = under(file, Mod::get()->getConfigDir()))
+            if (auto const rel = under(file, gucci::stdPath(Mod::get()->getConfigDir())))
                 return *rel;
             return utf8(file);
         }
@@ -188,9 +188,9 @@ namespace gucci::ui::bandfiles {
             std::error_code ec;
             if (p.is_absolute())
                 return fs::is_regular_file(p, ec) ? std::optional<Found>(Found{p, false}) : std::nullopt;
-            if (auto const c = Mod::get()->getConfigDir() / p; fs::is_regular_file(c, ec))
+            if (auto const c = gucci::stdPath(Mod::get()->getConfigDir()) / p; fs::is_regular_file(c, ec))
                 return Found{c, false};
-            if (auto const r = Mod::get()->getResourcesDir() / p; fs::is_regular_file(r, ec))
+            if (auto const r = gucci::stdPath(Mod::get()->getResourcesDir()) / p; fs::is_regular_file(r, ec))
                 return Found{r, true};
             return std::nullopt;
         }
@@ -246,7 +246,7 @@ namespace gucci::ui::bandfiles {
 
         arc::Future<int> pickTask(Want what, Kind kind, int bandId) {
             geode::utils::file::FilePickOptions options;
-            options.defaultPath = pickerFolder(what);
+            options.defaultPath = gucci::geodePath(pickerFolder(what));
             if (what == Want::File) {
                 geode::utils::file::FilePickOptions::Filter f;
                 if (kind == Kind::Sound) {
@@ -278,7 +278,7 @@ namespace gucci::ui::bandfiles {
             got.kind = kind;
             got.bandId = bandId;
             if (result.isOk())
-                got.path = std::move(result).unwrap();
+                got.path = gucci::stdPath(std::move(result).unwrap());
             else
                 got.error = std::move(result).unwrapErr();
             geode::queueInMainThread([got = std::move(got)]() mutable {
@@ -319,8 +319,8 @@ namespace gucci::ui::bandfiles {
 
     } // namespace
 
-    fs::path folder() { return Mod::get()->getConfigDir() / "bands"; }
-    fs::path packsFolder() { return Mod::get()->getSaveDir() / "band packs"; }
+    fs::path folder() { return gucci::stdPath(Mod::get()->getConfigDir()) / "bands"; }
+    fs::path packsFolder() { return gucci::stdPath(Mod::get()->getSaveDir()) / "band packs"; }
 
     Result importFile(fs::path const& picked, Kind kind) {
         Result r;
@@ -710,7 +710,7 @@ namespace gucci::ui::bandfiles {
                 auto const s = b["bundled"].asString().unwrapOr("");
                 std::error_code rc;
                 if (!gucci::bundle::fileNameOk(s) || !soundExt(extOf(s)) ||
-                    !fs::is_regular_file(Mod::get()->getResourcesDir() / u8path(s), rc)) {
+                    !fs::is_regular_file(gucci::stdPath(Mod::get()->getResourcesDir()) / u8path(s), rc)) {
                     r.note = fmt::format("{}: band {}'s sound ({}) isn't one this version has.", fname, it.band, s);
                     return r;
                 }

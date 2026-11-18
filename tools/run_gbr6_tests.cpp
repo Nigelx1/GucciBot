@@ -209,6 +209,62 @@ int main() {
             CHECK(same);
         }
     }
+    // What the macro was made on (2026-11-17): GD's and GucciBot's
+    // versions in the extension tail, after every flagged block.
+    for (int variant = 0; variant < 8; ++variant) {
+        auto f = make(variant & 1, variant & 2);
+        if (variant & 4) {
+            f.tpsChanges.push_back({12, 480.0});
+            f.header.flags |= GBR6_HAS_TPS;
+        }
+        auto const plain = f.serialize();
+        f.header.gdVersion = "2.2081";
+        f.header.gbVersion = "2.0.0";
+        auto const bytes = f.serialize();
+        // Old bytes first, the tail after: a reader from before the tail
+        // (which never looks past the last flagged block) reads the same
+        // macro as from the old bytes.
+        CHECK(bytes.size() > plain.size());
+        CHECK(std::memcmp(bytes.data(), plain.data(), plain.size()) == 0);
+        CHECK(std::memcmp(bytes.data() + plain.size(), GBR6_EXT_MAGIC, 4) == 0);
+        auto g = GBR6File::deserialize(bytes.data(), bytes.size());
+        CHECK(g.has_value());
+        CHECK(g->header.gdVersion == "2.2081" && g->header.gbVersion == "2.0.0");
+        CHECK(g->p1Inputs.size() == 4 && g->p2Inputs.size() == 2);
+        CHECK(g->deaths.size() == (variant & 1 ? 1u : 0u));
+        CHECK(g->subticks.size() == (variant & 2 ? 3u : 0u));
+        CHECK(g->tpsChanges.size() == (variant & 4 ? 1u : 0u));
+        CHECK(g->serialize() == bytes);
+        // a macro from before the tail: no version, loads as before
+        auto o = GBR6File::deserialize(plain.data(), plain.size());
+        CHECK(o.has_value() && o->header.gdVersion.empty() && o->header.gbVersion.empty());
+        CHECK(o->serialize() == plain);
+    }
+    // the tail is skipped by tag: an unknown chunk before GVER, and a damaged
+    // tail (a length past the end) loads the macro with no version
+    {
+        auto f = make(true, false);
+        auto bytes = f.serialize();
+        size_t const base = bytes.size();
+        bytes.insert(bytes.end(), GBR6_EXT_MAGIC, GBR6_EXT_MAGIC + 4);
+        const char unk[] = {'Z', 'Z', 'Z', 'Z', 3, 0, 0, 0, 'a', 'b', 'c'};
+        bytes.insert(bytes.end(), unk, unk + sizeof(unk));
+        const char ver[] = {'G', 'V', 'E', 'R', 10, 0, 0, 0, 3, 0, '2', '.', '9', 3, 0, '9', '.', '9'};
+        bytes.insert(bytes.end(), ver, ver + sizeof(ver));
+        auto g = GBR6File::deserialize(bytes.data(), bytes.size());
+        CHECK(g.has_value() && g->header.gdVersion == "2.9" && g->header.gbVersion == "9.9");
+        CHECK(g->p1Inputs.size() == 4 && g->deaths.size() == 1);
+        bytes.resize(base + 4 + 11 + 8);  // GVER's length says 10, none are left
+        auto h = GBR6File::deserialize(bytes.data(), bytes.size());
+        CHECK(h.has_value() && h->header.gdVersion.empty() && h->p1Inputs.size() == 4);
+    }
+    // the warning: only for a known, different version
+    {
+        CHECK(gdVersionWarning("2.2081", "2.2081").empty());
+        CHECK(gdVersionWarning("", "2.2091").empty());
+        CHECK(gdVersionWarning("2.2081", "2.2091") ==
+              "This macro was made on GD 2.2081; you're on GD 2.2091. It may not play the same.");
+    }
     std::printf(fails ? "gbr6 sub-tick: %d FAILED\n" : "gbr6 sub-tick: all passed\n", fails);
     return fails ? 1 : 0;
 }

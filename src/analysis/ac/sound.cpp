@@ -1,4 +1,5 @@
 #include "sound.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 
 #include <filesystem>
 #include <vector>
@@ -46,12 +47,12 @@ void FrameWindowSound::play(std::string const& path, float volume) {
     std::filesystem::path audioPath = given;
     if (!audioPath.is_absolute()) {
         std::error_code rc;
-        audioPath = Mod::get()->getConfigDir() / given;
+        audioPath = gucci::stdPath(Mod::get()->getConfigDir()) / given;
         if (!std::filesystem::exists(audioPath, rc))
-            audioPath = Mod::get()->getResourcesDir() / given;
+            audioPath = gucci::stdPath(Mod::get()->getResourcesDir()) / given;
     }
 
-    std::string const key = geode::utils::string::pathToString(audioPath);
+    std::string const key = gucci::pathToString(audioPath);
 
     FMOD::Sound* sound = nullptr;
     if (auto it = s_cache.find(key); it != s_cache.end()) {

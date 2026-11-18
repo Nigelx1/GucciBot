@@ -13,6 +13,7 @@
 // waits for the main menu: a popup there could cost an attempt.
 
 #include "core/GucciBot.hpp"
+#include "core/geode_compat.hpp" // gucci::webTimeout
 #include "hacks/safemode.hpp"
 #include "ui/ui.hpp"
 
@@ -98,11 +99,10 @@ namespace gucci::updates {
             }
         }
         arc::Future<int> checkTask() {
-            web::WebResponse res = co_await web::WebRequest()
-                                       .userAgent("GucciBot")
-                                       .header("Accept", "application/vnd.github+json")
-                                       .timeout(std::chrono::seconds(15))
-                                       .get(kReleasesApi);
+            web::WebRequest req;
+            req.userAgent("GucciBot").header("Accept", "application/vnd.github+json");
+            gucci::webTimeout(req, 15);
+            web::WebResponse res = co_await req.get(kReleasesApi);
             geode::queueInMainThread([res = std::move(res)]() mutable { onReleases(std::move(res)); });
             co_return 0;
         }

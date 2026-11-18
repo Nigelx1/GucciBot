@@ -45,6 +45,9 @@
 #include "core/GucciBot.hpp"
 #include "core/teleport_pick.hpp"
 #include "ui/ui.hpp"
+#if GB_GD2091_SITES
+#include "hooks/util_midhook.hpp"  // midhookLive
+#endif
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
@@ -99,6 +102,13 @@ class $modify(GBPortableTeleport, GJBaseGameLayer) {
         if (!gb->enabled || !portal || portal->m_orangePortal || portal->m_targetGroupID <= 0 ||
             Bot::get()->trajectory().isFakePlayer(player))
             return GJBaseGameLayer::teleportPlayer(portal, player);
+#if GB_GD2091_SITES
+        // GD 2.2091 on Windows: the teleport midhook makes this pick inside
+        // GD's own code (hook_gjbasegamelayer.cpp); with it in, this would
+        // make it a second time.
+        if (gucci::midhookLive("teleportRandomOverride"))
+            return GJBaseGameLayer::teleportPlayer(portal, player);
+#endif
 
         int const id = portal->m_targetGroupID;
         // GD's own read, with its side effect: the first time a group is

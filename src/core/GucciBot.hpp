@@ -1,9 +1,10 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-b (Pathfinder: pf_fork_dual on by default, a mode portal stacked on a dual portal is a route fork)"
+    "2026-11-17-k (GD 2.2091 / Geode 6 support merged: one codebase, two builds)"
 
 #include <Geode/Geode.hpp>
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include <cmath>
 #include "core/platform.hpp"
 #include "core/portable_tps.hpp"
@@ -139,7 +140,10 @@ namespace gucci {
         // PracticeFix::m_storeEvery). 1 is every tick, as GucciBot always did;
         // Absense's pathfinder raises it for the length of a search.
         uint32_t m_storeEvery = 1;
-        std::vector<std::pair<CheckpointObject*, CheckpointObject*>> m_platformerCheckpoints;
+        // Platformer checkpoints touched this attempt: the CheckpointObject GD
+        // built (retained by storeCheckpoint) and the level's checkpoint object
+        // that was touched (PlayLayer::m_activatedCheckpoint), as in Silicate.
+        std::vector<std::pair<CheckpointObject*, CheckpointGameObject*>> m_platformerCheckpoints;
 
         bool m_loadCheckpoint = false;
         bool m_isBackstep = false;
@@ -208,6 +212,11 @@ namespace gucci {
         void applyLatest();
         void applyCheckpoint(SavedCheckpointState& state);
         void dropLastStoredFrame();
+        // Empties the platformer checkpoints. `full` (a reset, a quit) also turns
+        // each touched checkpoint off and releases what storeCheckpoint retained
+        // (Silicate's clearPlatformer(true)), and empties the practice
+        // checkpoints and the backstep store; without it (a level loading) the
+        // list is only forgotten.
         void clearPlatformer(bool full);
         bool canRestoreState() const {
             return !m_storedFrames.empty();
@@ -311,6 +320,17 @@ namespace gucci {
         // saved as GBR6_FROM_START_POS, which is what the Macro card's
         // start-position warning reads.
         bool m_recordedFromStartPos = false;
+        // What the macro was made on (2026-11-17): GD's version and
+        // GucciBot's, read from the file on load and written by Save. Empty =
+        // not known (a macro from before this, or converted from another
+        // bot), and stays so until something records on top of it. Recording
+        // and the pathfinders stamp this game's (stampMadeHere).
+        std::string m_madeOnGd;
+        std::string m_madeWithGb;
+        void stampMadeHere();
+        // The Macro card's note when the macro was made on another GD
+        // version; "" when it wasn't, or nobody knows.
+        std::string gdVersionWarning() const;
         void buildClickIntervals(double tps);
 
         float m_trainerBestX = 0.f;
@@ -1309,10 +1329,10 @@ namespace gucci {
         void reloadMacroList();
 
         std::filesystem::path getReplayDir() const {
-            return Mod::get()->getSaveDir() / "replays";
+            return gucci::stdPath(Mod::get()->getSaveDir()) / "replays";
         }
         std::filesystem::path getPresetsDir() const {
-            return Mod::get()->getSaveDir() / "presets";
+            return gucci::stdPath(Mod::get()->getSaveDir()) / "presets";
         }
 
     private:

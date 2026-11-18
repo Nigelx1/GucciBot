@@ -15,6 +15,7 @@
 #include "hacks/hitborders.hpp"
 #include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
+#include "hacks/safemode_2209.hpp"  // GB_SAFETY_2209
 #include "mcp/mcp_server.hpp"
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
@@ -601,6 +602,27 @@ namespace gucci::testset {
                 // Legit only (hacks/legit.hpp), saved like its switch.
                 v.push_back({"legit_only", "bool", Store::Field, [] { return matjson::Value(legit::on()); },
                              [](matjson::Value const& val, bool) { legit::setOn(wantBool("legit_only", val)); }});
+#if GB_SAFETY_2209
+                // GD 2.2091's safety guards (hacks/safemode_2209.cpp): reads
+                // what each one let through or held back this launch, plus
+                // what GD keeps about the level and the player. Setting it
+                // runs a probe action (only in a test launch): "upload" calls
+                // GD's death-data upload through the guard, where it is always
+                // held back, so nothing leaves the PC.
+                v.push_back({"safety2209_probe", "text", Store::Memory,
+                             [] { return matjson::Value(safemode::probeCounts() + " | " + safemode::probeLevel()); },
+                             [](matjson::Value const& val, bool restoring) {
+                                 if (restoring)
+                                     return;
+                                 if (!val.isString())
+                                     throw ToolError("safety2209_probe: give an action as text");
+                                 if (!safemode::testLaunch())
+                                     throw ToolError("safety2209_probe: only in a test launch (GUCCIBOT_FORCE_SAFE_MODE)");
+                                 auto const why = safemode::probeAction(val.asString().unwrapOr(""));
+                                 if (!why.empty())
+                                     throw ToolError("safety2209_probe: " + why);
+                             }});
+#endif
                 // Sound: this launch's switches.
                 v.push_back({"bigbrrr", "bool", Store::Memory,
                              [] { return matjson::Value(BigBrrrManager::get()->enabled); },

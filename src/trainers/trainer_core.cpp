@@ -2,6 +2,7 @@
 // the Trainer's macro and track. See trainer_core.hpp for the shape of it.
 
 #include "trainers/trainer_core.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include "hacks/legit.hpp"
 #include "trainers/click_indicators.hpp"
 #include "core/bot_switch.hpp"
@@ -846,7 +847,7 @@ namespace gucci::trainers {
 
     fs::path importedTrackPath() {
         // trainerghost.cpp's player reads this exact file.
-        return Mod::get()->getSaveDir() / "trainer_music.mp3";
+        return gucci::stdPath(Mod::get()->getSaveDir()) / "trainer_music.mp3";
     }
 
     bool importTrack(fs::path const& from, std::string& error) {

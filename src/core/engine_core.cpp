@@ -1,4 +1,6 @@
+#include "core/gd_addresses.hpp"
 #include "core/GucciBot.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "hacks/legit.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "ui/ui.hpp"
@@ -6,6 +8,7 @@
 #include "core/bot_switch.hpp"
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
+#include "core/gd_version.hpp"
 #include "core/mcp_only.hpp"
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
@@ -19,7 +22,6 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PauseLayer.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
-#include <Geode/utils/Task.hpp>
 #include <Geode/utils/web.hpp>
 #include <array>
 #include <chrono>
@@ -325,7 +327,43 @@ namespace gucci {
     }
 
     void GucciPracticeFix::clearPlatformer(bool full) {
-        m_platformerCheckpoints.clear();
+        // Silicate's clearPlatformer(true): each touched checkpoint is turned
+        // off again (so it can be taken on the next attempt) and the
+        // CheckpointObject storeCheckpoint retained is released. GucciBot's
+        // port only emptied the list, so every touched platformer checkpoint
+        // leaked and its flag could stay lit. Without `full` (a level loading,
+        // Silicate's clearPlatformer(false)) the list is only forgotten.
+        //
+        // Before the release, the checkpoint's own object comes out of the
+        // section storeCheckpoint put it in, the way removeCheckpoint does for
+        // a practice checkpoint. Sections hold plain pointers: released while
+        // still filed there, it was freed under GD's visibility pass, which
+        // crashed (access violation in GJBaseGameLayer::preUpdateVisibility,
+        // render test copy 2026-11-17, a platformer checkpoint cleared by a
+        // restart from the start, then the level played on). Silicate 1.1.0's
+        // clearPlatformer has the same gap.
+        auto* pl = full ? PlayLayer::get() : nullptr;
+        while (!m_platformerCheckpoints.empty()) {
+            if (full) {
+                auto& back = m_platformerCheckpoints.back();
+                if (back.second) {
+                    back.second->m_checkpointActivated = false;
+                    back.second->resetCheckpoint();
+                }
+                if (back.first) {
+                    if (auto* obj = back.first->m_physicalCheckpointObject; obj && pl) {
+                        pl->removeObjectFromSection(obj);
+                        if (obj->m_glowSprite) {
+                            obj->m_glowSprite->removeMeAndCleanup();
+                            obj->m_glowSprite = nullptr;
+                        }
+                        obj->removeMeAndCleanup();
+                    }
+                    back.first->release();
+                }
+            }
+            m_platformerCheckpoints.pop_back();
+        }
         m_shouldLoadPlatformer = false;
         if (full) {
             m_savedCheckpoints.clear();
@@ -557,6 +595,8 @@ namespace gucci {
             } else {
                 m_actionAtom.m_actions.clear();
                 m_pathSamples.clear();
+                // A new recording, made on this game.
+                stampMadeHere();
                 // The run starts over here, from the level's start or from a
                 // start position; Save marks the file with which.
                 auto* pl = PlayLayer::get();
@@ -898,7 +938,7 @@ namespace gucci {
             // GucciBot 1.x's old .brrr, through the macro converter's reader
             // (readBrr). The macro list converts these, but a trainer macro
             // picked in 1.x can still name one.
-            auto const read = convert::read(bytes, geode::utils::string::pathToString(path.filename()));
+            auto const read = convert::read(bytes, gucci::pathToString(path.filename()));
             if (!read.ok() || read.macro.inputs.empty())
                 return;
 
@@ -1218,6 +1258,10 @@ namespace gucci {
         }
         hdr.name = m_replayName;
         hdr.rngSeed = m_startingSeed;
+        // What it was made on: the loaded file's, or this game's once
+        // something recorded on top (stampMadeHere). Unknown stays unknown.
+        hdr.gdVersion = m_madeOnGd;
+        hdr.gbVersion = m_madeWithGb;
         if (m_recordedFromStartPos)
             hdr.flags |= GBR6_FROM_START_POS;
         hdr.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
@@ -1295,6 +1339,17 @@ namespace gucci {
         return written;
     }
 
+    void GucciReplaySystem::stampMadeHere() {
+        if (m_madeOnGd != currentGdVersion())
+            m_madeOnGd = currentGdVersion();
+        if (m_madeWithGb != MOD_VERSION)
+            m_madeWithGb = MOD_VERSION;
+    }
+
+    std::string GucciReplaySystem::gdVersionWarning() const {
+        return gucci::gdVersionWarning(m_madeOnGd, currentGdVersion());
+    }
+
     void GucciReplaySystem::buildClickIntervals(double tps) {
         m_clickIntervalsSec.clear();
         m_clickBarTps = tps > 0.0 ? tps : 240.0;
@@ -1355,6 +1410,14 @@ namespace gucci {
             // Shown on the Macro card: a macro recorded from a start position
             // only plays, and measures, from that one. Kept for a re-save.
             m_recordedFromStartPos = f.header.fromStartPos();
+            m_madeOnGd = f.header.gdVersion;
+            m_madeWithGb = f.header.gbVersion;
+            if (auto const warn = gdVersionWarning(); !warn.empty()) {
+                // Never a reason not to play it: a note on the Macro card
+                // (gdVersionWarning) and this one notification per load.
+                log::warn("[GucciBot] {}", warn);
+                geode::queueInMainThread([warn] { ui::warnNotice(warn); });
+            }
             gb->startPosWarning = m_recordedFromStartPos
                                       ? "Recorded from a start position: play it, and Calculate it, from that "
                                         "same start position."
@@ -1420,6 +1483,22 @@ namespace gucci {
         }
         Mode prev = mode;
         mode = m;
+        // Intentional death is armed only while recording (its key does
+        // nothing otherwise) and lasts until the next reset. Left armed when
+        // the recording stopped, the next death in plain play took the
+        // intentional path (hook_playlayer.cpp, handleResetWithCheckpoints):
+        // back to a platformer checkpoint the recording reached. Going idle
+        // disarms it, and so does any other switch out of recording: straight
+        // to playback, the first playback reset took the intentional path, so
+        // the frame counter carried on from the death frame while the level
+        // started over and that attempt played its inputs at the wrong
+        // frames. Calculate's trip from a recording also switches to playback;
+        // it keeps the armed key itself (framewindow.cpp, the trip).
+        bool const leavesRecording = prev == Mode::Recording && m != Mode::Recording;
+        if ((m == Mode::Idle || leavesRecording) && updater.m_canDie) {
+            updater.m_canDie = false;
+            updater.m_inputIsDeath = false;
+        }
         // Recording or playback starting with something on that breaks it
         // (core/setup_check.hpp): a toast. Queued, since the MCP tools can get
         // here from their own thread.
@@ -1550,6 +1629,7 @@ namespace gucci {
         rs.clearDispatchOrder();
         forgetMacroWindows();
         rs.m_recordedFromStartPos = pl->m_startPosObject != nullptr;
+        rs.stampMadeHere();
         // The Macro card's note was the dropped file's ("Recorded from a
         // start position"), not this recording's.
         startPosWarning.clear();
@@ -1679,7 +1759,7 @@ namespace gucci {
             } catch (std::system_error const&) {
                 log::warn("[GucciBot] Macro list: skipped \"{}\": Windows can't spell its name in this system's code "
                           "page. Rename it with plain letters to see it.",
-                          geode::utils::string::pathToString(it.path().filename()));
+                          gucci::pathToString(it.path().filename()));
                 continue;
             }
             bool isKnown = std::find(known.begin(), known.end(), ext) != known.end();
@@ -2564,12 +2644,12 @@ namespace gucci {
     // the jupiter folder. The JMF page fills it from a played macro's path
     // (setJupiterMacroPath).
     static fs::path jupiterMacroAnchor() {
-        return Mod::get()->getSaveDir() / "jupiter" / "jupiter_my_favourite.gdr";
+        return gucci::stdPath(Mod::get()->getSaveDir()) / "jupiter" / "jupiter_my_favourite.gdr";
     }
 
     static void loadBundledJupiterMacro(GucciEngine::TrainerMacroData& out) {
         out = {};
-        auto const bundled = Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr";
+        auto const bundled = gucci::stdPath(Mod::get()->getResourcesDir()) / "jupiter_my_favourite.gdr";
         std::ifstream f(bundled, std::ios::binary | std::ios::ate);
         if (!f)
             return;
@@ -2985,17 +3065,17 @@ namespace gucci {
 
         {
             std::error_code dirEc;
-            fs::create_directories(Mod::get()->getSaveDir() / "jupiter", dirEc);
+            fs::create_directories(gucci::stdPath(Mod::get()->getSaveDir()) / "jupiter", dirEc);
             loadBundledJupiterMacro(jupiterMacro);
 
             // What the live game ended up with, in its own file: the JMF
             // trainer has come up empty before (2026-08-31, and again after
             // build -bz) with nothing else to say why.
-            std::ofstream jmLog(Mod::get()->getSaveDir() / "guccibot_jupitermacro.log",
+            std::ofstream jmLog(gucci::stdPath(Mod::get()->getSaveDir()) / "guccibot_jupitermacro.log",
                                 std::ios::trunc);
             if (jmLog) {
                 jmLog << "source="
-                      << geode::utils::string::pathToString(Mod::get()->getResourcesDir() /
+                      << gucci::pathToString(gucci::stdPath(Mod::get()->getResourcesDir()) /
                                                             "jupiter_my_favourite.gdr")
                       << "\n";
                 jmLog << "jupiterMacro.loaded=" << (jupiterMacro.loaded ? 1 : 0) << "\n";
@@ -3024,7 +3104,7 @@ namespace gucci {
             } catch (std::system_error const&) {
                 log::warn("[GucciBot] Presets: skipped \"{}\": Windows can't spell its name in this system's code "
                           "page. Rename it with plain letters to load it.",
-                          geode::utils::string::pathToString(entry.path().filename()));
+                          gucci::pathToString(entry.path().filename()));
                 continue;
             }
             std::ifstream fin(entry.path());
@@ -3090,14 +3170,23 @@ namespace gucci {
         // and 1 in hook_playerobject.cpp. A literal, not midhookSites().size():
         // a site registers itself as it's placed, so one whose $execute never
         // ran would shrink both counts and still pass.
-        bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_NATIVE_ENGINE;
+        // GD 2.2091 (Geode 6) places fewer: 6 midhooks (shake, teleport, GD's
+        // speed keys) and 9 patches (core/gd_addresses.hpp).
+        bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_RAW_SITES;
+#if GB_GD2091_SITES
+        int const wantMidhooks = gdaddr::v2091::kExpectedMidhooks;
+        int const wantPatches = gdaddr::v2091::kExpectedPatches;
+#else
+        int const wantMidhooks = 12;
+        int const wantPatches = 4;
+#endif
         gbcheck::g_engineSkippedWhy =
-            !GB_NATIVE_ENGINE ? "this platform doesn't use the Windows engine"
+            !GB_RAW_SITES ? "this platform doesn't use the Windows engine"
             : standingDown    ? "GucciBot stood down for another bot this launch"
             : mcponly::launch() ? "this is an MCP-only test launch (GUCCIBOT_MCP_ONLY)"
             : botswitch::takenOut() ? "the bot is switched off (Disable bot)"
                                     : nullptr;
-        gbcheck::run(noEngineCode ? 0 : 12, noEngineCode ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
+        gbcheck::run(noEngineCode ? 0 : wantMidhooks, noEngineCode ? 0 : wantPatches, GBR6_VERSION, BRR_FORMAT_VERSION,
                      MOD_VERSION);
     }
 

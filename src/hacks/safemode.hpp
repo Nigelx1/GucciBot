@@ -60,5 +60,9 @@ namespace gucci::safemode {
     // This attempt has had something on that counts as cheating (auto safe
     // mode keeps it from counting). For Assistant Access's get_state.
     bool tainted();
+    // GucciBot's reset is going back to a checkpoint (hook_playlayer.cpp,
+    // after handleResetWithCheckpoints): the same attempt, so the taint is
+    // kept for it. Read and cleared by the next PlayLayer::resetLevel.
+    void noteCheckpointRespawn();
 
 } // namespace gucci::safemode
