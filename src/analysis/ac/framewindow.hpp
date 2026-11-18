@@ -1140,9 +1140,17 @@ class FrameWindowAnalyzer {
     // there on kept (`carried`) or not.
     uint32_t recountAfter(bool carried, uint32_t stopAt) const;
     // What the run would leave if it stopped now.
+    // GucciBot (2026-11-18): of the older windows `old`, those `fresh` doesn't
+    // replace: how many were measured, and how many were desynced (counted as
+    // skipped, as a run counts them). A window typed by hand for an input
+    // that was never measured is neither.
+    static void keptCounts(std::vector<FrameWindowMark> const& fresh,
+                           std::vector<FrameWindowMark> const& old, int& measured,
+                           int& skipped);
     void runSnapshot(std::vector<FrameWindowMark>& marks,
                      std::vector<FrameWindowMessage>& messages,
-                     uint32_t& recountFrom) const;
+                     uint32_t& recountFrom, int* keptMeasured = nullptr,
+                     int* keptSkipped = nullptr) const;
     bool writeResults(std::filesystem::path const& path,
                       std::vector<FrameWindowMark> const& marks,
                       std::vector<FrameWindowMessage> const& messages,

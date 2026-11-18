@@ -5065,9 +5065,27 @@ uint32_t FrameWindowAnalyzer::recountAfter(bool carried, uint32_t stopAt) const 
     return carried ? stopAt : UINT32_MAX;
 }
 
+void FrameWindowAnalyzer::keptCounts(std::vector<FrameWindowMark> const& fresh,
+                                     std::vector<FrameWindowMark> const& old, int& measured,
+                                     int& skipped) {
+    measured = 0;
+    skipped = 0;
+    for (auto const& mk0 : old) {
+        bool const replaced = std::any_of(fresh.begin(), fresh.end(), [&](auto const& mk) {
+            return mk.frame == mk0.frame && mk.player2 == mk0.player2 && mk.release == mk0.release;
+        });
+        if (replaced || (mk0.manual && !mk0.hadAuto)) continue;
+        if (mk0.desynced)
+            skipped++;
+        else
+            measured++;
+    }
+}
+
 void FrameWindowAnalyzer::runSnapshot(std::vector<FrameWindowMark>& marks,
                                       std::vector<FrameWindowMessage>& messages,
-                                      uint32_t& recountFrom) const {
+                                      uint32_t& recountFrom, int* keptMeasured,
+                                      int* keptSkipped) const {
     uint32_t const stopAt = this->stopFrame();
     marks = m_results;
     auto old = m_keptResults;
@@ -5077,6 +5095,12 @@ void FrameWindowAnalyzer::runSnapshot(std::vector<FrameWindowMark>& marks,
             old.push_back(mk);
             carried = true;
         }
+    if (keptMeasured && keptSkipped) {
+        if (m_partial || carried)
+            keptCounts(m_results, old, *keptMeasured, *keptSkipped);
+        else
+            *keptMeasured = *keptSkipped = 0;
+    }
     mergeOld(marks, old);
     applyManual(marks, m_manualKept);
     messages = m_keptMessages;
@@ -5297,6 +5321,20 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     m_lastKeptOthers =
         !m_captureNoclip && (m_stoppedShort || (m_partial && ok));
     bool const resumed = m_resume && m_partial;
+    // GucciBot (2026-11-18): the totals are the file's, not only this run's.
+    // A range run (finished, canceled or stopped by leaving the level) and a
+    // whole run stopped short keep the older windows of the inputs they didn't
+    // count, and saved "measured" as the run's own count beside them: a
+    // 400-window file came back saying 2 measured after a 2-input range was
+    // canceled (2026-11-18 test pass, S5). Those kept windows count again, as
+    // a Continue's do below. (An input the older run couldn't measure at all
+    // left no window, so it can't be counted back into "skipped".)
+    if (!resumed && (m_partial || carried) && !m_captureNoclip) {
+        int keptMeasured = 0, keptSkipped = 0;
+        keptCounts(m_results, m_keptResults, keptMeasured, keptSkipped);
+        m_measured += keptMeasured;
+        m_skipped += keptSkipped;
+    }
     if (m_partial || carried) this->mergeKept();
     // The counts from before a Continue, back with their windows. (Its own
     // "not measured" stay its own: those from before were tried again.)
@@ -7975,11 +8013,15 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
         std::vector<FrameWindowMark> marks;
         std::vector<FrameWindowMessage> messages;
         uint32_t recountFrom = UINT32_MAX;
-        this->runSnapshot(marks, messages, recountFrom);
-        int const prevMeasured = m_resume ? m_resumePrevMeasured : 0;
+        int keptMeasured = 0, keptSkipped = 0;
+        this->runSnapshot(marks, messages, recountFrom, &keptMeasured, &keptSkipped);
+        // (A Continue's older count is m_resumePrevMeasured; otherwise the
+        // older windows this snapshot keeps, as finish() counts them.)
+        int const prevMeasured = m_resume ? m_resumePrevMeasured : keptMeasured;
+        int const prevSkipped = m_resume ? 0 : keptSkipped;
         int const prevDesynced = m_resume ? m_resumePrevDesynced : 0;
-        return this->writeResults(path, marks, messages, recountFrom, m_measured + prevMeasured, m_skipped,
-                                  m_desynced + prevDesynced);
+        return this->writeResults(path, marks, messages, recountFrom, m_measured + prevMeasured,
+                                  m_skipped + prevSkipped, m_desynced + prevDesynced);
     }
     return this->writeResults(path, m_results, m_messages, m_recountFrom, m_measured, m_skipped, m_desynced);
 }
