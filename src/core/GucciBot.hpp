@@ -559,8 +559,8 @@ namespace gucci {
         float m_lastTfp = 0.f;
         // Tick diagnostics, off by default: every frame-counter change in
         // guccibot_frameinc.log, and every input playback hands over in
-        // guccibot_slope.log. Saved as debug_tick_logs, with no menu row:
-        // for a session chasing a desync.
+        // guccibot_slope.log. Saved as debug_tick_logs; Settings >
+        // Diagnostics > Log frame increments: for a session chasing a desync.
         bool m_logFrameIncrements = false;
 
         bool m_lockDelta = true;

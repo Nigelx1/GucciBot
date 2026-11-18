@@ -3252,6 +3252,19 @@ namespace gucci::ui {
                     ImGui::TreePop();
                 }
             }
+            // The tick logs (GucciUpdater::m_logFrameIncrements): saved since
+            // before 2.0, with no row until now. For chasing a desync.
+            kit::Gap(0.3f);
+            // (The disguise doesn't name the files: they say guccibot.)
+            if (kit::SwitchRow("Log frame increments",
+                               disguised()
+                                   ? "Writes every frame-counter change and every input played back to log files "
+                                     "in the mod's save folder. For chasing a desync"
+                                   : "Writes every frame-counter change to guccibot_frameinc.log and every input "
+                                     "played back to guccibot_slope.log, in the mod's save folder. For chasing a "
+                                     "desync",
+                               &GucciEngine::get()->updater.m_logFrameIncrements))
+                saveEngineSwitch("debug_tick_logs", GucciEngine::get()->updater.m_logFrameIncrements);
             kit::EndCard();
             // GBot (the disguise) has no BIG BRRRR and doesn't mention it: the
             // card, the last one here, isn't drawn. Its saved switches are
