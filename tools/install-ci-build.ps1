@@ -31,6 +31,29 @@ $Workflow = "multi-platform.yml"
 $Artifact = "GucciBot (all platforms)"
 $Root = Split-Path $PSScriptRoot -Parent
 
+# GitHub's run of $Workflow for $Commit to download: the newest one that built
+# successfully, waiting while none has yet and one is still building. If every
+# run finished without success, the newest one comes back and the caller says
+# why. A commit can have several runs (a workflow_dispatch of the same commit).
+# ConvertFrom-Json in Windows PowerShell 5.1 passes a JSON array down the
+# pipeline as one object, so the list is unrolled here: until 2026-11-18 a
+# second run made $runs[0] the whole list, and gh run download got every run id.
+function Wait-CommitRun([string]$NoRunYet) {
+    $deadline = (Get-Date).AddMinutes(30)
+    while ($true) {
+        $json = (gh run list --repo $Repo --workflow $Workflow --commit $Commit --json databaseId,status,conclusion) -join "`n"
+        $runs = @(if ($json) { ($json | ConvertFrom-Json) | ForEach-Object { $_ } })
+        $ok = @($runs | Where-Object { $_.status -eq "completed" -and $_.conclusion -eq "success" })
+        if ($ok.Count -gt 0) { return $ok[0] }
+        $busy = @($runs | Where-Object { $_.status -ne "completed" })
+        if ($runs.Count -gt 0 -and $busy.Count -eq 0) { return $runs[0] }
+        if ($busy.Count -gt 0) { Write-Host "  still building ($($busy[0].status))..." }
+        else { Write-Host "  $NoRunYet" }
+        if ((Get-Date) -gt $deadline) { throw "no finished build of $Workflow for $short after 30 minutes" }
+        Start-Sleep -Seconds 30
+    }
+}
+
 if ($Gd2209) {
     # 0. Where it goes, checked before anything is downloaded
     if (-not $Folder) { throw "-Gd2209 needs -Folder <a GD 2.2091 test copy>" }
@@ -57,19 +80,7 @@ if ($Gd2209) {
     Write-Host "GucciBot: GitHub's GD 2.2091 build of $short, for the test copy $dir ($exe)"
 
     # 1. GitHub's run for this commit, waiting while it builds
-    $deadline = (Get-Date).AddMinutes(30)
-    while ($true) {
-        $runs = @(gh run list --repo $Repo --workflow $Workflow --commit $Commit --json databaseId,status,conclusion | ConvertFrom-Json)
-        if ($runs.Count -gt 0 -and $runs[0]) {
-            $run = $runs[0]
-            if ($run.status -eq "completed") { break }
-            Write-Host "  still building ($($run.status))..."
-        } else {
-            Write-Host "  no GD 2.2091 build for $short yet (gh workflow run $Workflow --ref <branch>) - waiting..."
-        }
-        if ((Get-Date) -gt $deadline) { throw "no finished GD 2.2091 build for $short after 30 minutes" }
-        Start-Sleep -Seconds 30
-    }
+    $run = Wait-CommitRun "no GD 2.2091 build for $short yet (gh workflow run $Workflow --ref <branch>) - waiting..."
     if ($run.conclusion -ne "success") {
         throw "GitHub's GD 2.2091 build of $short didn't succeed ($($run.conclusion)): gh run view $($run.databaseId) --repo $Repo"
     }
@@ -130,19 +141,7 @@ $short = $Commit.Substring(0, [Math]::Min(7, $Commit.Length))
 Write-Host "GucciBot: GitHub's build of $short"
 
 # 1. GitHub's run for this commit, waiting while it builds
-$deadline = (Get-Date).AddMinutes(30)
-while ($true) {
-    $runs = @(gh run list --repo $Repo --workflow $Workflow --commit $Commit --json databaseId,status,conclusion | ConvertFrom-Json)
-    if ($runs.Count -gt 0 -and $runs[0]) {
-        $run = $runs[0]
-        if ($run.status -eq "completed") { break }
-        Write-Host "  still building ($($run.status))..."
-    } else {
-        Write-Host "  no build for $short yet (pushed to master?) - waiting..."
-    }
-    if ((Get-Date) -gt $deadline) { throw "no finished build for $short after 30 minutes" }
-    Start-Sleep -Seconds 30
-}
+$run = Wait-CommitRun "no build for $short yet (pushed to master?) - waiting..."
 if ($run.conclusion -ne "success") {
     throw "GitHub's build of $short didn't succeed ($($run.conclusion)): gh run view $($run.databaseId) --repo $Repo"
 }
