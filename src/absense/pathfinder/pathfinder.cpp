@@ -888,6 +888,7 @@ bool AbsensePathfinder::onWouldDie(PlayerObject* player, GameObject* object) {
     const bool firstHit = !m_wouldDie;
     m_wouldDie = true;
     m_wouldDieTick = currentTick();
+    if (firstHit) m_wouldDieFirstTick = m_wouldDieTick;
     if (player) m_wouldDieRect = player->getObjectRect(0.3f, 0.3f);
     m_wouldDieP2 = player && PlayLayer::get() && player == PlayLayer::get()->m_player2;
     // Asked here, while the object is still at hand: the death is looked at a
@@ -5188,7 +5189,16 @@ void AbsensePathfinder::noteRunOnDeath(uint64_t from) {
     if (!m_wouldDie) return;
     // The earliest tick it can have been (the first tick run on): going back
     // to before it is what clears it, so earlier is the safe side.
-    const uint64_t at = from + 1;
+    // GucciBot (2026-11-18, pfharden lane): no earlier than the frame counter
+    // the first of those deaths read, though. The counter goes up at the
+    // settled point after a tick's physics (tickSettledWork), so a death in
+    // tick T's step reads T, one less than afterTick's label for it (T + 1),
+    // and one GD deals between two ticks reads T + 1, exactly that label.
+    // Either way the mark is never later than the death's own label, so a
+    // restore that clears it has really gone back before the death; with
+    // from + 1 alone, a run-on death at from + 3 kept a restore to from + 2,
+    // which plays that death's tick again, from clearing it.
+    const uint64_t at = std::max(from + 1, m_wouldDieFirstTick);
     if (at >= m_deathKept) return;
     m_deathKept = at;
     log("tick %llu: the ticks run on past %llu with no bookkeeping died, and there was nothing to go back to; "
