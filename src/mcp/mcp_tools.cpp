@@ -3102,6 +3102,14 @@ namespace gucci::mcp {
                 which["description"] = "read: \"reference\" for the saved run (default: the recording)";
                 props["which"] = which;
             }
+            {
+                // For comparing runs across builds or GD versions (the 2.2081 vs 2.2091 macro traces): every
+                // number in its shortest exact form instead of rounded, so a drift shows from its first bit.
+                auto exact = obj();
+                exact["type"] = "boolean";
+                exact["description"] = "read: every number exact (shortest round-trip form) instead of rounded";
+                props["exact"] = exact;
+            }
             schema["type"] = "object";
             schema["properties"] = props;
             schema["required"] = std::vector<std::string>{"action"};
@@ -3127,6 +3135,15 @@ namespace gucci::mcp {
                                                      s.yVel2, s.mode2, (int)s.flags2)
                                        : std::string());
                     };
+                    auto fmtExact = [](uint32_t f, tickprobe::Sample const& s) {
+                        return fmt::format("{} x={} y={} vy={} r={}{}{} {} dt={}{} xd={} hid={:02x} rings={} btn=+{}-{}",
+                                           f, s.x, s.y, s.yVel, s.rot, s.held ? " H" : "", s.onGround ? " G" : "",
+                                           s.mode, s.dt, s.split ? " SPLIT" : "", s.extraDelta, s.hidden, s.rings,
+                                           s.pushes, s.releases) +
+                               (s.dual ? fmt::format(" | P2 x={} y={} vy={} {} f2={}", s.x2, s.y2, s.yVel2, s.mode2,
+                                                     (int)s.flags2)
+                                       : std::string());
+                    };
                     auto range = [](std::map<uint32_t, tickprobe::Sample> const& m) {
                         auto r = obj();
                         r["ticks"] = (int64_t)m.size();
@@ -3149,10 +3166,11 @@ namespace gucci::mcp {
                         size_t count = 0;
                         // `which`: "reference" reads the saved run instead.
                         auto const& src = argStr(a, "which") == "reference" ? tickprobe::saved : tickprobe::current;
+                        bool const exact = argBool(a, "exact", false);
                         for (auto const& [f, s] : src) {
                             if ((int64_t)f < from || (int64_t)f > to || ((int64_t)f - from) % every != 0)
                                 continue;
-                            rows.push(fmtSample(f, s));
+                            rows.push(exact ? fmtExact(f, s) : fmtSample(f, s));
                             if (++count >= 400)
                                 break;
                         }
