@@ -10413,7 +10413,17 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::testPlayhead(PlayLayer* pl,
         std::unique(trip.checkpoints.begin(), trip.checkpoints.end()),
         trip.checkpoints.end());
 
+    // Leaving recording disarms intentional death (GucciEngine::setMode).
+    // The trip comes back to the recording, so the armed key comes through it:
+    // put back here, before startRange saves it and turns it off for the run,
+    // and finish() restores it.
+    bool const armedCanDie = updater.m_canDie;
+    bool const armedInputIsDeath = updater.m_inputIsDeath;
     if (trip.record) bot->setMode(Bot::Mode::Playing);
+    if (trip.record) {
+        updater.m_canDie = armedCanDie;
+        updater.m_inputIsDeath = armedInputIsDeath;
+    }
 
     report = this->startRange(pl, from, in.frame);
     if (!report.ok) {
@@ -10544,6 +10554,13 @@ void FrameWindowAnalyzer::endTrip(PlayLayer* pl, bool arrived,
 
     if (arrived || !pl) {
         if (m_trip.record) bot->setMode(Bot::Mode::Recording);
+    } else if (m_trip.record) {
+        // Left in playback: the armed key the trip carried for the recording
+        // (testPlayhead above) has no recording to go back to. Disarmed, as any
+        // other way out of recording does (GucciEngine::setMode), so the next
+        // playback reset doesn't take the intentional-death path.
+        updater.m_canDie = false;
+        updater.m_inputIsDeath = false;
     }
     updater.setPaused(arrived ? m_trip.paused : true);
 

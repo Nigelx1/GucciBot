@@ -1446,6 +1446,22 @@ namespace gucci {
         }
         Mode prev = mode;
         mode = m;
+        // Intentional death is armed only while recording (its key does
+        // nothing otherwise) and lasts until the next reset. Left armed when
+        // the recording stopped, the next death in plain play took the
+        // intentional path (hook_playlayer.cpp, handleResetWithCheckpoints):
+        // back to a platformer checkpoint the recording reached. Going idle
+        // disarms it, and so does any other switch out of recording: straight
+        // to playback, the first playback reset took the intentional path, so
+        // the frame counter carried on from the death frame while the level
+        // started over and that attempt played its inputs at the wrong
+        // frames. Calculate's trip from a recording also switches to playback;
+        // it keeps the armed key itself (framewindow.cpp, the trip).
+        bool const leavesRecording = prev == Mode::Recording && m != Mode::Recording;
+        if ((m == Mode::Idle || leavesRecording) && updater.m_canDie) {
+            updater.m_canDie = false;
+            updater.m_inputIsDeath = false;
+        }
         // Recording or playback starting with something on that breaks it
         // (core/setup_check.hpp): a toast. Queued, since the MCP tools can get
         // here from their own thread.

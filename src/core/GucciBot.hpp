@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-g (A macro restart after a completion takes the end screen down without the Node IDs mod)"
+    "2026-11-17-h (Intentional death is disarmed whenever a recording ends, also after a Calculate trip back that stops short)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
