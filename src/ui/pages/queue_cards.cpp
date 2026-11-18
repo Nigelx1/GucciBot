@@ -36,6 +36,8 @@ namespace gucci::ui::pages {
         std::set<std::string> g_ticked;  // macros ticked in the frame-window card
         std::string g_filter;
         bool g_listLoaded = false;
+        bool g_confirmPf = false;  // Start pressed once with an unsaved macro in memory
+        bool g_confirmFw = false;
 
         const char* resultText(queue::Item const& it, Kind k, bool now, std::string& buf) {
             switch (it.status) {
@@ -169,6 +171,9 @@ namespace gucci::ui::pages {
         // Start/Stop, the continue question and what it's doing now.
         void controls(Kind k, std::string& note, bool& noteOk) {
             bool const run = queue::running(k);
+            bool& confirm = k == Kind::Pathfinder ? g_confirmPf : g_confirmFw;
+            if (run || !queue::unsavedMacroInMemory())
+                confirm = false;
             if (queue::continueOffered(k)) {
                 kit::Note(fmt::format("The game closed while this queue ran. Continue the queue ({} left)?",
                                       queue::state(k).left())
@@ -188,9 +193,19 @@ namespace gucci::ui::pages {
             kit::RowBegin("", nullptr);
             if (!run) {
                 kit::LegitGate gate;  // a queue runs cheats only
-                if (kit::Button("Start", Tone::Accent, -1.f)) {
-                    note = queue::start(k);
-                    noteOk = note.empty();
+                if (kit::Button(confirm ? "Start anyway" : "Start", Tone::Accent, -1.f)) {
+                    if (!confirm && queue::unsavedMacroInMemory()) {
+                        // The queue loads and records macros of its own: the
+                        // one in memory would be gone.
+                        confirm = true;
+                        note = "The macro in memory isn't saved, and the queue will replace it. Save it on the "
+                               "Macro page first, or press Start anyway.";
+                        noteOk = false;
+                    } else {
+                        confirm = false;
+                        note = queue::start(k);
+                        noteOk = note.empty();
+                    }
                 }
             } else if (kit::Button("Stop", Tone::Bad, -1.f)) {
                 queue::stop(k);
@@ -208,6 +223,8 @@ namespace gucci::ui::pages {
                     kit::Hint(line.c_str());
                 kit::Hint("Safe mode is on until the queue ends.");
             }
+            if (!run && queue::holdingUntilLeft())
+                kit::Hint("Safe mode stays on until you leave the level the queue had open.");
             if (!note.empty())
                 kit::Note(note.c_str(), noteOk ? Tone::Muted : Tone::Warn);
         }
@@ -220,8 +237,8 @@ namespace gucci::ui::pages {
                        "and saves what it finds. It's a search that tries inputs in a copy of the game's physics, "
                        "not a trained AI.");
         if (!queue::pathfinderAvailable()) {
-            kit::Note("The Pathfinder queue isn't available on this platform yet: it needs the trigger model, "
-                      "which runs on Windows only for now. The frame-window queue (Calculate page) works here.",
+            kit::Note("The Pathfinder queue isn't available here yet: for now it runs only on Windows with "
+                      "GD 2.2081. The frame-window queue (Calculate page) works here.",
                       Tone::Warn);
             kit::EndCard();
             return;

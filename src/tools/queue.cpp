@@ -21,12 +21,7 @@
 
 #include <Geode/Geode.hpp>
 
-#if __has_include("core/geode_compat.hpp")
 #include "core/geode_compat.hpp"
-#define GBQ_HAVE_COMPAT 1
-#else
-#define GBQ_HAVE_COMPAT 0
-#endif
 
 #include <algorithm>
 #include <chrono>
@@ -47,25 +42,27 @@ namespace gucci::queue {
         // ---- small helpers
 
         std::string utf8(fs::path const& p) {
-#if GBQ_HAVE_COMPAT
             return gucci::pathToString(p);
-#elif defined(GEODE_IS_WINDOWS)
-            return geode::utils::string::wideToUtf8(p.native());
-#else
-            return p.string();
-#endif
         }
 
         fs::path fromUtf8(std::string const& s) {
             return fs::path(std::u8string(s.begin(), s.end()));
         }
 
+        // `base`, or "<base> 2", "<base> 3"... : the first name no saved
+        // macro has, so a save never replaces another macro (the Pathfinder's
+        // saveResult numbers its wins the same way).
+        std::string freeMacroName(std::string const& base) {
+            auto const dir = GucciEngine::get()->getReplayDir();
+            std::error_code ec;
+            std::string name = base;
+            for (int n = 2; fs::exists(dir / fromUtf8(name + ui::macroExtension()), ec); ++n)
+                name = fmt::format("{} {}", base, n);
+            return name;
+        }
+
         cocos2d::CCScene* sceneFor(GJGameLevel* level) {
-#if GBQ_HAVE_COMPAT
             return gucci::playLayerScene<PlayLayer>(level);
-#else
-            return PlayLayer::scene(level, false, false);
-#endif
         }
 
         double secondsSince(Clock::time_point t) {
@@ -124,6 +121,37 @@ namespace gucci::queue {
         };
 
         Runner g_pf, g_fw;
+
+        // A queue that ended with a level open: safe mode stays held until
+        // that level is left, and the bot is stopped once nothing else
+        // (Calculate's trip back, a Pathfinder stop) still has the level.
+        // Released here, not at the end, so the macro the queue last loaded
+        // can't play on and count a completion once the hold is gone.
+        bool g_holdUntilLeft = false;
+        bool g_idleWhenFree = false;
+
+        void serviceHold() {
+            if (!g_holdUntilLeft)
+                return;
+            if (g_pf.running || g_fw.running) {
+                g_holdUntilLeft = false;  // a new queue holds it itself
+                g_idleWhenFree = false;
+                return;
+            }
+            auto* gb = GucciEngine::get();
+            auto& fw = ::Bot::get()->frameWindow();
+            bool const busy = fw.running() || fw.returning() || absense::isRunning() || absense::startPending();
+            if (g_idleWhenFree && !busy) {
+                g_idleWhenFree = false;
+                if (gb->isPlaying() || gb->isRecording())
+                    gb->setMode(GucciEngine::Mode::Idle);
+            }
+            if (!PlayLayer::get() && !busy) {
+                g_holdUntilLeft = false;
+                safemode::setQueueHold(false);
+                geode::log::info("[GucciBot] queue: the level is closed, safe mode's queue hold is off");
+            }
+        }
 
         Runner& R(Kind k) {
             return k == Kind::Pathfinder ? g_pf : g_fw;
@@ -223,8 +251,15 @@ namespace gucci::queue {
             r.index = -1;
             r.activity.clear();
             go(r, Step::Idle);
-            if (!g_pf.running && !g_fw.running)
-                safemode::setQueueHold(false);
+            if (!g_pf.running && !g_fw.running) {
+                if (PlayLayer::get()) {
+                    g_holdUntilLeft = true;
+                    g_idleWhenFree = true;
+                    serviceHold();  // stops the bot now if nothing else has the level
+                } else {
+                    safemode::setQueueHold(false);
+                }
+            }
             save(k);
             log(why);
             Notification::create(why, NotificationIcon::Info, 5.f)->show();
@@ -249,8 +284,12 @@ namespace gucci::queue {
             }
             std::string const levelName = file->header.levelName;
             auto* glm = GameLevelManager::get();
-            if (int const id = idFromMacroName(it.macro); id > 0) {
-                if (isMainLevel(id) || (glm && glm->getSavedLevel(id))) {
+            // The "(<id>)" counts only when that level is the one the macro
+            // says it was recorded on: "Bloodbath (2)" (a second take, a
+            // browser's copy number) is Bloodbath, not Back On Track.
+            if (int const id = idFromMacroName(it.macro); id > 0 && glm) {
+                GJGameLevel* lvl = isMainLevel(id) ? glm->getMainLevel(id, true) : glm->getSavedLevel(id);
+                if (lvl && (levelName.empty() || std::string(lvl->m_levelName) == levelName)) {
                     r.targetId = id;
                     return true;
                 }
@@ -454,6 +493,9 @@ namespace gucci::queue {
                     r.attempts = 0;
                     r.counting = false;
                     r.lastAsk = {};
+                    // Written down before anything reads the macro: a bad
+                    // file that crashes the reader counts as a try.
+                    save(k);
                     if (k == Kind::Pathfinder) {
                         r.targetId = it.levelId;
                         r.targetName.clear();
@@ -672,8 +714,12 @@ namespace gucci::queue {
                         it->bestPercent = 100.0;
                         if (saved.empty() && PlayLayer::get() && gb->replay.m_actionAtom.length() > 0) {
                             // Saving when done switched off: saved here.
-                            saved = macroNameFor(it->levelName, it->levelId);
-                            gb->replay.save(gb->getReplayDir() / fromUtf8(saved + ui::macroExtension()), true);
+                            saved = freeMacroName(macroNameFor(it->levelName, it->levelId));
+                            auto const path = gb->getReplayDir() / fromUtf8(saved + ui::macroExtension());
+                            std::error_code ec;
+                            fs::create_directories(path.parent_path(), ec);
+                            if (!gb->replay.save(path, true))
+                                saved.clear();  // nothing written: nothing to count
                         }
                         it->macro = saved;
                         it->note.clear();
@@ -693,11 +739,11 @@ namespace gucci::queue {
                     }
                     if (furthest.empty() && PlayLayer::get() && gb->replay.m_actionAtom.length() > 0) {
                         // The live run is the furthest it got: kept as that.
-                        furthest = macroNameFor(it->levelName, it->levelId) + " furthest";
+                        furthest = freeMacroName(macroNameFor(it->levelName, it->levelId) + " furthest");
                         auto const path = gb->getReplayDir() / fromUtf8(furthest + ui::macroExtension());
                         std::error_code ec;
                         fs::create_directories(path.parent_path(), ec);
-                        if (!gb->replay.save(path))
+                        if (!gb->replay.save(path, true))
                             furthest.clear();
                     }
                     it->macro = furthest;
@@ -778,6 +824,7 @@ namespace gucci::queue {
         if (depth > 0)
             return;
         ++depth;
+        serviceHold();
         for (Kind k : {Kind::Pathfinder, Kind::FrameWindows}) {
             loadOnce(k);
             try {
@@ -793,6 +840,31 @@ namespace gucci::queue {
 
     bool pathfinderAvailable() {
         return GB_NATIVE_ENGINE != 0;
+    }
+
+    bool holdingUntilLeft() {
+        return g_holdUntilLeft && !g_pf.running && !g_fw.running;
+    }
+
+    bool unsavedMacroInMemory() {
+        auto const& rs = GucciEngine::get()->replay;
+        return rs.m_actionAtom.length() > 0 && rs.m_savedFrom.empty();
+    }
+
+    void onGameExit() {
+        for (Kind k : {Kind::Pathfinder, Kind::FrameWindows}) {
+            auto& r = R(k);
+            if (!r.running)
+                continue;
+            if (auto* it = current(r)) {
+                it->status = Status::Pending;
+                it->tries = std::max(0, it->tries - 1);
+                it->seconds = r.itemBase + secondsSince(r.itemAt);
+                it->note = "The game was closed while this ran";
+            }
+            save(k);  // still marked running: the next launch offers to continue
+            log("the game is closing: the item running goes back in line");
+        }
     }
 
     State const& state(Kind k) {
@@ -1039,4 +1111,11 @@ $on_mod(Loaded) {
                                      NotificationIcon::Info, 6.f)
                     ->show();
     });
+}
+
+// A normal close (Geode sends this; a crash never gets here): the item
+// running isn't counted as a try, so closing the game twice on one level
+// doesn't mark it failed.
+$on_game(Exiting) {
+    gucci::queue::onGameExit();
 }

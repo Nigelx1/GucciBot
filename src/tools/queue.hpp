@@ -72,6 +72,17 @@ namespace gucci::queue {
     bool continueOffered(Kind kind);
     void answerContinue(Kind kind, bool yes);
 
+    // A queue ended with a level open: safe mode stays on until that level is
+    // left (the card says so).
+    bool holdingUntilLeft();
+    // The macro in memory has inputs and no file of its own: starting a queue
+    // would replace it (the card asks first).
+    bool unsavedMacroInMemory();
+
+    // The game is closing normally: the item running goes back in line
+    // without counting the try (only a crash counts one).
+    void onGameExit();
+
     // For Assistant Access (gucci_queue_read).
     matjson::Value toJson(Kind kind);
 
