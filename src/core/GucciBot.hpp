@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-b (GD 2.2091: Calculate warns when GD's Ignore Damage was on during the run)"
+    "2026-11-18-c (Pathfinder: a death on a plan's last tick goes back instead of being decided past, so level complete means the macro replays)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
