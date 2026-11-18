@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-c (Pathfinder: a death on a plan's last tick goes back instead of being decided past, so level complete means the macro replays)"
+    "2026-11-18-e (Pathfinder: the stuck rule counts 300 decisions without getting further instead of five minutes, with a 60-minute clock backstop)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

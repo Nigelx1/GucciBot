@@ -22,6 +22,8 @@
 #include "ui/kit.hpp"
 #include "ui/layout.hpp"
 #include "ui/look.hpp"
+#include "ui/pages.hpp"
+#include "ui/ui.hpp"
 
 #include "absense/glue.hpp"
 #include "ai/job.hpp"
@@ -39,6 +41,7 @@
 #include <cstdint>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace gucci::ui::pages {
@@ -282,6 +285,19 @@ namespace gucci::ui::pages {
 
         bool selected(State const& s, uint32_t key) {
             return std::binary_search(s.sel.begin(), s.sel.end(), key);
+        }
+
+        // A click on a bar with Ctrl held puts it in or takes it out of the
+        // selection. True when Ctrl was held (ui::ctrlHeld: the game
+        // keyboard's Ctrl, the only one that's right on both Geode versions).
+        bool ctrlClickBar(State& s, uint32_t key) {
+            if (!ctrlHeld())
+                return false;
+            if (selected(s, key))
+                std::erase(s.sel, key);
+            else
+                s.sel.insert(std::lower_bound(s.sel.begin(), s.sel.end(), key), key);
+            return true;
         }
 
         // Ctrl+A, and on a phone the inspector's Select all.
@@ -631,11 +647,8 @@ namespace gucci::ui::pages {
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && inTrack && laneHere >= 0) {
                 if (hit.key != ed::kNone) {
                     bool const isSel = selected(s, hit.key);
-                    if (io.KeyCtrl) {
-                        if (isSel)
-                            std::erase(s.sel, hit.key);
-                        else
-                            s.sel.insert(std::lower_bound(s.sel.begin(), s.sel.end(), hit.key), hit.key);
+                    if (ctrlClickBar(s, hit.key)) {
+                        // in or out of the selection; nothing is dragged
                     } else if (editable) {
                         s.dragFrom = v.frame(io.MousePos.x);
                         s.dragKey = hit.key;
@@ -658,8 +671,9 @@ namespace gucci::ui::pages {
                         s.sel = {hit.key};  // locked: it can still be selected and looked at
                     }
                 } else {
-                    s.boxBase = io.KeyCtrl ? s.sel : std::vector<uint32_t>{};
-                    if (!io.KeyCtrl)
+                    bool const ctrl = ctrlHeld();
+                    s.boxBase = ctrl ? s.sel : std::vector<uint32_t>{};
+                    if (!ctrl)
                         s.sel.clear();
                     s.drag = Drag::Box;
                     s.boxFrom = io.MousePos;
@@ -1206,11 +1220,17 @@ namespace gucci::ui::pages {
         }
 
         // Keys while the page has focus and no field is being typed in.
-        void shortcuts(State& s) {
+        // Ctrl+Z / Ctrl+Y / Ctrl+A from a real keyboard come through
+        // editorCtrlKey (below) instead: imgui-cocos never hands ImGui a key
+        // going down while no box has the keyboard, so these checks only see
+        // keys put straight into ImGui (or handed to it while it wanted the
+        // keyboard). `ctrlTaken`: one of those came from the game's keyboard
+        // this frame, so the Ctrl ones here stand aside.
+        void shortcuts(State& s, bool ctrlTaken) {
             ImGuiIO const& io = ImGui::GetIO();
             if (io.WantTextInput)
                 return;
-            bool const ctrl = io.KeyCtrl;
+            bool const ctrl = io.KeyCtrl && !ctrlTaken;
             if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
                 if (io.KeyShift)
                     redo(s);
@@ -1249,17 +1269,68 @@ namespace gucci::ui::pages {
     }
 
     namespace {
-        bool g_keysLive = false;
-    }
+        // The frame the editor last had the keyboard (its page or a card
+        // focused), and the last it listened for keys (that, and no drag).
+        int g_focusedFrame = -100;
+        int g_keysLiveFrame = -100;
+
+        // A Ctrl key from the game's keyboard (editorCtrlKey), done at the
+        // editor's next draw.
+        enum class CtrlKey { None, Undo, Redo, SelectAll };
+        CtrlKey g_ctrlKey = CtrlKey::None;
+        int g_ctrlKeyFrame = -100;
+        int g_ctrlKeysTaken = 0;
+
+        // Assistant Access (editortest): a bar clicked, a focus change.
+        int g_testClick = -1;
+        bool g_testCtrlSeen = false;
+        int g_testFocus = -1;  // 1 focus, 0 let go
+
+        bool fresh(int frame) {
+            return ImGui::GetCurrentContext() && ImGui::GetFrameCount() - frame <= 1;
+        }
+    } // namespace
 
     bool editorKeysLive() {
-        return g_keysLive;
+        return fresh(g_keysLiveFrame);
+    }
+
+    bool editorCtrlKey(int keyCode, bool shift, bool down, bool repeat) {
+        // The editor had the keyboard at its last draw, the menu is still
+        // open, and nothing is being typed in (a box keeps its own Ctrl+Z and
+        // Ctrl+A: those keys go to ImGui, as the hook hands them on).
+        if (!fresh(g_focusedFrame) || !isOpen() || ImGui::GetIO().WantTextInput || !ctrlHeld())
+            return false;
+        CtrlKey what = CtrlKey::None;
+        if (keyCode == static_cast<int>(enumKeyCodes::KEY_Z))
+            what = shift ? CtrlKey::Redo : CtrlKey::Undo;
+        else if (keyCode == static_cast<int>(enumKeyCodes::KEY_Y))
+            what = CtrlKey::Redo;
+        else if (keyCode == static_cast<int>(enumKeyCodes::KEY_A))
+            what = CtrlKey::SelectAll;
+        if (what == CtrlKey::None || !down)
+            return false;  // a key going up goes on, whatever it is
+        // Held down, it repeats: taken, but done once.
+        if (!repeat) {
+            g_ctrlKey = what;
+            g_ctrlKeyFrame = ImGui::GetFrameCount();
+            ++g_ctrlKeysTaken;
+        }
+        return true;
     }
 
     void editor() {
         State& s = st();
         sync(s);
         const char* lock = lockReason();
+        if (g_testFocus >= 0 && !layout::drawingPage()) {
+            // The page's own window, as a click in it focuses it (or none).
+            if (g_testFocus == 1)
+                ImGui::SetWindowFocus();
+            else
+                ImGui::SetWindowFocus(nullptr);
+        }
+        g_testFocus = -1;
         // Taken before anything is drawn: the page (or a card in it) has focus.
         // In the Windows layout each card is a window of its own, not a child
         // of the page's, so it asks after the editor's three cards instead.
@@ -1271,10 +1342,59 @@ namespace gucci::ui::pages {
         headerCard(s, lock);
         timelineCard(s, lock == nullptr);
         inspectorCard(s, lock == nullptr);
-        g_keysLive = focused && s.drag == Drag::None;
-        if (g_keysLive)
-            shortcuts(s);
+        if (g_testClick >= 0) {
+            // What a left click on that bar in the timeline does (lanesView),
+            // with Ctrl as ctrlHeld() reads it now; without Ctrl, the drag a
+            // real click would start isn't, only its selection change.
+            if (static_cast<size_t>(g_testClick) < s.model.items.size()) {
+                uint32_t const key = s.model.items[static_cast<size_t>(g_testClick)].key();
+                g_testCtrlSeen = ctrlHeld();
+                if (!ctrlClickBar(s, key) && !selected(s, key))
+                    s.sel = {key};
+            }
+            g_testClick = -1;
+        }
+        bool const live = focused && s.drag == Drag::None;
+        if (focused)
+            g_focusedFrame = ImGui::GetFrameCount();
+        if (live)
+            g_keysLiveFrame = ImGui::GetFrameCount();
+        // (Not drawn since, the editor drops it: no undo when it opens again.)
+        CtrlKey const key = fresh(g_ctrlKeyFrame) ? std::exchange(g_ctrlKey, CtrlKey::None) : CtrlKey::None;
+        g_ctrlKey = CtrlKey::None;
+        if (live) {
+            if (key == CtrlKey::Undo)
+                undo(s);
+            else if (key == CtrlKey::Redo)
+                redo(s);
+            else if (key == CtrlKey::SelectAll)
+                selectAll(s);
+            shortcuts(s, key != CtrlKey::None);
+        }
         ImGui::PopID();
     }
+
+    namespace editortest {
+        Info info() {
+            State& s = st();
+            Info i;
+            i.focused = fresh(g_focusedFrame);
+            i.keysLive = editorKeysLive();
+            i.items = static_cast<int>(s.model.items.size());
+            i.selected = static_cast<int>(s.sel.size());
+            i.canUndo = s.history.canUndo();
+            i.canRedo = s.history.canRedo();
+            i.message = s.msg.text;
+            i.ctrlKeysTaken = g_ctrlKeysTaken;
+            i.lastClickCtrl = g_testCtrlSeen;
+            return i;
+        }
+        void clickBar(int n) {
+            g_testClick = n;
+        }
+        void focus(bool on) {
+            g_testFocus = on ? 1 : 0;
+        }
+    } // namespace editortest
 
 } // namespace gucci::ui::pages
