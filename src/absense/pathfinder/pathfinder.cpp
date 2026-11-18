@@ -899,8 +899,13 @@ bool AbsensePathfinder::onWouldDie(PlayerObject* player, GameObject* object) {
     // level it had already beaten. Swallowed as GD would, and not counted.
     // Only where both hold (the end animation has started AND player 1 is
     // locked): a hit with just one of them still counts, the safe side.
+    // The player that was hit must be locked too (review, 2026-11-18): if GD
+    // checked the hit player's own lock and left player 2 free in a dual, a
+    // player-2 hit there would be a real death. Single mode: the hit player
+    // is player 1, so nothing changes there.
     if (auto* pl = PlayLayer::get();
-        pl && pl->m_levelEndAnimationStarted && pl->m_player1 && pl->m_player1->m_isLocked) {
+        pl && pl->m_levelEndAnimationStarted && pl->m_player1 && pl->m_player1->m_isLocked &&
+        (!player || player->m_isLocked)) {
         if (m_lockedDeathLines++ < 10)
             log("tick %llu: player 1 is locked for GD's end animation: a hit GD does not deal, not a death",
                 (unsigned long long)currentTick());
