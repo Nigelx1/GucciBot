@@ -543,6 +543,9 @@ namespace gucci::mcp {
 
                 out["macro"] = gb->replay.m_replayName;
                 out["macro_actions"] = (int64_t)gb->replay.m_actionAtom.length();
+                out["macro_gd_version"] = gb->replay.m_madeOnGd;
+                out["macro_gb_version"] = gb->replay.m_madeWithGb;
+                out["gd_version_warning"] = gb->replay.gdVersionWarning();
                 out["macro_input_index"] = (int64_t)gb->replay.m_inputIndex;
 
                 auto* pl = PlayLayer::get();
@@ -707,26 +710,45 @@ namespace gucci::mcp {
             "one)}], in the card's order, and foreign [{file, format, known}]: "
             "other bots' macros in the replays folder, which the card offers to "
             "convert. The card's list follows the folder within about 1.5 s "
-            "while the Macro page is open (or on Refresh).",
+            "while the Macro page is open (or on Refresh). skipped_unspellable "
+            "(only when there are any): files whose names the system code page "
+            "can't spell, which the card leaves out too.",
             obj(),
             [](matjson::Value const&) {
                 auto dir = GucciEngine::get()->getReplayDir();
                 auto arr = matjson::Value::array();
+                // Files the system code page can't spell: path::string()
+                // throws for them on Windows, which used to stop the whole
+                // tool. Reported here by their UTF-8 name and left out of
+                // macros, as the menu's list (reloadMacroList) leaves them out.
+                auto unspellable = matjson::Value::array();
+                size_t unspellableCount = 0;
                 std::error_code ec;
                 if (fs::exists(dir, ec)) {
-                    for (auto const& it : fs::directory_iterator(dir, ec)) {
-                        if (!it.is_regular_file(ec))
+                    for (fs::directory_iterator walk(dir, ec), end; !ec && walk != end; walk.increment(ec)) {
+                        auto const& it = *walk;
+                        std::error_code typeEc;
+                        if (!it.is_regular_file(typeEc))
                             continue;
                         auto e = obj();
-                        e["name"] = it.path().stem().string();
-                        e["ext"] = it.path().extension().string();
-                        e["bytes"] = (int64_t)fs::file_size(it.path(), ec);
+                        try {
+                            e["name"] = it.path().stem().string();
+                            e["ext"] = it.path().extension().string();
+                        } catch (std::system_error const&) {
+                            unspellable.push(gucci::pathToString(it.path().filename()));
+                            ++unspellableCount;
+                            continue;
+                        }
+                        std::error_code sizeEc;
+                        e["bytes"] = (int64_t)fs::file_size(it.path(), sizeEc);
                         arr.push(e);
                     }
                 }
                 auto out = obj();
-                out["dir"] = dir.string();
+                out["dir"] = gucci::pathToString(dir);
                 out["macros"] = arr;
+                if (unspellableCount > 0)
+                    out["skipped_unspellable"] = unspellable;
                 // GucciBot (2026-11-01): the card's own list, as it shows it.
                 auto listed = matjson::Value::array();
                 for (auto const& m : ui::listedMacros()) {
@@ -2284,6 +2306,14 @@ namespace gucci::mcp {
                 out["player1"] = playerJson(pl->m_player1);
                 if (pl->m_gameState.m_isDualMode && pl->m_player2)
                     out["player2"] = playerJson(pl->m_player2);
+                // The checkpoints a respawn could go back to: GucciBot's
+                // platformer and practice stacks, and GD's own array.
+                auto cps = obj();
+                auto const& pf = GucciEngine::get()->practiceFix;
+                cps["platformer"] = (int64_t)pf.m_platformerCheckpoints.size();
+                cps["practice"] = (int64_t)pf.m_savedCheckpoints.size();
+                cps["gd_array"] = (int64_t)(pl->m_checkpointArray ? pl->m_checkpointArray->count() : 0);
+                out["checkpoints"] = cps;
                 return out;
             },
         });
@@ -2733,7 +2763,9 @@ namespace gucci::mcp {
             schemaOf({{"press", "boolean", "true to press, false to release (default true)"},
                       {"player2", "boolean", "player 2 instead of 1 (default false)"},
                       {"key", "boolean", "send Space (with player2: the Up arrow) through the keyboard "
-                                         "dispatcher (default false)"}}),
+                                         "dispatcher (default false)"},
+                      {"button", "integer", "without key: 1 jump (the default), 2 left, 3 right (platformer "
+                                            "walking)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 auto* pl = requireLevel();
@@ -2760,9 +2792,13 @@ namespace gucci::mcp {
                 // player2 is the player, queued on the side that moves it
                 // (see sideFor; Flip 2-Player Controls swaps them outside
                 // platformer).
-                pl->queueButton(1, press, GucciEngine::get()->replay.sideFor(pl, p2), 0.0);
+                int const button = (int)argInt(a, "button", 1);
+                if (button < 1 || button > 3)
+                    throw ToolError("button is 1 (jump), 2 (left) or 3 (right)");
+                pl->queueButton(button, press, GucciEngine::get()->replay.sideFor(pl, p2), 0.0);
                 auto out = obj();
                 out["queued"] = press ? "press" : "release";
+                out["button"] = (int64_t)button;
                 out["player2"] = p2;
                 out["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
                 return out;
@@ -3269,7 +3305,7 @@ namespace gucci::mcp {
             "the game or test the pathfinder on a list of levels.",
             schemaOf({{"name", "string", "a local level's name, exactly"},
                       {"id", "integer", "an online level's ID (instead of name)"},
-                      {"main", "integer", "one of RobTop's levels, 1 to 22 (instead of name)"}}),
+                      {"main", "integer", "one of RobTop's levels, 1 to 22, or The Tower's 5001 to 5004 (instead of name)"}}),
             [](matjson::Value const& a) {
                 if (PlayLayer::get() || LevelEditorLayer::get())
                     throw ToolError("leave the level (or the editor) first");
@@ -3281,8 +3317,10 @@ namespace gucci::mcp {
                 // 8, the secret coins collected).
                 if (a.contains("main")) {
                     int64_t const id = argInt(a, "main", 0);
-                    if (id < 1 || id > 22)
-                        throw ToolError("main is 1 to 22 (Stereo Madness to Dash)");
+                    // 5001 to 5004: The Tower's floors (platformer levels GD
+                    // also builds from its own files).
+                    if ((id < 1 || id > 22) && (id < 5001 || id > 5004))
+                        throw ToolError("main is 1 to 22 (Stereo Madness to Dash) or 5001 to 5004 (The Tower)");
                     auto* glm = GameLevelManager::get();
                     auto* level = glm ? glm->getMainLevel((int)id, false) : nullptr;
                     if (!level)
@@ -3469,6 +3507,7 @@ namespace gucci::mcp {
         registerUiPressTools(server);
         registerSearchTools(server);
         registerShareTools(server);
+        registerBandsTools(server);
         registerLayoutTools(server);
     }
 

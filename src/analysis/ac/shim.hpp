@@ -127,6 +127,17 @@ struct FrameWindowTier {
     float pulseIn = 0.08f;
     float pulseHold = 0.12f;
     float pulseOut = 0.25f;
+    // GucciBot (2026-11-16): a color for the pulse. While it pulses, what
+    // pulses (the marker, the label or both) turns this color and back, on
+    // the same fade-in, hold and fade-out. Off, the pulse keeps the band's
+    // own color, as it always did. The band's opacity is kept either way.
+    bool pulseTint = false;
+    std::array<float, 3> pulseColor = {1.f, 1.f, 1.f};
+    // GucciBot (2026-11-16): a legend group. Shown bands with the same group
+    // share one legend row (in the level and on Share my windows' picture),
+    // named for the group, in the first one's color, with their counts added
+    // up. Empty: the band has a row of its own, as always.
+    std::string group = "";
 };
 
 // Copied field-for-field from anticroom's settings.hpp. Defaults are his --
@@ -252,6 +263,11 @@ struct FrameWindowSettings {
     bool playSounds = true;
     float soundVolume = 1.f;
     float markerRadius = 11.f;
+    // GucciBot (2026-11-16): how thick the plain ring's colored line is (its
+    // dark edge is 2 wider). 2 is the thickness it always had. Saved only
+    // once it's changed (fwstore's sparse keys), so a save that never touched
+    // it stays as it was.
+    float ringWidth = 2.f;
 
     // Circle skin: marker radius grows with the window instead of being one
     // fixed size, so how tight a click is reads at a glance without looking at

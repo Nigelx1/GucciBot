@@ -460,7 +460,15 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
         return;
     }
 
-    if (m_paused && !SLRenderer::get()->isRecording()) {
+    // Frame advance doesn't hold a level that is closing. GD keeps it as
+    // PlayLayer::get() through the fade to the menu, and holding the
+    // scheduler froze that fade until frame advance was turned off (soak test
+    // 2026-11-16, quitting through Assistant Access; the pause menu's exit
+    // never got here, it comes through the m_isPaused branch above).
+    // m_quittingLayer is set by the onQuit hook and cleared by the next
+    // level's init.
+    if (m_paused && !SLRenderer::get()->isRecording() &&
+        !(isPlayLayer && pl == SLRenderer::get()->m_quittingLayer)) {
         m_tpsOverflow = 0.0;
         m_respawnTimer = 0;
         if (consumeStep())

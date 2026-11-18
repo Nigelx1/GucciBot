@@ -1586,6 +1586,8 @@ namespace gucci {
                 return a.m_frame < b.m_frame;
             });
             gb->replay.m_actionAtom.m_actions = committed;
+            // Found on this game: what Save says the macro was made on.
+            gb->replay.stampMadeHere();
             // GucciBot (2026-10-23): the frame windows in memory were measured
             // on the clicks this replaces. Saved below with the search's
             // macro, they would stand on clicks they were never measured on.

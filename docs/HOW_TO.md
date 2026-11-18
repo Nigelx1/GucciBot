@@ -125,7 +125,8 @@ A macro is a recording of your inputs, tick by tick. GucciBot plays it back exac
 
 - A name can't have `\ / : * ? " < > |` in it.
 - **Practice mode works too.** Checkpoints are saved whole, so a macro recorded through respawns plays back like one recorded straight through.
-- **Fix a mistake without starting over (new in 2.0):** while the macro plays, switch **Mode** to **Record** at the spot you want to change. Recording carries on from there, and the rest of the macro is cut.
+- **Fix a mistake without starting over (new in 2.0):** while the macro plays, switch **Mode** to **Record** at the spot you want to change. Recording carries on from there, and the rest of the macro is cut. **Save** then saves over that macro, as it does after any change to a macro you loaded.
+- **When the name is taken (new in 2.0):** if another macro already has the name in **Name** (say you recorded from **Off** and the last macro's name was still there), **Save** asks first: **Replace** it (it's backed up first if that's on), **Save as "name 2"** to keep both, or **Cancel**. An autosave can't ask, so it keeps both: it saves as "name 2" and says so.
 - **Autosave:** the **Saving** card on the same page has **Autosave at the level's end** and **Autosave on a timer**. **Back up a macro before overwriting it** is on by default.
 - Your macros are saved with your theme's file ending (`.brrr` for the GucciBot theme). The **Saved macros** list shows which theme each one was saved under.
 
@@ -180,7 +181,7 @@ Calculate measures, for every input in the loaded macro, how many frames you had
 
 ### Run it
 
-1. Load a macro and open its level.
+1. Open the macro's level and load the macro by clicking its name in **Saved macros** (that also sets **Mode** to **Play**, which Calculate needs).
 2. Go to the **Calculate** page and press **Calculate** (or press **Calculate** on the Macro page, or in Compact Mode).
 3. Wait for the bar to finish. A long level can take a while; **Cancel** stops it.
 
@@ -234,7 +235,7 @@ The Pathfinder finds its own way through a level. It tries moves in a copy of th
 2. Go to the **Pathfinder** page.
 3. Set **Engine** to **Search (old)** (that's the default), and **Search** to **Absense** (also the default).
 4. Press **Start**.
-5. Watch. The game pauses now and then while it thinks. When it beats the level, it saves the macro and says **Macro saved as "..."**. It's named after the level. Replay it like any other macro (section 4).
+5. Watch. The game pauses now and then while it thinks. When it beats the level, it saves the macro and says **Macro saved as "..."**, on the page too. It's named after the level. **Mode** goes back to what it was before the run, so to replay it or run Calculate on it, click its name in **Saved macros** first (section 4).
 
 **Tip:** empty the **Name** box on the Macro page before you press Start. If a name is in it, the Pathfinder saves over that macro instead (a backup of the old one is kept by default).
 

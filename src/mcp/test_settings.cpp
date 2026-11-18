@@ -472,6 +472,14 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setForkJump(wantBool("pf_fork_jump", val));
                              }});
+                // GucciBot (2026-11-16, pf3 lane): a mode portal stacked on a
+                // dual portal is a route fork too, gone back to the first time
+                // a walk back past it fails; on by default (GRIEF, 2026-11-17).
+                v.push_back({"pf_fork_dual", "bool", Store::Memory,
+                             [] { return matjson::Value(absense::forkDual()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setForkDual(wantBool("pf_fork_dual", val));
+                             }});
                 // The cell-by-cell write-back on a level with rows (on by
                 // default); off for the old pass of everything, to compare.
                 v.push_back({"pf_pending_cells", "bool", Store::Memory,

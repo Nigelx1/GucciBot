@@ -76,9 +76,10 @@ namespace gucci::mcp {
         // Nothing stops the server at exit, and by the time this static is
         // destroyed (the DLL's atexit, inside ExitProcess) Windows has already
         // ended the socket thread, so m_thread is still joinable and
-        // std::thread's destructor called std::terminate. Geode 6 reports that
-        // abort as a crash on every exit (crash log 2026-11-17 05:49 UTC,
-        // dynamic atexit destructor for 'inst'). Let go of the handle instead.
+        // std::thread's destructor called std::terminate: an abort on every
+        // exit (0xc0000409 in ucrtbase, in Windows' event log; Geode 6 also
+        // writes a crash log for it). Let go of the handle instead. Ported
+        // from the 2.2091 branch (c730662).
         ~Server() {
             m_running = false;
             if (m_thread.joinable())
@@ -196,6 +197,8 @@ namespace gucci::mcp {
     void registerSearchTools(Server& server);
     // gucci_share: what Share my windows saved, or why it can't (share_tool.cpp).
     void registerShareTools(Server& server);
+    // gucci_bands: the Bands card's files and sound packs (bands_tool.cpp).
+    void registerBandsTools(Server& server);
     // gucci_layout: the menu's Windows layout, for tests (layout_tool.cpp).
     void registerLayoutTools(Server& server);
 

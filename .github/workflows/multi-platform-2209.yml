@@ -13,10 +13,9 @@ name: GD 2.2091 build (Geode 6, Windows preview)
 # - no combine step: one platform, so the build's .geode is the package;
 # - its own artifact and file name, "GD 2.2091" in both, so it can't be taken
 #   for the 2.2081 package;
-# - every build input pinned, including the two that float in the 2.2081
-#   workflow (build-geode-mod@main there, safetyhook#main in CMakeLists for
-#   Geode 5). Pinning those for 2.2081 too would change its build, so that
-#   waits for the merge (docs/CI_2209.md).
+# - every build input pinned, the same build-geode-mod and SafetyHook commits
+#   as the 2.2081 workflow (master pinned those in 2026-11-17-c;
+#   docs/CI_2209.md).
 #
 # The bindings come from CMakeLists.txt (commit 7a670e9, the one Geode
 # 6.0.0-alpha.2 came out with, plus patches/bindings-g6-copyable-renames.patch).

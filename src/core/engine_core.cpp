@@ -8,6 +8,7 @@
 #include "core/bot_switch.hpp"
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
+#include "core/gd_version.hpp"
 #include "core/mcp_only.hpp"
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
@@ -15,6 +16,7 @@
 #include "hacks/hud.hpp"
 #include "mcp/test_settings.hpp"
 #include "tools/macro_convert.hpp"
+#include "tools/save_target.hpp"
 #include "tools/selfcheck.hpp"
 
 #include <Geode/Geode.hpp>
@@ -325,7 +327,43 @@ namespace gucci {
     }
 
     void GucciPracticeFix::clearPlatformer(bool full) {
-        m_platformerCheckpoints.clear();
+        // Silicate's clearPlatformer(true): each touched checkpoint is turned
+        // off again (so it can be taken on the next attempt) and the
+        // CheckpointObject storeCheckpoint retained is released. GucciBot's
+        // port only emptied the list, so every touched platformer checkpoint
+        // leaked and its flag could stay lit. Without `full` (a level loading,
+        // Silicate's clearPlatformer(false)) the list is only forgotten.
+        //
+        // Before the release, the checkpoint's own object comes out of the
+        // section storeCheckpoint put it in, the way removeCheckpoint does for
+        // a practice checkpoint. Sections hold plain pointers: released while
+        // still filed there, it was freed under GD's visibility pass, which
+        // crashed (access violation in GJBaseGameLayer::preUpdateVisibility,
+        // render test copy 2026-11-17, a platformer checkpoint cleared by a
+        // restart from the start, then the level played on). Silicate 1.1.0's
+        // clearPlatformer has the same gap.
+        auto* pl = full ? PlayLayer::get() : nullptr;
+        while (!m_platformerCheckpoints.empty()) {
+            if (full) {
+                auto& back = m_platformerCheckpoints.back();
+                if (back.second) {
+                    back.second->m_checkpointActivated = false;
+                    back.second->resetCheckpoint();
+                }
+                if (back.first) {
+                    if (auto* obj = back.first->m_physicalCheckpointObject; obj && pl) {
+                        pl->removeObjectFromSection(obj);
+                        if (obj->m_glowSprite) {
+                            obj->m_glowSprite->removeMeAndCleanup();
+                            obj->m_glowSprite = nullptr;
+                        }
+                        obj->removeMeAndCleanup();
+                    }
+                    back.first->release();
+                }
+            }
+            m_platformerCheckpoints.pop_back();
+        }
         m_shouldLoadPlatformer = false;
         if (full) {
             m_savedCheckpoints.clear();
@@ -557,11 +595,20 @@ namespace gucci {
             } else {
                 m_actionAtom.m_actions.clear();
                 m_pathSamples.clear();
+                // A new recording, made on this game.
+                stampMadeHere();
                 // The run starts over here, from the level's start or from a
                 // start position; Save marks the file with which.
                 auto* pl = PlayLayer::get();
                 m_recordedFromStartPos = pl && pl->m_startPosObject;
                 gb->updater.m_droppedTimeFrame = UINT32_MAX;
+                // GucciBot (2026-11-16): Record stays on from one level to
+                // the next, and the Name box keeps the last macro's name. A
+                // run starting over on another level is a new macro: Save
+                // (and the autosaves) keep the old one instead of writing
+                // over it. The same level, recorded again, saves in place.
+                if (pl && pl->m_level)
+                    forgetSourceIfOtherLevel(pl->m_level->m_levelName);
                 // GucciBot (2026-10-23): the clicks these windows were
                 // measured on are gone: drop them from memory, or Save writes
                 // them next to this new recording. The old macro's sidecar on
@@ -648,6 +695,14 @@ namespace gucci {
     }
 
     static fs::path sidecarPath(const fs::path& macroPath, const char* ext);
+
+    void GucciReplaySystem::forgetSourceIfOtherLevel(std::string const& level) {
+        if (m_savedFrom.empty() || level == m_savedFromLevel)
+            return;
+        log::info("[GucciBot] Recording on \"{}\", not \"{}\": a new macro, not {}",
+                  level, m_savedFromLevel, m_savedFrom.filename().string());
+        m_savedFrom.clear();
+    }
 
     void GucciReplaySystem::backupExisting(const fs::path& path) {
         if (!fs::exists(path))
@@ -1203,6 +1258,10 @@ namespace gucci {
         }
         hdr.name = m_replayName;
         hdr.rngSeed = m_startingSeed;
+        // What it was made on: the loaded file's, or this game's once
+        // something recorded on top (stampMadeHere). Unknown stays unknown.
+        hdr.gdVersion = m_madeOnGd;
+        hdr.gbVersion = m_madeWithGb;
         if (m_recordedFromStartPos)
             hdr.flags |= GBR6_FROM_START_POS;
         hdr.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
@@ -1256,8 +1315,11 @@ namespace gucci {
             // loaded one now: Save writes the theme's extension, which may not
             // be the one loaded (zz.solar loaded, zz.juice saved), and the
             // autosaves, sidecars and highlighted row follow getCurrentPath.
-            if (path.parent_path() == gb->getReplayDir() && path.stem().string() == gb->replayName)
+            if (path.parent_path() == gb->getReplayDir() && path.stem().string() == gb->replayName) {
                 m_loadedPath = path;
+                m_savedFrom = path;
+                m_savedFromLevel = hdr.levelName;
+            }
         }
         saveFwMarks(path);
         saveAcResults(path);
@@ -1275,6 +1337,17 @@ namespace gucci {
         if (written && asLoaded && ::Bot::get()->frameWindow().running())
             g_fwRunMacro = path;
         return written;
+    }
+
+    void GucciReplaySystem::stampMadeHere() {
+        if (m_madeOnGd != currentGdVersion())
+            m_madeOnGd = currentGdVersion();
+        if (m_madeWithGb != MOD_VERSION)
+            m_madeWithGb = MOD_VERSION;
+    }
+
+    std::string GucciReplaySystem::gdVersionWarning() const {
+        return gucci::gdVersionWarning(m_madeOnGd, currentGdVersion());
     }
 
     void GucciReplaySystem::buildClickIntervals(double tps) {
@@ -1337,6 +1410,14 @@ namespace gucci {
             // Shown on the Macro card: a macro recorded from a start position
             // only plays, and measures, from that one. Kept for a re-save.
             m_recordedFromStartPos = f.header.fromStartPos();
+            m_madeOnGd = f.header.gdVersion;
+            m_madeWithGb = f.header.gbVersion;
+            if (auto const warn = gdVersionWarning(); !warn.empty()) {
+                // Never a reason not to play it: a note on the Macro card
+                // (gdVersionWarning) and this one notification per load.
+                log::warn("[GucciBot] {}", warn);
+                geode::queueInMainThread([warn] { ui::warnNotice(warn); });
+            }
             gb->startPosWarning = m_recordedFromStartPos
                                       ? "Recorded from a start position: play it, and Calculate it, from that "
                                         "same start position."
@@ -1344,6 +1425,8 @@ namespace gucci {
             m_actionAtom.clear();
             m_inputIndex = 0;
             m_loadedPath = path;
+            m_savedFrom = path;
+            m_savedFromLevel = f.header.levelName;
             for (auto& inp : f.p1Inputs)
                 m_actionAtom.addAction(
                     inp.frame, static_cast<gb::ActionType>(inp.button), inp.pressed, false);
@@ -1400,6 +1483,22 @@ namespace gucci {
         }
         Mode prev = mode;
         mode = m;
+        // Intentional death is armed only while recording (its key does
+        // nothing otherwise) and lasts until the next reset. Left armed when
+        // the recording stopped, the next death in plain play took the
+        // intentional path (hook_playlayer.cpp, handleResetWithCheckpoints):
+        // back to a platformer checkpoint the recording reached. Going idle
+        // disarms it, and so does any other switch out of recording: straight
+        // to playback, the first playback reset took the intentional path, so
+        // the frame counter carried on from the death frame while the level
+        // started over and that attempt played its inputs at the wrong
+        // frames. Calculate's trip from a recording also switches to playback;
+        // it keeps the armed key itself (framewindow.cpp, the trip).
+        bool const leavesRecording = prev == Mode::Recording && m != Mode::Recording;
+        if ((m == Mode::Idle || leavesRecording) && updater.m_canDie) {
+            updater.m_canDie = false;
+            updater.m_inputIsDeath = false;
+        }
         // Recording or playback starting with something on that breaks it
         // (core/setup_check.hpp): a toast. Queued, since the MCP tools can get
         // here from their own thread.
@@ -1530,6 +1629,7 @@ namespace gucci {
         rs.clearDispatchOrder();
         forgetMacroWindows();
         rs.m_recordedFromStartPos = pl->m_startPosObject != nullptr;
+        rs.stampMadeHere();
         // The Macro card's note was the dropped file's ("Recorded from a
         // start position"), not this recording's.
         startPosWarning.clear();
@@ -1589,6 +1689,12 @@ namespace gucci {
         bool const runPlaysMacro = fwAnalyzing || acfw.running() || acfw.returning();
         if (m == Mode::Recording && isPlaying() && !runPlaysMacro && beginResumeRecording())
             return;
+        // GucciBot (2026-11-16): any other Record from the menu is a fresh
+        // recording, not the file the Name box may still name: a Save over
+        // that file asks first (tools/save_target.hpp). Carrying on from a
+        // macro that plays (above) keeps its file, and saves over it.
+        if (m == Mode::Recording && !isRecording() && !runPlaysMacro)
+            replay.m_savedFrom.clear();
         if (m == Mode::Recording && !runPlaysMacro && beginRecordingFromOff())
             return;
         setMode(m);
@@ -1746,16 +1852,36 @@ namespace gucci {
         if (replay.m_autosaveJobId == 0) {
             replay.m_autosaveJobId = scheduler.schedule(autosaveIntervalSec, [this] {
                 // Not without a name, as at the level's end (hook_playlayer.cpp).
-                if (autosaveAtInterval && isRecording() && !replay.m_actionAtom.empty() && !replayName.empty()) {
-                    auto path = replay.getCurrentPath();
-                    if (replayBackupsEnabled)
-                        replay.backupExisting(path);
-                    replay.save(path);
-                }
+                if (autosaveAtInterval && isRecording() && !replay.m_actionAtom.empty() && !replayName.empty())
+                    autosaveMacro();
             });
         } else {
             scheduler.reschedule(replay.m_autosaveJobId, autosaveIntervalSec);
         }
+    }
+
+    void GucciEngine::autosaveMacro() {
+        auto path = replay.getCurrentPath();
+        std::error_code ec;
+        bool const exists = fs::exists(path, ec);
+        bool const own = !replay.m_savedFrom.empty() && fs::equivalent(path, replay.m_savedFrom, ec);
+        if (savetarget::decide(exists, own) == savetarget::Decision::Ask) {
+            // A fresh recording, and the Name box still names another macro:
+            // an autosave can't ask, so both are kept (Nigel, 2026-11-16).
+            std::string const taken = replayName;
+            replayName = savetarget::nextFreeName(taken, [this](std::string const& n) {
+                return !findMacroFile(n).empty();
+            });
+            path = getReplayDir() / (replayName + ui::macroExtension());
+            log::info("[GucciBot] Autosave: \"{}\" is another macro; saved as \"{}\"", taken, replayName);
+            Notification::create(
+                fmt::format("Autosaved as \"{}\": there's already a macro called \"{}\".", replayName, taken),
+                NotificationIcon::Info, 4.f)
+                ->show();
+        } else if (replayBackupsEnabled) {
+            replay.backupExisting(path);
+        }
+        replay.save(path);
     }
 
     // Macro Tools. Everything here is file in, file out through
@@ -1832,6 +1958,8 @@ namespace gucci {
             replayName = name;
         if (replay.m_loadedPath == src)
             replay.m_loadedPath = dst;
+        if (replay.m_savedFrom == src)
+            replay.m_savedFrom = dst;
         log::info("[GucciBot] macro {} -> {}", src.filename().string(), dst.filename().string());
         reloadMacroList();
         return "";

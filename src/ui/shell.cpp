@@ -42,6 +42,7 @@
 #include "trainers/videomode.hpp"
 #include "trainers/click_indicators.hpp"
 #include "tools/macro_check.hpp"
+#include "tools/save_target.hpp"
 #include "tools/selfcheck.hpp"
 
 #include <Geode/Geode.hpp>
@@ -522,6 +523,39 @@ namespace gucci::ui {
         std::string g_saveNote;
         bool g_saveNoteOk = false;
 
+        // The macro in memory written as replays/<name><theme's extension>,
+        // the file there backed up first when that's on. The Name box takes
+        // the name (Save as "X 2" changes it).
+        void writeMacroAs(std::string const& name) {
+            auto* gb = GucciEngine::get();
+            gb->replayName = name;
+            std::error_code ec;
+            std::filesystem::create_directories(replaysDir(), ec);
+            auto const path = replaysDir() / (name + macroExtension());
+            if (gb->replayBackupsEnabled)
+                gb->replay.backupExisting(path);
+            bool const written = gb->replay.save(path);
+            gb->reloadMacroList();
+            g_saveNoteOk = written;
+            g_saveNote = written ? fmt::format("Saved \"{}\".", name)
+                                 : fmt::format("Couldn't save \"{}\": the file couldn't be written.", name);
+        }
+
+        // GucciBot (2026-11-16), Nigel: "we gotta be able to append stuff, so
+        // the most intuitive option that keeps both". A Save over the file the
+        // macro came from (carried on recording from it, edited, saved again)
+        // writes at once, as always. A Save over another macro's file (a fresh
+        // recording with the old name still in the Name box, or a name typed
+        // in that's taken) asks first: Replace, Save as "<name> 2", or Cancel
+        // (saveQuestion, drawn under each Save button).
+        std::string g_askName;   // the name asked about; empty: no question
+        bool g_askOpen = false;  // open the popup the next time it's drawn
+
+        std::string nextFreeMacroName(std::string const& name) {
+            auto* gb = GucciEngine::get();
+            return savetarget::nextFreeName(name, [gb](std::string const& n) { return !gb->findMacroFile(n).empty(); });
+        }
+
         void saveLoadedMacro() {
             auto* gb = GucciEngine::get();
             g_saveNoteOk = false;
@@ -531,16 +565,63 @@ namespace gucci::ui {
                 g_saveNote = "Not saved: a name can't have any of \\ / : * ? \" < > |";
                 return;
             }
-            std::error_code ec;
-            std::filesystem::create_directories(replaysDir(), ec);
             auto const path = replaysDir() / (gb->replayName + macroExtension());
-            if (gb->replayBackupsEnabled)
-                gb->replay.backupExisting(path);
-            bool const written = gb->replay.save(path);
-            gb->reloadMacroList();
-            g_saveNoteOk = written;
-            g_saveNote = written ? fmt::format("Saved \"{}\".", gb->replayName)
-                                 : fmt::format("Couldn't save \"{}\": the file couldn't be written.", gb->replayName);
+            std::error_code ec;
+            bool const exists = std::filesystem::exists(path, ec);
+            auto const& from = gb->replay.m_savedFrom;
+            bool const own = !from.empty() && std::filesystem::equivalent(path, from, ec);
+            if (savetarget::decide(exists, own) == savetarget::Decision::Ask) {
+                g_askName = gb->replayName;
+                g_askOpen = true;
+                g_saveNote.clear();
+                return;
+            }
+            writeMacroAs(gb->replayName);
+        }
+
+        // The question a Save over another macro asks. Drawn right after each
+        // Save button (the Macro page's, Compact Mode's), where it opens.
+        void saveQuestion() {
+            static constexpr char kId[] = "##savequestion";
+            if (search::indexing())  // the search's hidden pass over every page
+                return;
+            if (g_askOpen && !g_askName.empty()) {
+                ImGui::OpenPopup(kId);
+                g_askOpen = false;
+            }
+            float const width = std::min(380.f, ImGui::GetIO().DisplaySize.x - 32.f);
+            ImGui::SetNextWindowSize(ImVec2(width, 0.f), ImGuiCond_Always);
+            if (!ImGui::BeginPopupModal(kId, nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize))
+                return;
+            auto* gb = GucciEngine::get();
+            std::string const name = g_askName;
+            std::string const other = nextFreeMacroName(name);
+            {
+                UseFont f(Font::Strong);
+                ImGui::TextWrapped("%s", fmt::format("There's already a macro called \"{}\".", name).c_str());
+            }
+            kit::Gap(0.3f);
+            kit::Paragraph(fmt::format("Replace it with this one{}, or keep both and save this one as \"{}\".",
+                                       gb->replayBackupsEnabled ? " (it's backed up first)" : "", other)
+                               .c_str());
+            kit::Gap(0.5f);
+            float const full = kit::Avail();
+            bool done = false;
+            if (kit::Button(fmt::format("Save as \"{}\"", other).c_str(), Tone::Accent, full)) {
+                writeMacroAs(other);
+                done = true;
+            }
+            if (kit::Button("Replace", Tone::Bad, full)) {
+                writeMacroAs(name);
+                done = true;
+            }
+            if (kit::Button("Cancel", Tone::Plain, full))
+                done = true;
+            if (done) {
+                g_askName.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
 
         // Under a Save button: what it said, for a few seconds after it did.
@@ -636,6 +717,13 @@ namespace gucci::ui {
             auto* gb = GucciEngine::get();
             std::error_code ec;
             auto const file = gb->findMacroFile(name, ext);
+            // GucciBot (2026-11-16): the macro in memory came from this file:
+            // it no longer does. Save still brings it back (a free name is
+            // written at once), but a macro that takes the name later is
+            // another one, and Save asks before replacing it.
+            bool const wasSource = !file.empty() && !gb->replay.m_savedFrom.empty() &&
+                                   std::filesystem::equivalent(file, gb->replay.m_savedFrom, ec);
+            ec.clear();
             if (file.empty() || !std::filesystem::remove(file, ec))
                 return fmt::format("Couldn't delete \"{}\"{}", name, ec ? ": " + ec.message() : ".");
             auto const prefix = file.filename().string() + ".";
@@ -645,6 +733,8 @@ namespace gucci::ui {
                     sidecars.push_back(e.path());
             for (auto const& p : sidecars)
                 std::filesystem::remove(p, ec);
+            if (wasSource)
+                gb->replay.m_savedFrom.clear();
             gb->reloadMacroList();
             return "";
         }
@@ -1210,6 +1300,10 @@ namespace gucci::ui {
 
     } // namespace
 
+    void warnNotice(std::string const& text, float seconds) {
+        showNotice(text, NotificationIcon::Warning, seconds);
+    }
+
     // Import a macro's own path, for the picker's result and Assistant
     // Access's test hook (gucci_share import): the same note under Saved
     // macros either way.
@@ -1383,8 +1477,9 @@ namespace gucci::ui {
             }
             ImGui::EndDisabled();
             kit::RowBegin("Shift frames", "If a converted macro dies early, try one frame either way");
-            ImGui::SetNextItemWidth(kit::Avail());
-            ImGui::SliderInt("##convertshift", &g_convertShift, -3, 3, g_convertShift == 0 ? "as saved" : "%+d");
+            // kit's slider (the same ImGui slider, full width) so the test
+            // tools see it: gucci_ui reads it, gucci_ui_press types into it.
+            kit::SliderInt("convertshift", &g_convertShift, -3, 3, g_convertShift == 0 ? "as saved" : "%+d");
             kit::RowEnd();
             // Each file's format, found once (nullptr: none).
             static std::map<std::string, convert::Format const*> s_formatOf;
@@ -1661,6 +1756,7 @@ namespace gucci::ui {
             if (kit::Button("Save", Tone::Accent))
                 saveLoadedMacro();
             ImGui::EndDisabled();
+            saveQuestion();
             ImGui::SameLine();
             bool const canCalc = PlayLayer::get() && !actions.empty();
             ImGui::BeginDisabled(!canCalc || legit::on());  // a Calculate run is a cheat
@@ -1677,6 +1773,9 @@ namespace gucci::ui {
             saveNoteRow();
             if (!gb->startPosWarning.empty())
                 kit::Note(gb->startPosWarning.c_str(), Tone::Warn);
+            // Made on another GD version: it plays anyway, with this note.
+            if (auto const gdWarn = gb->replay.gdVersionWarning(); !gdWarn.empty() && !actions.empty())
+                kit::Note(gdWarn.c_str(), Tone::Warn);
             kit::EndCard();
 
             // Nigel's layout (2026-11-12): the tick rate and speed come first,
@@ -1772,6 +1871,14 @@ namespace gucci::ui {
                     auto const& f = report.findings[i];
                     s_checkReport += fmt::format("\nframe {}{}: {}", f.frame, f.lane >= 3 ? " (P2)" : "", macrocheck::name(f.problem));
                 }
+                // What it was made on, when the file says (2026-11-17).
+                if (!gb->replay.m_madeOnGd.empty())
+                    s_checkReport += fmt::format("\nMade on GD {}{}.", gb->replay.m_madeOnGd,
+                                                 gb->replay.m_madeWithGb.empty()
+                                                     ? std::string()
+                                                     : " with GucciBot " + gb->replay.m_madeWithGb);
+                if (auto const gdWarn = gb->replay.gdVersionWarning(); !gdWarn.empty())
+                    s_checkReport += "\n" + gdWarn;
             }
             // Deleting the macro picked in the list below (the loaded one). Two
             // presses, so a slip doesn't lose a run; its sidecars go too, or a
@@ -3708,6 +3815,20 @@ namespace gucci::ui {
                 ImGui::SetCursorPosY(std::max(after, ImGui::GetCursorPosY()));
             }
             ImGui::BeginChild("##page", ImVec2(0.f, 0.f));
+            // Every page shares this one child, so ImGui kept the last page's
+            // scroll: from the Pathfinder scrolled down to Start, Calculate
+            // opened with its own button above the view (11-16 new-user
+            // pass). Another page starts at its top. A search result picked
+            // onto a new page still scrolls to it: its jump sets the scroll
+            // later in this frame, and the later one wins.
+            {
+                static int s_drawnPage = -1;
+                if (g_page != s_drawnPage) {
+                    if (s_drawnPage >= 0)
+                        ImGui::SetScrollY(0.f);
+                    s_drawnPage = g_page;
+                }
+            }
             // The theme's words under every page's title (Nigel, 2026-10-18:
             // "add labels everywhere with the cool quote stuff"). A theme has
             // three quotes (the old menu's Replay, Tools and Credits pages);
@@ -3941,6 +4062,7 @@ namespace gucci::ui {
                 if (kit::Button("Save", Tone::Accent, half))
                     saveLoadedMacro();
                 ImGui::EndDisabled();
+                saveQuestion();
                 ImGui::SameLine();
                 ImGui::BeginDisabled(!PlayLayer::get() || gb->replay.m_actionAtom.empty() || legit::on());
                 if (kit::Button("Calculate", Tone::Plain, -1.f))

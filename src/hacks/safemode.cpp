@@ -431,9 +431,9 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         // (or a start position's own saved state, which is a start), and
         // with GucciBot on that array gets an entry only in the branches of
         // handleResetWithCheckpoints that return true (GucciBot's
-        // storeCheckpoint never hands GD one). A plain death after a
-        // platformer checkpoint goes back to the start for now (that
-        // function's last branch), so it is a new attempt. Checked in GD
+        // storeCheckpoint never hands GD one). That includes the plain-play
+        // platformer branch (a death after a platformer checkpoint respawns
+        // there, 2026-11-17-j), so the mark holds through it. Checked in GD
         // 2.2091's code (resetLevel 0x5192bb..0x5193e2, storeCheckpoint
         // 0x516510); the 2.2081 lane read the same in 2.2081's.
         bool const sameAttempt = safemode::g_checkpointRespawn;
