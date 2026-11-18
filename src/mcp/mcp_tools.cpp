@@ -29,6 +29,7 @@
 #include "mcp/tickprobe.hpp"
 #include "analysis/trajectory.hpp"
 #include "tools/macro_check.hpp"
+#include "tools/queue.hpp"
 #include "core/GucciBot.hpp"
 #include "hacks/hitborder_probe.hpp"
 #include "hacks/hitborders.hpp"
@@ -402,8 +403,10 @@ namespace gucci::mcp {
                     sm["switch"] = gb->protectedMode;
                     sm["forced"] = safemode::forced();
                     sm["auto"] = safemode::autoSafeMode();
+                    sm["queue_hold"] = safemode::queueHold();
                     sm["bot_runs_count"] =
-                        !gb->protectedMode && !safemode::forced() && !safemode::autoSafeMode();
+                        !gb->protectedMode && !safemode::forced() && !safemode::autoSafeMode() &&
+                        !safemode::queueHold();
                     sm["cheating_now"] = safemode::cheatingNow();
                     sm["tainted"] = safemode::tainted();
                     sm["legit_only"] = legit::on();
@@ -1780,6 +1783,9 @@ namespace gucci::mcp {
                         out["skipped"] = (int64_t)fw.skippedCount();
                         out["desynced"] = (int64_t)fw.desyncCount();
                         out["last_run_ok"] = fw.lastRunOk();
+                        // GucciBot (2026-11-17): GD 2.2091's Ignore Damage was on while
+                        // these windows were counted (FrameWindowAnalyzer::gdIgnoreDamage).
+                        out["gd_ignore_damage"] = fw.gdIgnoreDamage();
                         // GucciBot (2026-11-15): where a whole run over older windows stopped
                         // (-1: none), and what Continue would do.
                         out["recount_from"] =
@@ -3310,6 +3316,110 @@ namespace gucci::mcp {
                 },
             });
         }
+
+        // --- the queues (tools/queue.hpp, Juice's idea) ---------------------
+
+        server.addTool({
+            "gucci_queue_add",
+            "Add to a queue, as its card's Add does: kind pathfinder takes `ids` (level IDs split by spaces, commas or "
+            "lines; 1 to 22 and 5001 to 5004 are RobTop's levels), kind frame_windows takes `macros` (saved macro "
+            "names, one a line). Also sets the Pathfinder queue's `limit_minutes` and `count_windows`, and `clear`: "
+            "true empties the queue first (not while it runs). Answers with the queue (as gucci_queue_read).",
+            schemaOf({{"kind", "string", "pathfinder or frame_windows"},
+                      {"ids", "string", "pathfinder: the level IDs"},
+                      {"macros", "string", "frame_windows: saved macro names, one a line"},
+                      {"limit_minutes", "integer", "pathfinder: minutes per level (default 30)"},
+                      {"count_windows", "boolean", "pathfinder: count a win's frame windows (default on)"},
+                      {"clear", "boolean", "empty the queue first"}}),
+            [](matjson::Value const& a) {
+                auto const kind = argStr(a, "kind");
+                if (kind != "pathfinder" && kind != "frame_windows")
+                    throw ToolError("kind is pathfinder or frame_windows");
+                auto const k = kind == "pathfinder" ? queue::Kind::Pathfinder : queue::Kind::FrameWindows;
+                if (argBool(a, "clear", false)) {
+                    if (queue::running(k))
+                        throw ToolError("the queue is running: stop it first");
+                    queue::clear(k);
+                }
+                auto out = obj();
+                if (k == queue::Kind::Pathfinder) {
+                    if (a.contains("limit_minutes"))
+                        queue::setLimitMinutes((int)argInt(a, "limit_minutes", 30));
+                    if (a.contains("count_windows"))
+                        queue::setCountWindows(argBool(a, "count_windows", true));
+                    std::vector<std::string> bad;
+                    out["added"] = (int64_t)queue::addLevelIds(argStr(a, "ids"), &bad);
+                    out["not_ids"] = bad;
+                } else {
+                    std::vector<std::string> names;
+                    std::string line;
+                    for (char c : argStr(a, "macros") + "\n") {
+                        if (c == '\n' || c == '\r') {
+                            if (!line.empty())
+                                names.push_back(line);
+                            line.clear();
+                        } else {
+                            line += c;
+                        }
+                    }
+                    out["added"] = (int64_t)queue::addMacros(names);
+                }
+                out["queue"] = queue::toJson(k);
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_queue_start",
+            "Start (or continue) a queue, as its card's Start does: refused with Legit only on, while the other queue "
+            "or anything else owns the run. Safe mode is on until it ends. Also answers a pending \"Continue the "
+            "queue?\" with yes.",
+            schemaOf({{"kind", "string", "pathfinder or frame_windows"}}),
+            [](matjson::Value const& a) {
+                auto const kind = argStr(a, "kind");
+                if (kind != "pathfinder" && kind != "frame_windows")
+                    throw ToolError("kind is pathfinder or frame_windows");
+                auto const k = kind == "pathfinder" ? queue::Kind::Pathfinder : queue::Kind::FrameWindows;
+                auto const why = queue::start(k);
+                if (!why.empty())
+                    throw ToolError(why);
+                return queue::toJson(k);
+            },
+        });
+
+        server.addTool({
+            "gucci_queue_stop",
+            "Stop a queue, as its card's Stop does: the run going is stopped and its item goes back in line.",
+            schemaOf({{"kind", "string", "pathfinder or frame_windows"}}),
+            [](matjson::Value const& a) {
+                auto const kind = argStr(a, "kind");
+                if (kind != "pathfinder" && kind != "frame_windows")
+                    throw ToolError("kind is pathfinder or frame_windows");
+                auto const k = kind == "pathfinder" ? queue::Kind::Pathfinder : queue::Kind::FrameWindows;
+                queue::stop(k);
+                return queue::toJson(k);
+            },
+        });
+
+        server.addTool({
+            "gucci_queue_read",
+            "A queue and its results: running, continue_offered (the last launch left it with items to go and nobody "
+            "answered yet), activity (what it does now), left, limit_minutes, count_windows, safe_mode_hold, file (its "
+            "saved state) and items (id, level, status pending/running/beaten/not_beaten/failed/skipped, tries, "
+            "best_percent, seconds, macro, windows (-1: none counted), lstar, note). `answer_continue`: true or false "
+            "answers the Continue question as the card's buttons do.",
+            schemaOf({{"kind", "string", "pathfinder or frame_windows"},
+                      {"answer_continue", "boolean", "answer \"Continue the queue?\""}}),
+            [](matjson::Value const& a) {
+                auto const kind = argStr(a, "kind");
+                if (kind != "pathfinder" && kind != "frame_windows")
+                    throw ToolError("kind is pathfinder or frame_windows");
+                auto const k = kind == "pathfinder" ? queue::Kind::Pathfinder : queue::Kind::FrameWindows;
+                if (a.contains("answer_continue"))
+                    queue::answerContinue(k, argBool(a, "answer_continue", false));
+                return queue::toJson(k);
+            },
+        });
 
         server.addTool({
             "gucci_open_level",

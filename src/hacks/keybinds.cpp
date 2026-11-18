@@ -151,8 +151,14 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
             return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
         // Ctrl+F in the menu goes to its search box (ui/search.cpp), not to a
         // hotkey bound to F: the box isn't taking typing yet as F goes down.
-        if (key == enumKeyCodes::KEY_F && ui::search::ctrlFIsMine())
+        // Ctrl is read from this dispatcher (Geode sets its modifiers right
+        // before every key it hands on), not from ImGui, which never sees
+        // these keys go down (ui/search.hpp, ctrlFIsMine).
+        if (key == enumKeyCodes::KEY_F && ui::search::ctrlFIsMine(this->getControlKeyPressed())) {
+            if (down && !repeat)
+                ui::search::focusBox();
             return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+        }
 
         // Switched off (core/bot_switch.hpp), only the menu key does anything.
         bool const live = botswitch::on();

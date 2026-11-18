@@ -20,6 +20,7 @@
 #include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/binding/FMODAudioEngine.hpp>
 
 #include <string_view>
 #include <vector>
@@ -191,6 +192,19 @@ namespace gucci::botswitch {
             s_disabledHooks.clear();
         }
 
+        // Sets the master channel group's pitch, as updateAudioSpeedhack does,
+        // and reads it back (-1 when FMOD isn't there to set).
+        float setGamePitch(float pitch) {
+            auto* fmod = FMODAudioEngine::get();
+            FMOD::ChannelGroup* master = nullptr;
+            if (!fmod || !fmod->m_system || fmod->m_system->getMasterChannelGroup(&master) != FMOD_OK || !master)
+                return -1.f;
+            master->setPitch(pitch);
+            float now = -1.f;
+            master->getPitch(&now);
+            return now;
+        }
+
         void takeOut() {
             auto* gb = GucciEngine::get();
             gb->enabled = false;
@@ -204,7 +218,14 @@ namespace gucci::botswitch {
 #endif
             disableHooks();
             s_takenOut = true;
-            log::info("[GucciBot] Switched off: out of the game until it is switched back on");
+            // The game's audio pitch back to normal. Only drawScene's
+            // updateAudioSpeedhack sets it (engine_updater.cpp), and with that
+            // hook out (or stepping aside, where the menu keeps it) nothing
+            // would: the speedhack's pitch stayed on a game running at normal
+            // speed. putBack's first drawScene sets the speed's pitch again.
+            float const pitch = setGamePitch(1.f);
+            log::info("[GucciBot] Switched off: out of the game until it is switched back on (audio pitch {:.2f})",
+                      pitch);
         }
 
         void putBack() {
@@ -217,6 +238,9 @@ namespace gucci::botswitch {
 #endif
             gb->enabled = true;
             s_takenOut = false;
+            // The speed's pitch straight away (takeOut set it to 1), rather
+            // than on the next drawn frame.
+            gb->updater.updateAudioSpeedhack();
             // Diagnostics still had the launch's check, which expected nothing
             // and said the bot is switched off.
             gb->runSelfCheck();

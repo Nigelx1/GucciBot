@@ -38,6 +38,11 @@ namespace gucci::safemode {
 
     bool forced();
     void forceForSession();
+    // A queue (tools/queue.hpp) is running: safe mode is on for as long as it
+    // runs, between its levels too, whatever the switch says (Juice's queue,
+    // 2026-11-17: it plays the Pathfinder and Calculate, which are cheats).
+    void setQueueHold(bool on);
+    bool queueHold();
     // Started with GUCCIBOT_FORCE_SAFE_MODE set (a test launch from tools/assist.py),
     // not just forced later by the tool. GD's saves are never written then (hooks/test_save_guard.cpp).
     bool testLaunch();

@@ -186,6 +186,41 @@ namespace {
         std::printf("  %s: %zu bytes -> %s\n", name, file.size(), out.c_str());
     }
 
+    // GucciBot (2026-11-17): windows counted with GD 2.2091's Ignore Damage on
+    // (Card::warning): a red top edge and the warning, white on red, where the
+    // kicker was.
+    void checkWarned() {
+        auto card = sampleCard(false, true);
+        card.warning = "NOT LEGIT: GD'S IGNORE DAMAGE WAS ON WHILE THESE WERE COUNTED";
+        png::Pixels px;
+        std::string error;
+        if (!share::draw(card, px, error)) {
+            fail("warned: draw refused: " + error);
+            return;
+        }
+        auto const at = [&](int x, int y) { return px.rgba.data() + (static_cast<size_t>(y) * px.width + x) * 4; };
+        share::Rgba const red{214, 48, 49};
+        if (!near(at(800, 2), red) || !near(at(800, 10), red))
+            fail("warned: the top edge isn't red");
+        int white = 0, redPill = 0;
+        for (int y = 40; y < 80; ++y)
+            for (int x = 30; x < 1100; ++x) {
+                if (near(at(x, y), {255, 255, 255}, 10))
+                    white++;
+                if (near(at(x, y), red, 4))
+                    redPill++;
+            }
+        if (white < 300 || redPill < 3000)
+            fail("warned: no white-on-red warning in the kicker's place (white " + std::to_string(white) +
+                 ", red " + std::to_string(redPill) + ")");
+        auto const file = png::encode(px, false, error);
+        if (!file.empty()) {
+            std::ofstream("build/share_sample_warned.png", std::ios::binary)
+                .write(reinterpret_cast<char const*>(file.data()), static_cast<std::streamsize>(file.size()));
+            std::printf("  warned: %zu bytes -> build/share_sample_warned.png\n", file.size());
+        }
+    }
+
 } // namespace
 
 int main() {
@@ -193,6 +228,7 @@ int main() {
     checkCard(false, true, "dark");
     checkCard(true, true, "light");
     checkCard(false, false, "noscore");
+    checkWarned();
     {
         share::Card none;
         png::Pixels px;
