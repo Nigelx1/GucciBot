@@ -796,6 +796,7 @@ public:
         int mode = -1, mode2 = -1;     // the kinds of player it ends in (mode2: -1 without a second player)
     };
     AheadWait m_aheadWait;
+    void noteRunOnDeath(uint64_t from);  // pffix: a death in ticks run on with no bookkeeping
     void goLive();
     void pauseLive();
     void beginAhead();
@@ -932,6 +933,14 @@ public:
     uint64_t m_planKnownDeath = UINT64_MAX;
     bool m_expectReset = false;
     bool m_completed = false;
+    // GucciBot (2026-11-17, pffix lane): the earliest tick (as afterTick
+    // labels it: the counter once the tick has run) at which the real game
+    // would have killed the player on the path kept now, the death kept from
+    // happening (onWouldDie) and never gone back before. A path through one
+    // is not a path the game plays: a macro of it dies there. Cleared when a
+    // restore lands before it; a run that reaches the end with one set is
+    // not called complete (stop). UINT64_MAX: none.
+    uint64_t m_deathKept = UINT64_MAX;
 
     std::deque<Anchor> m_anchors;  // oldest first; the start state is kept apart
     Anchor m_startAnchor;
