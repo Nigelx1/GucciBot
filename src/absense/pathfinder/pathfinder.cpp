@@ -529,6 +529,7 @@ bool AbsensePathfinder::start() {
     m_expectReset = false;
     m_completed = false;
     m_deathKept = UINT64_MAX;
+    m_liveGuardLines = 0;
     m_starts.clear();
     forgetRunMemo();
     m_probe = Probe{};
@@ -1238,6 +1239,21 @@ void AbsensePathfinder::tick() {
                     // where the plan ends meanwhile.
                     if (m_ahead.active) {
                         decide();
+                        // GucciBot (2026-11-18, pfharden lane): a dead end
+                        // decided ahead is handed over here, at once, as the
+                        // Backtracking case below does it. Left to that case,
+                        // it waited for another pass of this loop, and when
+                        // the decision used up the slice there was none: the
+                        // game ran the next frame live with the phase at
+                        // Backtracking, where liveInput plays nothing and
+                        // keeps no books (a death in those ticks was never
+                        // recorded, and the history drifted from what the
+                        // game played).
+                        if (m_phase == Phase::Backtracking && m_ahead.active) {
+                            cancelAhead();
+                            m_aheadFailed = true;
+                            m_phase = Phase::Committing;
+                        }
                     } else if (m_planIndex < m_plan.size()) {
                         beginAhead();
                         if (!m_ahead.active) goto done;  // nothing to decide ahead of: wait for the plan
@@ -1294,6 +1310,18 @@ void AbsensePathfinder::tick() {
         }
     }
 done:
+    // GucciBot (2026-11-18, pfharden lane): the game never runs live past a
+    // slice with the phase other than Committing: liveInput would skip every
+    // tick of the next frame (no input, no bookkeeping). Stopped here
+    // instead, its last tick's bookkeeping done; the phase's own case carries
+    // on from where the game is next frame.
+    if (m_live && m_phase != Phase::Committing) {
+        static const char* const kPhase[] = {"idle", "deciding", "committing", "going back", "probing", "restoring", "done"};
+        if (m_liveGuardLines++ < 20)
+            log("tick %llu: the game was left live with the search %s; stopped it until that is done",
+                (unsigned long long)currentTick(), kPhase[(int)m_phase]);
+        pauseLive();
+    }
     m_lastSliceStart = frameStart;
     m_lastSliceMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frameStart).count();
     m_stats.sliceMs = m_lastSliceMs;

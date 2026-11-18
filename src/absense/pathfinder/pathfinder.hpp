@@ -947,6 +947,7 @@ public:
     // restore lands before it; a run that reaches the end with one set is
     // not called complete (stop). UINT64_MAX: none.
     uint64_t m_deathKept = UINT64_MAX;
+    int m_liveGuardLines = 0;  // pfharden: tick()'s guard at done: (the game left live outside Committing)
 
     std::deque<Anchor> m_anchors;  // oldest first; the start state is kept apart
     Anchor m_startAnchor;
