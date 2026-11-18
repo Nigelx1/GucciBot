@@ -41,7 +41,7 @@ The number in each name is the GD version it's for: **2208** is GD 2.2081, **220
 
 **Not sure which you have?** Open Geode's mod list: Geode itself is listed there with its version. Geode 5 means GD 2.2081, Geode 6 means GD 2.2091. To see the GD version itself, open the newest log in the game's `geode/logs` folder: near the top it says `Running Geode v... in Geometry Dash v2.2081` (or `v2.2091`). If that line also says **forward compatibility mode**, your game is on 2.2091 with Geode 5, and neither file loads: install Geode 6.0.0-alpha.2 first.
 
-**The preview (GD 2.2091)** has everything in 2.0 except the **Pathfinder** and **tick rates other than 240 TPS** (both come in 2.0.1). Its look-aheads (Show Trajectory and the rest) work as they do on a Mac, without the trigger model. Mac, Android, iPhone and iPad on 2.2091 come later.
+**The preview (GD 2.2091)** has everything in 2.0 except the **Pathfinder**, **tick rates under 162 TPS**, **TPS changes inside a macro** and **High TPS precision** (they come in 2.0.1). 240 TPS and any rate from 162 TPS up work. Its look-aheads (Show Trajectory and the rest) work as they do on a Mac, without the trigger model. Mac, Android, iPhone and iPad on 2.2091 come later.
 
 **Picked the wrong one?** Geode says the mod "can not be installed". Press **OK**, then **Cancel** on the box after it: **Replace** there would delete the GucciBot that works.
 
@@ -80,7 +80,7 @@ The **Open Mods Folder** button always finds it. By hand:
 - **Mac, iPhone and iPad** have had little testing. The Mac build runs on Apple silicon and on Intel Macs **(new in 2.0)**; nobody has tried it on an Intel Mac yet.
 - **Rendering and Video Mode** work on Windows and Mac **(Mac is new in 2.0, and not tried on a Mac yet)**. They don't work on phones yet.
 - **The Pathfinder** runs everywhere **(new in 2.0)**, but it's at its best on Windows. Off Windows it can't see what move and rotate triggers will do next, so levels that use them fail more often. The page says so. It hasn't been tried on a Mac or a phone yet.
-- **Still Windows only:** tick rates under 162 TPS, High TPS precision, and the Pathfinder's **Rotate triggers (experimental)** switch.
+- **Still Windows on GD 2.2081 only:** tick rates under 162 TPS, High TPS precision, and the Pathfinder's **Rotate triggers (experimental)** switch.
 
 ---
 

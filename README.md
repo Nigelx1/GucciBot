@@ -15,9 +15,9 @@ It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.o
        name, or a pre-release tag such as 2.0.0-preview.1 for the 2.2091 file). Change every file name below if he picks another.
      - "Macros play the same on both" waits for the cross-version traces (parity plan must-have 20). Until they're in, the text
        says it hasn't been checked.
-     - The preview's "not yet" list follows the parity plan (no Pathfinder, 240 TPS only, no trigger model for the look-aheads).
-       Re-read it against the 2.2091 build that actually ships: as of port-2209 9aa1def the 240 TPS lock isn't in the code yet
-       (port2209 PROGRESS, open item 3), and the Pathfinder page note is (9aa1def).
+     - The preview's "not yet" list follows the in-game sweep of 11-17 (lanes/sweep2209/RESULTS.md): no Pathfinder; 240 and
+       162 TPS and up record and replay exactly, while under 162 TPS, TPS changes inside a macro and High TPS precision come in
+       2.0.1; no trigger model for the look-aheads. There is no 240 TPS lock (master since 2026-11-17-k).
      - Not checked in a game: that Geode's installed-mods list shows Geode itself with its version (read from Geode's UI code,
        ModItem.cpp, not seen on screen). The log line, the "can not be installed" box, the Already Installed / Replace box and the
        "Outdated (GD x)" label are read from Geode 5.10.1's and 6.0.0-alpha.2's source. -->
@@ -74,7 +74,7 @@ Windows is home, and gets the most testing. macOS, iOS and Android are newer: th
 The preview is the same GucciBot, built from the same code for GD 2.2091 and Geode 6. It's **Windows only** for now, and it has everything in 2.0 except:
 
 - **The Pathfinder.** Its page says it isn't on GD 2.2091 yet. It comes in **2.0.1**.
-- **Tick rates other than 240 TPS.** The preview runs at 240 only, so no custom TPS, no TPS changes inside a macro, and no High TPS precision. They come in **2.0.1**.
+- **Some tick rates.** 240 TPS and any rate from 162 TPS up work: they record and replay to exactly the same end. Tick rates under 162 TPS, TPS changes inside a macro, and High TPS precision come in **2.0.1**. A macro made under 162 TPS plays at 240 instead, with a notice.
 - **The trigger model behind the look-aheads.** Show Trajectory, Frame extrapolation, Prevent death's look-ahead, Best tick and the sub-tick preview work as they do on a Mac: moving objects keep their current speed.
 - **Mac, Android, iPhone and iPad on 2.2091.** Later. Until then, those platforms have GucciBot on GD 2.2081 only.
 
@@ -166,10 +166,10 @@ What's tested and what isn't, plainly:
 
 - **Windows on GD 2.2081** is home and gets the most testing.
 - **Mac, iPhone and iPad** have had little testing, and **Android** has run on a phone. The Mac build runs on Intel Macs too, but nobody has run it on one yet. Rendering and Video Mode on a Mac, and the Pathfinder off Windows, haven't been tried on a device.
-- **The GD 2.2091 preview** is Windows only, without the Pathfinder or tick rates other than 240 TPS, and it hasn't been checked that every 2.2081 macro plays back the same there ([the details](#gd-22091-the-windows-preview)).
+- **The GD 2.2091 preview** is Windows only, without the Pathfinder or tick rates under 162 TPS, and it hasn't been checked that every 2.2081 macro plays back the same there ([the details](#gd-22091-the-windows-preview)).
 - **The AI pathfinder** is still being built. The Pathfinder's search engine is what plays levels today.
 
-Next up is **2.0.1**: the Pathfinder and custom TPS on the 2.2091 preview. Anything on `master` still waiting on its in-game test says so in its commit message.
+Next up is **2.0.1**: the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro and High TPS precision on the 2.2091 preview. Anything on `master` still waiting on its in-game test says so in its commit message.
 
 ## Help and contact
 
