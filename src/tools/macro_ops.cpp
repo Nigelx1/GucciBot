@@ -456,7 +456,8 @@ namespace gucci::macroops {
         if (!a.header.gdVersion.empty() && !b.header.gdVersion.empty() &&
             a.header.gdVersion != b.header.gdVersion)
             notes += "They were made on different GD versions (" + a.header.gdVersion + " and " +
-                     b.header.gdVersion + "); the result says A's. ";
+                     b.header.gdVersion + "); the result says A's. They should play the same; double-check "
+                     "frame-perfect slope parts. ";
         if (a.header.rngSeed != b.header.rngSeed)
             notes += "They started with different random seeds; the result keeps A's, so random "
                      "triggers in B's part may play differently. ";
