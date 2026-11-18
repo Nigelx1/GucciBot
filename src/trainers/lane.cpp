@@ -183,9 +183,13 @@ namespace gucci::trainers::lane {
             g_settings.inLevel = mod->getSavedValue<bool>("trainer_lane_in_level", d.inLevel);
             g_settings.levelWidth =
                 std::clamp((float)mod->getSavedValue<double>("trainer_lane_width", d.levelWidth), 0.3f, 1.f);
-            g_settings.place = mod->getSavedValue<int64_t>("trainer_lane_place", (int64_t)d.place) == 1
-                                   ? Place::Bottom
-                                   : Place::Top;
+            // A new key with Auto in it (2026-11-18): a test copy's saved Top
+            // from before Auto existed doesn't pin the lane there.
+            switch (mod->getSavedValue<int64_t>("trainer_lane_where", (int64_t)d.place)) {
+                case 0: g_settings.place = Place::Top; break;
+                case 1: g_settings.place = Place::Bottom; break;
+                default: g_settings.place = Place::Auto; break;
+            }
             g_settings.judgments = mod->getSavedValue<bool>("trainer_lane_judgments", d.judgments);
         }
         return g_settings;
@@ -199,7 +203,7 @@ namespace gucci::trainers::lane {
         mod->setSavedValue<double>("trainer_lane_size", s.size);
         mod->setSavedValue<bool>("trainer_lane_in_level", s.inLevel);
         mod->setSavedValue<double>("trainer_lane_width", s.levelWidth);
-        mod->setSavedValue<int64_t>("trainer_lane_place", (int64_t)s.place);
+        mod->setSavedValue<int64_t>("trainer_lane_where", (int64_t)s.place);
         mod->setSavedValue<bool>("trainer_lane_judgments", s.judgments);
     }
 
@@ -338,6 +342,11 @@ namespace gucci::trainers::lane {
         auto& l = g_lanes[(size_t)idx(k)];
         l.flash.atReal = steadyNow() - ageSec;
         g_heldAge[(size_t)idx(k)] = hold ? ageSec : -1.0;
+    }
+
+    Placement& placement(Kind k) {
+        static Placement s_place[2];
+        return s_place[(size_t)idx(k)];
     }
 
     void markShownInLevel(Kind k) {

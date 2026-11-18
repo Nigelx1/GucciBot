@@ -78,7 +78,7 @@ namespace gucci::mcp {
             field("lead_ticks", "integer", "the lane's lead (this launch)");
             field("size", "number", "the lane's size (this launch)");
             field("in_level", "boolean", "the lane over the level (this launch)");
-            field("place", "string", "\"top\" or \"bottom\" (this launch)");
+            field("place", "string", "\"auto\", \"top\" or \"bottom\" (this launch)");
             field("width", "number", "the lane's width in the level, of the screen (this launch)");
             field("flash_age", "number", "make the last verdict this many seconds old (its pop, pulse, fade)");
             field("flash_hold", "boolean", "with flash_age: hold it at that age until a flash_age call without it");
@@ -125,7 +125,9 @@ namespace gucci::mcp {
                 if (a.contains("in_level"))
                     set.inLevel = flag(a, "in_level", true);
                 if (a.contains("place"))
-                    set.place = text(a, "place") == "bottom" ? ln::Place::Bottom : ln::Place::Top;
+                    set.place = text(a, "place") == "bottom" ? ln::Place::Bottom
+                                : text(a, "place") == "top"  ? ln::Place::Top
+                                                             : ln::Place::Auto;
                 if (a.contains("width"))
                     set.levelWidth = std::clamp((float)num(a, "width", set.levelWidth), 0.3f, 1.f);
                 if (a.contains("seek"))
@@ -153,6 +155,18 @@ namespace gucci::mcp {
                 out["shown_in_level"] = ln::shownInLevel(kind);
                 out["page_visible"] = s.pageVisible;
                 out["style"] = set.style == ln::Style::Lane ? "lane" : "classic";
+                {
+                    auto const& pl = ln::placement(kind);
+                    auto where = matjson::Value::object();
+                    where["setting"] = set.place == ln::Place::Auto ? "auto" : set.place == ln::Place::Top ? "top" : "bottom";
+                    where["band"] = pl.band == 0 ? "top" : "bottom";
+                    where["slide"] = (double)pl.slide;
+                    where["alpha"] = (double)pl.alpha;
+                    where["moves"] = (int64_t)pl.moves;
+                    where["y"] = (double)pl.y;
+                    where["h"] = (double)pl.h;
+                    out["place"] = where;
+                }
                 out["lead_ticks"] = (int64_t)set.leadTicks;
                 out["tps"] = v.tps;
                 out["macro"] = GucciEngine::get()->trainerMacroName;

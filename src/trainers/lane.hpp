@@ -26,7 +26,10 @@
 namespace gucci::trainers::lane {
 
     enum class Style { Lane = 0, Classic = 1 };
-    enum class Place { Top = 0, Bottom = 1 };
+    // Auto (the default): Top or Bottom, whichever band the player is
+    // farther from, decided again at each gamemode portal or when the
+    // player comes near the lane's band.
+    enum class Place { Top = 0, Bottom = 1, Auto = 2 };
 
     // Shared by both trainers. Saved as trainer_lane_*.
     struct Settings {
@@ -37,7 +40,7 @@ namespace gucci::trainers::lane {
         float size = 1.f;          // the lane's height: 1x = 12% of the screen's height
         bool inLevel = true;       // drawn over the trainer's level while you play it
         float levelWidth = 0.64f;  // of the screen's width, in the level
-        Place place = Place::Top;  // in the level
+        Place place = Place::Auto;  // in the level
         bool judgments = true;     // the PERFECT / EARLY 1f words
     };
     Settings& settings();
@@ -128,6 +131,20 @@ namespace gucci::trainers::lane {
     // seconds old, so a shot catches its pop, pulse or fade on purpose.
     // `hold`: keep it that old (the next verdict too) until a call without.
     void ageFlashForTest(Kind k, double ageSec, bool hold);
+
+    // Where the lane sits over the level now (the drawing keeps it; the
+    // Assistant Access tool reads it). band: 0 top, 1 bottom; slide: 0 at
+    // the top .. 1 at the bottom (mid-slide in between); alpha: the whole
+    // lane's opacity (0.3 while a player is inside its band); moves: how
+    // many times Auto moved it this launch.
+    struct Placement {
+        int band = 0;
+        float slide = 0.f;
+        float alpha = 1.f;
+        int moves = 0;
+        float y = 0.f, h = 0.f;  // the box's top and height on screen, in pixels
+    };
+    Placement& placement(Kind k);
 
     // Drawn over the trainer's level this frame (safe mode counts it).
     void markShownInLevel(Kind k);
