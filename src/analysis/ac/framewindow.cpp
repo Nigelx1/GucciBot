@@ -1667,8 +1667,8 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     // results are cleared for the run (mergeKept puts them back after it).
     m_resume = resume;
     m_resumeKeys = resume ? resumeKeysOf(m_results, recountFrom) : std::vector<uint64_t>{};
-    m_resumePrevMeasured = resume ? m_measured : 0;
     m_resumePrevDesynced = resume ? m_desynced : 0;
+    m_skippedKeys.clear();
     m_probeMask.clear();
     m_probeStartIndex = 0;
     m_stoppedByPlayer = false;
@@ -4957,7 +4957,15 @@ void FrameWindowAnalyzer::abortClick(char const* why) {
     FWWARN("[fw][click {}] NOT MEASURED @ frame {}: {}", m_index + 1,
               m_recorded, why);
     m_skipped++;
+    this->noteSkipped();
     this->nextClick();
+}
+
+void FrameWindowAnalyzer::noteSkipped() {
+    if (m_index < m_samples.size()) {
+        auto const& s = m_samples[m_index];
+        m_skippedKeys.push_back(resumeKey(s.frame, s.player2, s.release));
+    }
 }
 
 bool FrameWindowAnalyzer::inProbeRange(size_t index) const {
@@ -5096,7 +5104,8 @@ uint32_t FrameWindowAnalyzer::recountAfter(bool carried, uint32_t stopAt) const 
 }
 
 void FrameWindowAnalyzer::keptCounts(std::vector<FrameWindowMark> const& fresh,
-                                     std::vector<FrameWindowMark> const& old, int& measured,
+                                     std::vector<FrameWindowMark> const& old,
+                                     std::vector<uint64_t> const& tried, int& measured,
                                      int& skipped) {
     measured = 0;
     skipped = 0;
@@ -5104,7 +5113,9 @@ void FrameWindowAnalyzer::keptCounts(std::vector<FrameWindowMark> const& fresh,
         bool const replaced = std::any_of(fresh.begin(), fresh.end(), [&](auto const& mk) {
             return mk.frame == mk0.frame && mk.player2 == mk0.player2 && mk.release == mk0.release;
         });
-        if (replaced || (mk0.manual && !mk0.hadAuto)) continue;
+        bool const triedHere =
+            std::find(tried.begin(), tried.end(), resumeKey(mk0.frame, mk0.player2, mk0.release)) != tried.end();
+        if (replaced || triedHere || (mk0.manual && !mk0.hadAuto)) continue;
         if (mk0.desynced)
             skipped++;
         else
@@ -5127,7 +5138,7 @@ void FrameWindowAnalyzer::runSnapshot(std::vector<FrameWindowMark>& marks,
         }
     if (keptMeasured && keptSkipped) {
         if (m_partial || carried)
-            keptCounts(m_results, old, *keptMeasured, *keptSkipped);
+            keptCounts(m_results, old, m_skippedKeys, *keptMeasured, *keptSkipped);
         else
             *keptMeasured = *keptSkipped = 0;
     }
@@ -5363,23 +5374,23 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     // canceled (2026-11-18 test pass, S5). Those kept windows count again, as
     // a Continue's do below. (An input the older run couldn't measure at all
     // left no window, so it can't be counted back into "skipped".)
-    if (!resumed && (m_partial || carried) && !m_captureNoclip) {
+    // (2026-11-18 review: a Continue too, from the windows it keeps, in place
+    // of the count from before it, which held the windows past where the run
+    // before it stopped, counted again here: 400 inputs came out 700.)
+    if ((m_partial || carried) && (!m_captureNoclip || resumed)) {
         int keptMeasured = 0, keptSkipped = 0;
-        keptCounts(m_results, m_keptResults, keptMeasured, keptSkipped);
+        keptCounts(m_results, m_keptResults, m_skippedKeys, keptMeasured, keptSkipped);
         m_measured += keptMeasured;
         m_skipped += keptSkipped;
     }
+    m_skippedKeys.clear();
     if (m_partial || carried) this->mergeKept();
     // The counts from before a Continue, back with their windows. (Its own
     // "not measured" stay its own: those from before were tried again.)
-    if (resumed) {
-        m_measured += m_resumePrevMeasured;
-        m_desynced += m_resumePrevDesynced;
-    }
+    if (resumed) m_desynced += m_resumePrevDesynced;
     m_resume = false;
     m_resumeKeys.clear();
     m_probeMask.clear();
-    m_resumePrevMeasured = 0;
     m_resumePrevDesynced = 0;
     m_probeStartIndex = 0;
     this->reapplyManual();
@@ -5743,6 +5754,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     FWWARN("[fw][click {}] NOT MEASURED @ frame {}: {}", m_index + 1, m_recorded,
                            "died before reaching the branch point");
                     m_skipped++;
+                    this->noteSkipped();
                     this->finish(
                         fmt::format("Measured {} of {} inputs. The macro "
                                     "cannot be replayed past frame {}.",
@@ -8051,10 +8063,10 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
         uint32_t recountFrom = UINT32_MAX;
         int keptMeasured = 0, keptSkipped = 0;
         this->runSnapshot(marks, messages, recountFrom, &keptMeasured, &keptSkipped);
-        // (A Continue's older count is m_resumePrevMeasured; otherwise the
-        // older windows this snapshot keeps, as finish() counts them.)
-        int const prevMeasured = m_resume ? m_resumePrevMeasured : keptMeasured;
-        int const prevSkipped = m_resume ? 0 : keptSkipped;
+        // (The older windows this snapshot keeps, as finish() counts them,
+        // a Continue's too.)
+        int const prevMeasured = keptMeasured;
+        int const prevSkipped = keptSkipped;
         int const prevDesynced = m_resume ? m_resumePrevDesynced : 0;
         return this->writeResults(path, marks, messages, recountFrom, m_measured + prevMeasured,
                                   m_skipped + prevSkipped, m_desynced + prevDesynced);

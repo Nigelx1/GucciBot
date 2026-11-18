@@ -1154,9 +1154,17 @@ class FrameWindowAnalyzer {
     // replace: how many were measured, and how many were desynced (counted as
     // skipped, as a run counts them). A window typed by hand for an input
     // that was never measured is neither.
+    // (2026-11-18 review) Nor one this run tried and counted as skipped
+    // (`tried`, resumeKey keys): an input counts once.
     static void keptCounts(std::vector<FrameWindowMark> const& fresh,
-                           std::vector<FrameWindowMark> const& old, int& measured,
+                           std::vector<FrameWindowMark> const& old,
+                           std::vector<uint64_t> const& tried, int& measured,
                            int& skipped);
+    // GucciBot (2026-11-18): the inputs this run counted as skipped (abortClick,
+    // and the stop at an input it couldn't reach), as resumeKey keys, so an
+    // older window kept for one isn't counted as measured too (keptCounts).
+    std::vector<uint64_t> m_skippedKeys;
+    void noteSkipped();
     void runSnapshot(std::vector<FrameWindowMark>& marks,
                      std::vector<FrameWindowMessage>& messages,
                      uint32_t& recountFrom, int* keptMeasured = nullptr,
@@ -1182,8 +1190,11 @@ class FrameWindowAnalyzer {
     // capture has settled the samples (buildResumeMask); empty until then.
     std::vector<char> m_probeMask;
     void buildResumeMask();
-    // The counts from before a resumed run, added back when it finishes.
-    int m_resumePrevMeasured = 0;
+    // The desynced count from before a resumed run, added back when it
+    // finishes. (GucciBot, 2026-11-18: its measured and skipped come from the
+    // windows it keeps, keptCounts, not from the count before it: that count
+    // held the windows past where the run before it stopped, which it counts
+    // again, so a Continue counted them twice.)
     int m_resumePrevDesynced = 0;
     // How many inputs this run measures (all of them for a whole run).
     size_t probeTotal() const;
