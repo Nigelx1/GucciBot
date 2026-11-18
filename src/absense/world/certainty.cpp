@@ -9,6 +9,7 @@
 // objects the old way (MovingObjects) all end there.
 
 #include "absense/world/world.hpp"
+#include "core/geode_compat.hpp" // gd:: on Geode 6
 
 #include <algorithm>
 #include <cmath>

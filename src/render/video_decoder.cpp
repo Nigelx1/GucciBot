@@ -1,4 +1,5 @@
 #include "render/video_decoder.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "render/renderer.hpp"
 
 #include <Geode/Geode.hpp>
@@ -18,7 +19,7 @@ namespace gucci {
         // UTF-8, which FFmpeg takes file names in. path.string() is the ANSI
         // code page on Windows, and throws for a name it can't spell: a video
         // with such a name used to take the game down.
-        std::string const name = geode::utils::string::pathToString(path);
+        std::string const name = gucci::pathToString(path);
         auto* renderer = SLRenderer::get();
         if (!renderer->isFFmpegLoaded()) {
             geode::log::error("[VideoDecoder] FFmpeg not loaded, can't open {}", name);

@@ -28,6 +28,7 @@ namespace {
 #endif
 
 #include "mcp_server.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include "events.hpp"
 #include "core/log_rotate.hpp"
 
@@ -73,7 +74,7 @@ namespace gucci::mcp {
         constexpr std::uintmax_t kMcpLogHardCap = 55ull << 20;
 
         void mcpLogOpen() {
-            auto const dir = geode::Mod::get()->getSaveDir();
+            auto const dir = gucci::stdPath(geode::Mod::get()->getSaveDir());
             auto const path = dir / "guccibot_mcp.log";
             auto const old = dir / "guccibot_mcp.old.log";
             auto const why = logrotate::rotate(path, old);

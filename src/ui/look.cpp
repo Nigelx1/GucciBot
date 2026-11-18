@@ -1,4 +1,5 @@
 #include "ui/look.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "ui/themes.hpp"
 
 #include <Geode/Geode.hpp>
@@ -155,7 +156,7 @@ namespace gucci::ui {
 
     void Look::loadFonts() {
         ImGuiIO& io = ImGui::GetIO();
-        auto dir = Mod::get()->getResourcesDir();
+        auto dir = gucci::stdPath(Mod::get()->getResourcesDir());
         auto const regularFile = dir / "Roboto-Regular.ttf";
         auto const boldFile = dir / "Roboto-Bold.ttf";
         std::error_code ec;
@@ -163,8 +164,8 @@ namespace gucci::ui {
         bool const haveBold = std::filesystem::exists(boldFile, ec);
         // ImGui opens font files by UTF-8 name. path.string() is the ANSI
         // code page on Windows (and throws for a folder name it can't spell).
-        std::string const regular = geode::utils::string::pathToString(regularFile);
-        std::string const bold = geode::utils::string::pathToString(boldFile);
+        std::string const regular = gucci::pathToString(regularFile);
+        std::string const bold = gucci::pathToString(boldFile);
 
         // Body first: the first font loaded is ImGui's default.
         struct Want {

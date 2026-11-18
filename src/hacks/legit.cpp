@@ -15,6 +15,7 @@
 #include "core/bot_switch.hpp"
 #include "hacks/autoclicker.hpp"
 #include "hacks/hitborders.hpp"
+#include "hacks/safemode_2209.hpp"  // GB_SAFETY_2209
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
 #include "trainers/videomode.hpp"
@@ -150,6 +151,23 @@ namespace gucci::legit {
                     speed.engaged = [gb] { return std::abs(gb->updater.m_speedhack - 1.0) > 1e-6; };
                     v.push_back(std::move(speed));
                 }
+#if GB_SAFETY_2209
+                // GD 2.2091's own Ignore Damage (Nigel, 2026-11-16: a cheat).
+                // It belongs to the level, not a setting: turned off, as GD's
+                // restart turns it off, and not put back when Legit only goes
+                // off. (GD's own speed needs no row: it is held at 1x while
+                // GucciBot is in charge, and its slider moves GucciBot's
+                // speed, held by the row above.)
+                {
+                    Row ignore;
+                    ignore.engaged = [] { return safemode::gdIgnoreDamageOn(); };
+                    ignore.hold = [] {};
+                    ignore.clear = [] { safemode::gdIgnoreDamageOff(); };
+                    ignore.give = [] {};
+                    ignore.heldValue = [] { return 0.0; };
+                    v.push_back(std::move(ignore));
+                }
+#endif
                 return v;
             }();
             return v;

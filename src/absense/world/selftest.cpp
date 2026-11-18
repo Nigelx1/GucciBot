@@ -13,6 +13,7 @@
 // logs why.
 
 #include <Geode/Geode.hpp>
+#include "core/platform.hpp" // GB_WORLD_LAYOUTS
 
 #include <algorithm>
 #include <cmath>
@@ -957,7 +958,7 @@ void World::turnOff(const char* why) {
 }
 
 void World::init(GJBaseGameLayer* pl) {
-#if !defined(GEODE_IS_WINDOWS) || defined(GB_FORCE_PORTABLE)  // core/platform.hpp
+#if !GB_WORLD_LAYOUTS || defined(GB_FORCE_PORTABLE)  // core/platform.hpp
     // GucciBot multiplatform (2026-10-05): the World reads and writes GD's
     // Windows memory layout (world/offsets.hpp), and the checks below compare
     // code bytes at Windows addresses, which in another platform's binary are
@@ -967,7 +968,12 @@ void World::init(GJBaseGameLayer* pl) {
     // current speed (MovingObjects). Nothing else turns it on (disabled starts
     // true, and only the end of this function clears it).
     (void)pl;
+#if GB_GEODE6
+    // Windows too: its layout is GD 2.2081's, not yet found again in 2.2091.
+    disable("the trigger model reads GD 2.2081's memory layout; off on GD 2.2091 for now");
+#else
     disable("the trigger model reads GD's Windows memory layout; off on this platform");
+#endif
     return;
 #else
     // The code is checked whether or not a layer is at hand: returning early

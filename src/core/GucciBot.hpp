@@ -1,9 +1,10 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-j (Platformer checkpoints: a death in normal play respawns at the last one, like plain GD)"
+    "2026-11-17-k (GD 2.2091 / Geode 6 support merged: one codebase, two builds)"
 
 #include <Geode/Geode.hpp>
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include <cmath>
 #include "core/platform.hpp"
 #include "core/portable_tps.hpp"
@@ -1328,10 +1329,10 @@ namespace gucci {
         void reloadMacroList();
 
         std::filesystem::path getReplayDir() const {
-            return Mod::get()->getSaveDir() / "replays";
+            return gucci::stdPath(Mod::get()->getSaveDir()) / "replays";
         }
         std::filesystem::path getPresetsDir() const {
-            return Mod::get()->getSaveDir() / "presets";
+            return gucci::stdPath(Mod::get()->getSaveDir()) / "presets";
         }
 
     private:

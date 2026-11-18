@@ -199,7 +199,7 @@ namespace gucci::botswitch {
             // nothing paused). drawScene called this every frame; with that
             // hook out, service() calls it from here on.
             gb->syncInputMods();
-#if GB_NATIVE_ENGINE
+#if GB_RAW_SITES
             setEngineCodeIn(false);
 #endif
             disableHooks();
@@ -210,7 +210,7 @@ namespace gucci::botswitch {
         void putBack() {
             auto* gb = GucciEngine::get();
             enableHooks();
-#if GB_NATIVE_ENGINE
+#if GB_RAW_SITES
             // The first time after a launch with the switch off, this places
             // them (hooks/util_midhook.hpp).
             setEngineCodeIn(true);

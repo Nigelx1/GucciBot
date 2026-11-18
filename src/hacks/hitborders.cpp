@@ -27,6 +27,7 @@
 // (m_isDisabled and m_isGroupDisabled, not m_isActivated).
 
 #include "hacks/hitborders.hpp"
+#include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 #include "hacks/legit.hpp"
 
 #include "absense/compat/bot.hpp"
@@ -1476,8 +1477,8 @@ class $modify(GBHitborderPlayLayerHook, PlayLayer) {
         PlayLayer::destroyPlayer(player, object);
     }
 
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         if (gucci::GucciEngine::get()->enabled)
             gucci::HitborderOverlay::get()->init(this);

@@ -3,6 +3,9 @@
 // alone. The sounds themselves are audio/clicks.*.
 
 #include "ui/pages.hpp"
+#if GEODE_COMP_GD_VERSION >= 22090
+#include "core/geode_compat.hpp" // openFolder on Geode 6
+#endif
 
 #include "audio/clicks.hpp"
 #include "ui/kit.hpp"

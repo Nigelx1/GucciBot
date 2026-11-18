@@ -1,4 +1,6 @@
 #include "collisions.hpp"
+#include "core/platform.hpp" // GB_WORLD_LAYOUTS
+#include "core/geode_compat.hpp" // GB_FIELD
 
 #include <Geode/Enums.hpp>
 #include <Geode/Geode.hpp>
@@ -353,7 +355,7 @@ void bumpPlayerFromGJBGL(GJBaseGameLayer* pl, PlayerObject* player,
 // below calls the bound getOrientedBox / updateOrientedBox, which exist on every
 // platform). Off Windows these addresses mean nothing, so they are not even
 // worked out there (GucciBot multiplatform).
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
 static void* g_PlayerObject_getOrientedBox = nullptr;
 static void* g_PlayerObject_updateOrientedBox = nullptr;
 
@@ -698,12 +700,12 @@ void collisionCheckObjects(GJBaseGameLayer* pl, PlayerObject* player,
                         (ForceBlockGameObject*)object;
                     int forceID = forceBlock->m_forceID;
                     if (forceID > 0) {
-                        if (player->m_jumpPadRelated.contains(forceID)) {
-                            if (player->m_jumpPadRelated.at(forceID)) {
+                        if (player->GB_FIELD(m_jumpPadRelated, m_touchedForceIds).contains(forceID)) {
+                            if (player->GB_FIELD(m_jumpPadRelated, m_touchedForceIds).at(forceID)) {
                                 break;
                             }
                         }
-                        player->m_jumpPadRelated.insert({forceID, true});
+                        player->GB_FIELD(m_jumpPadRelated, m_touchedForceIds).insert({forceID, true});
                     }
 
                     // void* fnPtr = reinterpret_cast<void*>(geode::base::get()

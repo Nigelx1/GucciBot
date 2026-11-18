@@ -14,6 +14,7 @@
 // not widths; +0x351 and +0x368 are the other way round).
 
 #include <Geode/Geode.hpp>
+#include "core/platform.hpp" // GB_WORLD_LAYOUTS
 
 #include <cstddef>
 #include <cstdint>
@@ -395,35 +396,35 @@ inline uint32_t& layerCommandIndex(GJBaseGameLayer* pl) { return at<uint32_t>(pl
 // places are used instead: GJGameState is declared once for every platform,
 // so the member is the same field there.
 inline bool& cameraFreeMode(GJBaseGameLayer* pl) {
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
     return at<bool>(pl, kCameraFreeMode);
 #else
     return pl->m_gameState.m_isFreeMode;
 #endif
 }
 inline bool& cameraGridSnap(GJBaseGameLayer* pl) {
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
     return at<bool>(pl, kCameraGridSnap);
 #else
     return pl->m_gameState.m_unkBool9;
 #endif
 }
 inline float& cameraEasing(GJBaseGameLayer* pl) {
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
     return at<float>(pl, kCameraEasing);
 #else
     return pl->m_gameState.m_unkFloat3;
 #endif
 }
 inline float& cameraPadding(GJBaseGameLayer* pl) {
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
     return at<float>(pl, kCameraPadding);
 #else
     return pl->m_gameState.m_unkFloat2;
 #endif
 }
 inline uint32_t& dualGroundMode(GJBaseGameLayer* pl) {
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
     return at<uint32_t>(pl, kDualGroundMode);
 #else
     return pl->m_gameState.m_dualRelated;
@@ -445,7 +446,7 @@ namespace world::off::detail {
 inline constexpr std::ptrdiff_t kGs = offsetof(GJBaseGameLayer, m_gameState);
 }
 
-#ifdef GEODE_IS_WINDOWS // Windows layouts only (core/platform.hpp)
+#if GB_WORLD_LAYOUTS // Windows layouts only (core/platform.hpp)
 static_assert(offsetof(GJBaseGameLayer, m_gameState) == world::off::kGameState);
 static_assert(offsetof(GJBaseGameLayer, m_effectManager) == world::off::kEffectManager);
 static_assert(offsetof(GJBaseGameLayer, m_player1) == world::off::kPlayer1);
@@ -777,7 +778,7 @@ static_assert(world::off::detail::kGs + offsetof(GJGameState, m_queuedTimeWarp) 
 static_assert(world::off::detail::kGs + offsetof(GJGameState, m_timeWarpRelated) == 0x338);
 #endif
 
-#ifndef GEODE_IS_WINDOWS
+#if !GB_WORLD_LAYOUTS
 // Off Windows (GucciBot multiplatform): the four camera members the accessors
 // hand a copy have to sit in the run of bytes a run's PortalState::head keeps
 // (trajectory.cpp: from m_cameraZoom, up to m_spawnChannelRelated0 and at most
