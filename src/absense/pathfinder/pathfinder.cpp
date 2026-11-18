@@ -108,11 +108,48 @@ constexpr float kRescuePast = 60.0f;
 constexpr float kLegCellY = 10.0f;
 // Nigel (2026-10-22, answer 3 in docs/ROUTE_ENGINE_PLAN.md): five minutes on
 // one spot - the best tick not moving on - and the run stops and says where.
+// On the wall clock, this is the rule with the test switch pf_stuck_work off.
 constexpr double kStuckSeconds = 300.0;
-// GucciBot (2026-11-16, pf2 lane; pf_stuck_work): with the switch on, the
-// wall clock still stops a run whose best tick has not moved for this many
-// times the five minutes, so a search doing no work cannot run forever.
-constexpr double kStuckWallFactor = 4.0;
+// GucciBot (2026-11-17, pf3 lane; pf_stuck_work, on by default): the same
+// rule counted in the search's own work, not in time: this many decisions
+// begun in a row (m_stats.decisions: each decision and each stop of a walk
+// back) without the best tick moving on. The search's decisions come out the
+// same on every PC (its budgets are steps, not time: Base After Base made 194
+// decisions and 47419 simulations in 133 s, 150 s and 215 s on three runs), so
+// the same run now stops or doesn't stop on any PC. A clock did not: GRIEF
+// needs the same 30 decisions to get past tick 12126, 62 past 15868 and 69-70
+// past 18709 on every run, but those took 109-468 s, 138-550 s and 256-417 s
+// of wall clock with the PC's load, and the five-minute rule (the wall clock,
+// then thinking plus level time played from 11-15) stopped 12 runs at those
+// three spots, 10 of them 2 to 41 decisions short of what the others needed
+// there. Measured in every lane's logs (199 runs, 11-15..11-17): the most any
+// run needed before getting further was 200 (Polargeist), then 173 (Forest
+// Temple at tick 17016) and 144 (GRIEF's two-player cube part after its fork
+// jump); at GRIEF's 18709, 68-70, and the two runs stopped there after 94 and
+// 97 on a longer way were still going. Runs stopped where that build got no
+// further at all ended at 85-148 decisions (Forest Temple before the fork
+// jump, 10 runs; 244-615 in 4 more on test switches), 118 (GRIEF's 71.22%
+// wall before the dual-portal rule), 253-312 (Geometrical Dominator, Cold
+// Sweat, a Bloodbath GPU test). 300 is 4.3 times what 18709 takes and 1.5
+// times the most any run has needed. A truly stuck run gets up to about 2.5
+// times the old rule's work: at the pace those runs made decisions, 12-18
+// minutes for Forest Temple's wall and 14 for GRIEF's instead of 5-6 (the
+// ones at 253-312 about as long as before), and the tick-1 walks of Society
+// and Cortex Break (23000 and 9000 cheap stops in five minutes) end in
+// seconds.
+constexpr uint64_t kStuckDecisions = 300;
+// ... and two wall-clock backstops, so nothing can run forever: no decision
+// begun for 20 minutes (a restore that never arrives, a decision that never
+// ends: tonight's longest GRIEF decision took 271 s), and 60 minutes on the
+// wall clock without the best tick moving on, whatever the work. Not the old
+// 20 minutes for the second: GRIEF's 18709 stall took up to 491 s on a loaded
+// PC, so a PC 2.5 times slower would hit 20 minutes before the work ran out,
+// the same PC-dependence again; 60 minutes is 7 times that.
+constexpr double kStuckIdleSeconds = 1200.0;
+constexpr double kStuckWallSeconds = 3600.0;
+// A stall that ends after this many decisions is logged (with its decisions
+// and wall clock), so later runs show how close a stall came to the rule.
+constexpr uint64_t kStuckLogDecisions = 50;
 // GucciBot (2026-11-15, pf2 lane; pf_start_stop): how many times a spot whose
 // floor is the search's own start, with no stored frame before it, may fail
 // before the run stops (see escalate), and how close to the start the death
@@ -548,10 +585,8 @@ bool AbsensePathfinder::start() {
     m_lastRateAt = m_startedAt;
     m_lastRateTicks = 0;
     m_stuckBest = tick;
-    m_stuckSeconds = 0.0;
-    m_stuckWallSeconds = 0.0;
     m_stuckClock = m_startedAt;
-    m_stuckTicks = m_stats.committedTicks;
+    restartStuckCount();
     m_forkBest = 0;
     m_stats.message = "Searching";
 
@@ -1026,34 +1061,19 @@ void AbsensePathfinder::tick() {
         return;  // wait for the player
     }
 
-    // Five minutes without the best tick moving on, whatever the route setting:
-    // the run stops and says where (kStuckSeconds). Time between two slices
-    // counts up to ten seconds, so a hitch of the whole machine is not taken
-    // for minutes of searching.
+    // The stuck rule, whatever the route setting: the best tick not moving on
+    // for kStuckDecisions decisions in a row (pf_stuck_work, the default) or
+    // five minutes of wall clock (the switch off), and the run stops and says
+    // where. Wall-clock time between two slices counts up to ten seconds, so a
+    // hitch of the whole machine is not taken for minutes of searching.
+    // GucciBot (2026-11-17, pf3 lane): the work count replaces 11-15's
+    // thinking-plus-played clock (pf2 lane), which still depended on the PC:
+    // how much thinking fits in a frozen frame, and the game's own speed. Only
+    // when a stuck run ends changes; nothing decided reads any of this.
     {
         const auto now = std::chrono::steady_clock::now();
-        // GucciBot (2026-11-15, pf2 lane; the test switch pf_stuck_work):
-        // with the switch on, the clock counts only the search's own thinking
-        // (the last slice) and the level time the game played since (the
-        // ticks committed), never more than the wall clock. What it leaves
-        // out is the game's own frames while it is frozen waiting and the
-        // game running slow: on GRIEF in a test window about 40% of the wall
-        // clock, and more on a loaded PC. Measured with it (11-16, loaded
-        // PC, one run each): GRIEF with all five test switches on got past
-        // tick 18709, where the same switches without this one stopped on
-        // this rule. Nothing decided reads this clock: only when a stuck run
-        // ends changes. A run doing no work at all (a restore that never
-        // arrives) counts almost nothing, so the wall clock still stops it
-        // at kStuckWallFactor times the five minutes.
-        const uint64_t committed = m_stats.committedTicks;
         const double wall = std::clamp(std::chrono::duration<double>(now - m_stuckClock).count(), 0.0, 10.0);
-        double counted = wall;
-        if (absense::stuckWork()) {
-            const double tps = std::max(1.0, Bot::get()->updater().getTps());
-            const double played = committed > m_stuckTicks ? (double)(committed - m_stuckTicks) / tps : 0.0;
-            counted = std::min(wall, std::max(0.0, m_lastSliceMs) / 1000.0 + played);
-        }
-        m_stuckTicks = committed;
+        const uint64_t decisions = m_stats.decisions;
         // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): after a fork jump the
         // route is a new one, and until it gets past the old furthest tick, its
         // own furthest since the jump is what has to keep moving on. On GRIEF the
@@ -1070,21 +1090,45 @@ void AbsensePathfinder::tick() {
         if (m_forkBest != 0 && m_stats.bestTick != m_stuckBest) m_forkBest = 0;
         if (m_forkBest != 0 && settled && nowTick > m_forkBest && nowTick < m_stuckBest) {
             m_forkBest = nowTick;
-            m_stuckSeconds = 0.0;
-            m_stuckWallSeconds = 0.0;
+            restartStuckCount();
         } else if (m_stats.bestTick != m_stuckBest) {
+            // How close the stall that just ended came to the rule, for the
+            // next time its limit is looked at (kStuckLogDecisions).
+            const uint64_t tries = decisions - m_stuckDecisions;
+            if (tries >= kStuckLogDecisions)
+                log("stuck rule: the furthest moved on from tick %llu to %llu after %llu decisions (the rule stops at "
+                    "%llu) and %.0f s",
+                    (unsigned long long)m_stuckBest, (unsigned long long)m_stats.bestTick, (unsigned long long)tries,
+                    (unsigned long long)kStuckDecisions, m_stuckWallSeconds);
             m_stuckBest = m_stats.bestTick;
-            m_stuckSeconds = 0.0;
-            m_stuckWallSeconds = 0.0;
+            restartStuckCount();
         } else {
-            m_stuckSeconds += counted;
             m_stuckWallSeconds += wall;
+            if (decisions != m_stuckIdleDecisions) {
+                m_stuckIdleDecisions = decisions;
+                m_stuckIdleSeconds = 0.0;
+            } else {
+                m_stuckIdleSeconds += wall;
+            }
         }
         m_stuckClock = now;
-        if (m_stuckSeconds >= kStuckSeconds || m_stuckWallSeconds >= kStuckSeconds * kStuckWallFactor) {
-            const std::string why =
-                fmt::format("stuck at x {:.0f} (tick {}) for 5 minutes", m_stats.bestX, m_stats.bestTick);
-            log("%s: the furthest it got has not moved on in that time", why.c_str());
+        const uint64_t tries = decisions - m_stuckDecisions;
+        std::string why;
+        if (!absense::stuckWork()) {
+            if (m_stuckWallSeconds >= kStuckSeconds)
+                why = fmt::format("stuck at x {:.0f} (tick {}) for 5 minutes", m_stats.bestX, m_stats.bestTick);
+        } else if (tries >= kStuckDecisions) {
+            why = fmt::format("stuck at x {:.0f} (tick {}): {} decisions in a row got no further", m_stats.bestX,
+                              m_stats.bestTick, tries);
+        } else if (m_stuckIdleSeconds >= kStuckIdleSeconds) {
+            why = fmt::format("stuck at x {:.0f} (tick {}): no decision for 20 minutes", m_stats.bestX,
+                              m_stats.bestTick);
+        } else if (m_stuckWallSeconds >= kStuckWallSeconds) {
+            why = fmt::format("stuck at x {:.0f} (tick {}) for 60 minutes", m_stats.bestX, m_stats.bestTick);
+        }
+        if (!why.empty()) {
+            log("%s: the furthest it got has not moved on (%llu decisions, %.0f s)", why.c_str(),
+                (unsigned long long)tries, m_stuckWallSeconds);
             giveUp(why);
             return;
         }
@@ -1356,6 +1400,15 @@ void AbsensePathfinder::noteFrameCost(double gameMs, double restoreMs) {
     m_gameMs = cost;
     m_gameMsAvg = m_gameMsAvg <= 0.0 ? cost : m_gameMsAvg * 0.8 + cost * 0.2;
     m_stats.gameMs = cost;
+}
+
+// The stuck rule's counts start over (see tick()): the best tick moved on,
+// a fork jump, or the new route after one moved on.
+void AbsensePathfinder::restartStuckCount() {
+    m_stuckDecisions = m_stats.decisions;
+    m_stuckIdleDecisions = m_stats.decisions;
+    m_stuckWallSeconds = 0.0;
+    m_stuckIdleSeconds = 0.0;
 }
 
 void AbsensePathfinder::noteProgress() {
@@ -5652,8 +5705,8 @@ void AbsensePathfinder::noteForks(uint64_t now) {
 // The newest fork before the floor that this spot has not gone back to yet:
 // the game goes back for real to a second before its crossing, and the
 // decision there drives into the portal (decide). Bounded per spot and per
-// run; each jump starts the stuck clock over, or the five-minute rule would
-// end the run 30 s after it (Forest Temple's floor stayed at 18:55:17 and
+// run; each jump starts the stuck count over, or the stuck rule would
+// end the run soon after it (Forest Temple's floor stayed at 18:55:17 and
 // the rule stopped the run at 18:55:47). False when there is none.
 bool AbsensePathfinder::forkJump(const char* why, uint64_t floor, bool dualOnly) {
     if (m_forkJumps >= kForkJumpsPerRun) return false;
@@ -5682,8 +5735,7 @@ bool AbsensePathfinder::forkJump(const char* why, uint64_t floor, bool dualOnly)
         // The floor is the fork's tick now: a stop after it that fails walks
         // back to it, not past it into ticks the walk has already ruled out.
         m_repair.floor = std::min(m_repair.floor, target);
-        m_stuckSeconds = 0.0;
-        m_stuckWallSeconds = 0.0;
+        restartStuckCount();
         if (absense::forkDual()) m_forkBest = target;  // the new route's furthest, for the stuck rule (pf_fork_dual)
         m_repair.passes++;
         m_repair.probe = 0;

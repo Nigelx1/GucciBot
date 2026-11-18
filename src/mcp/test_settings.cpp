@@ -432,9 +432,9 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setFrozenShare(wantBool("pf_frozen_share", val));
                              }});
-                // GucciBot (2026-11-15, pf2 lane): the stuck rule's five
-                // minutes count thinking + level time played (at most the wall
-                // clock), not the wall clock; on by default (11-16).
+                // GucciBot (2026-11-15, pf2 lane): the stuck rule counts the
+                // search's decisions (11-17; thinking + level time played
+                // before), not five minutes of wall clock; on by default (11-16).
                 v.push_back({"pf_stuck_work", "bool", Store::Memory,
                              [] { return matjson::Value(absense::stuckWork()); },
                              [](matjson::Value const& val, bool) {
