@@ -1034,3 +1034,27 @@ class $modify(GBSearchKeypad, CCKeypadDispatcher) {
     }
 };
 #endif
+
+// Left or Right while a menu text box is typed in, on GD 2.2081 (Geode 5,
+// Windows): Geode hands cocos's text input an "a" alongside the arrow (GD's
+// own text fields read the key from it and move their cursor), and
+// imgui-cocos 9764333 types that "a" into the ImGui box; its Geode 6 version
+// (934958c) leaves it out. Taken here first, only while ImGui has the
+// keyboard, when imgui-cocos hands it to no cocos field anyway; the arrow key
+// itself still reaches ImGui and moves the cursor.
+#if defined(GEODE_IS_WINDOWS) && GEODE_COMP_GD_VERSION < 22090
+#include <Geode/modify/CCIMEDispatcher.hpp>
+
+class $modify(GBMenuArrowText, CCIMEDispatcher) {
+    static void onModify(auto& self) {
+        (void)self.setHookPriorityPre("cocos2d::CCIMEDispatcher::dispatchInsertText", Priority::First);
+    }
+
+    void dispatchInsertText(char const* text, int len, enumKeyCodes keys) {
+        if ((keys == KEY_Left || keys == KEY_Right) && ImGui::GetCurrentContext() &&
+            ImGui::GetIO().WantCaptureKeyboard)
+            return;
+        CCIMEDispatcher::dispatchInsertText(text, len, keys);
+    }
+};
+#endif
