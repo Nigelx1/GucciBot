@@ -19,8 +19,8 @@
 //
 // Frames are GucciBot's numbering throughout. A format whose bot counts one
 // frame behind GucciBot (Silicate's family: GucciBot records at getFrame()+1
-// where Silicate records at getFrame()) carries a frameShift, added on read
-// and taken off on write.
+// where Silicate records at getFrame(); yBot too, shown by real macros) carries
+// a frameShift, added on read and taken off on write.
 
 #include <cstdint>
 #include <string>

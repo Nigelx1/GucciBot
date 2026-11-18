@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-h (Frame Editor: Escape pauses a running level even with a bar selected)"
+    "2026-11-18-i (Macro converter: yBot macros line up with GucciBot's frames (they played one frame early))"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

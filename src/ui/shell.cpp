@@ -1225,7 +1225,16 @@ namespace gucci::ui {
                 log::warn("[GucciBot] {} isn't readable JSON, starting it again", indexFile);
             std::string const hash = geode::sha256(std::span<uint8_t const>(bytes)).toString();
             matjson::Value const seen = std::as_const(index)[hash];
-            std::string const nudge = std::to_string(ours || shared ? 0 : g_convertShift);
+            // Keyed by the nudge, plus the format's own frame shift when it has
+            // one ("0+1"). yBot's shift went from 0 to 1 (2026-11-18): an entry
+            // an older build wrote for a .ybot ("0") then misses, and the file
+            // is converted again instead of handing back the macro that played
+            // one frame early. A Silicate file imported before converts once
+            // more too; every other format keeps its key.
+            std::string nudge = std::to_string(ours || shared ? 0 : g_convertShift);
+            if (!ours && !shared)
+                if (auto const* f = convert::detect(bytes, fname); f && f->frameShift != 0)
+                    nudge += fmt::format("+{}", f->frameShift);
 
             // Imported before, at this nudge, and that macro is still the one
             // the import wrote, byte for byte. An entry written before the
