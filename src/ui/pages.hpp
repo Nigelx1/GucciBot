@@ -17,6 +17,33 @@ namespace gucci::ui::pages {
     void clickSounds();  // pages/clicksounds.cpp
     void editor();       // pages/editor.cpp: Frame Editor (timeline of the loaded macro's inputs)
     bool editorKeysLive();  // ... its shortcuts were listening at its last draw (Assistant Access: gucci_layout)
+    // ... a key from the game's keyboard (hacks/keybinds.cpp), with Ctrl held
+    // as ui::ctrlHeld() reads it: Z (Shift+Z redoes), Y or A while the editor
+    // has the keyboard (its page or a card focused at its last draw, the menu
+    // open, no text box active) is its undo, redo or select all, done at its
+    // next draw. True when it's the editor's: the key goes no further (not to
+    // GD, not to a hotkey). A key going up is never taken.
+    bool editorCtrlKey(int keyCode, bool shift, bool down, bool repeat);
+    // ... for Assistant Access (mcp/keys_tool.cpp, test launches only)
+    namespace editortest {
+        struct Info {
+            bool focused = false;   // had the keyboard at its last draw
+            bool keysLive = false;  // ... and listened for keys (no drag)
+            int items = 0;          // clicks in the loaded macro
+            int selected = 0;
+            bool canUndo = false, canRedo = false;
+            std::string message;    // the inspector's last line
+            int ctrlKeysTaken = 0;  // editorCtrlKey keys taken, ever
+            bool lastClickCtrl = false;  // Ctrl as clickBar's click saw it
+        };
+        Info info();
+        // At its next draw: what a left click on bar n (the n-th click, in
+        // key order) does to the selection, with Ctrl as ctrlHeld() reads it.
+        void clickBar(int n);
+        // At its next draw (Pages layout): its page focused, as a click in it
+        // does, or nothing focused.
+        void focus(bool on);
+    }
     void calculate();    // pages/calculate.cpp: Calculate (frame-window analyzer) settings + run
     void macroTools();   // pages/macro_tools.cpp: Macro Tools (diff, trim, merge, metadata, TPS changes)
     void editorTools();  // pages/editor_tools.cpp: Replace All and Macro Buffing (level editor)

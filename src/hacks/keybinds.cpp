@@ -2,9 +2,11 @@
 #include "core/bot_switch.hpp"
 #include "hacks/autoclicker.hpp"
 #include "hacks/hitborders.hpp"
+#include "hacks/keybinds.hpp"
 #include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
 #include "trainers/trainer_core.hpp"
+#include "ui/pages.hpp"
 #include "ui/search.hpp"
 #include "ui/ui.hpp"
 
@@ -19,6 +21,14 @@ using namespace geode::prelude;
 using namespace gucci;
 
 namespace {
+
+    // Assistant Access's view of what went on to the game (hacks/keybinds.hpp).
+    uint32_t g_handedOn[256] = {};
+    uint32_t g_kept[256] = {};
+    void count(uint32_t (&table)[256], int k, bool down, bool repeat) {
+        if (down && !repeat && k > 0 && k < 256)
+            ++table[k];
+    }
 
     bool jumpKey(enumKeyCodes key) {
         return key == enumKeyCodes::KEY_Space || key == enumKeyCodes::KEY_Up || key == enumKeyCodes::KEY_W;
@@ -138,26 +148,114 @@ namespace {
 
 } // namespace
 
+#if GB_GEODE6 && defined(GEODE_IS_WINDOWS)
+// Ctrl as the keyboard has it, on Geode 6 for Windows (keybinds.hpp,
+// ctrlDown). Neither of the other two places to read it can be trusted there
+// (Geode 6.0.0-alpha.2 loader/src/platform/windows/input.cpp,
+// handleKeyboardEvent; imgui-cocos 934958c src/hooks.cpp):
+// - ImGui's Ctrl sticks down after Ctrl is let go: Geode puts Control in the
+//   modifiers of a Ctrl key's own event, its release too, and imgui-cocos
+//   hands ImGui those modifiers on every key going up.
+// - The dispatcher's misses a release imgui-cocos takes (while ImGui wants
+//   the keyboard, a widget held or a box typed in): Geode sets the
+//   dispatcher's modifiers only for a key it hands on.
+// So this listens where every key arrives first, KeyboardInputEvent, ahead of
+// imgui-cocos (a lower number goes first), and never stops a key. A Ctrl key
+// says itself whether it's down; any other key carries Geode's own record of
+// the modifiers held (its KeyStateTracker), which puts the two right again.
+namespace {
+    bool g_ctrlLeft = false, g_ctrlRight = false;
+}
+
+$execute {
+    KeyboardInputEvent().listen(
+        [](KeyboardInputData& d) {
+            bool const down = d.action != KeyboardInputData::Action::Release;
+            switch (d.key) {
+                case enumKeyCodes::KEY_LeftControl:
+                case enumKeyCodes::KEY_Control:
+                    g_ctrlLeft = down;
+                    break;
+                case enumKeyCodes::KEY_RightContol:
+                    g_ctrlRight = down;
+                    break;
+                default:
+                    if (!static_cast<bool>(d.modifiers & KeyboardModifier::Control))
+                        g_ctrlLeft = g_ctrlRight = false;
+                    else if (!g_ctrlLeft && !g_ctrlRight)
+                        g_ctrlLeft = true;
+                    break;
+            }
+            return ListenerResult::Propagate;
+        },
+        -1000)
+        .leak();
+}
+
+bool gucci::keybinds::ctrlDown() {
+    return g_ctrlLeft || g_ctrlRight;
+}
+#else
+bool gucci::keybinds::ctrlDown() {
+#if defined(GEODE_IS_IOS)  // no keyboard dispatcher binding there
+    return false;
+#else
+    // Geode 5 sets the dispatcher's modifiers right before every key it hands
+    // on, and on Windows imgui-cocos takes keys only after that, inside
+    // dispatchKeyboardMSG; a lost focus lets go of every key through it too.
+    auto* kb = CCKeyboardDispatcher::get();
+    return kb && kb->getControlKeyPressed();
+#endif
+}
+#endif
+
+uint32_t gucci::keybinds::handedOn(int keyCode) {
+    return keyCode > 0 && keyCode < 256 ? g_handedOn[keyCode] : 0;
+}
+
+uint32_t gucci::keybinds::kept(int keyCode) {
+    return keyCode > 0 && keyCode < 256 ? g_kept[keyCode] : 0;
+}
+
 #ifndef GEODE_IS_IOS // no keyboard dispatcher binding there
 class $modify(GucciKeys, CCKeyboardDispatcher) {
     bool dispatchKeyboardMSG(enumKeyCodes key, bool down, bool repeat, double timestamp) {
+        int const k = static_cast<int>(key);
+        // Every key not kept goes on to the game from here.
+        bool const handedOn = gucciHandle(key, down, repeat);
+        count(handedOn ? g_handedOn : g_kept, k, down, repeat);
+        if (!handedOn)
+            return true;
+        return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+    }
+
+    // What GucciBot does with a key; false when it keeps it from the game.
+    bool gucciHandle(enumKeyCodes key, bool down, bool repeat) {
         int const k = static_cast<int>(key);
         auto* gb = GucciEngine::get();
 
         // A key-capture control in the menu takes the key first.
         if (down && !repeat && ui::feedKeyCapture(k))
-            return true;
+            return false;
         if (ImGui::GetIO().WantTextInput)
-            return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+            return true;
+        // Ctrl+Z, Ctrl+Y (Ctrl+Shift+Z) and Ctrl+A while the Frame Editor has
+        // the keyboard are its undo, redo and select all, and go no further:
+        // not to GD (its level editor has a Ctrl+Z of its own), not to a
+        // hotkey on that key. ImGui never sees them go down from a real
+        // keyboard (ui/pages/editor.cpp, shortcuts), as with Ctrl+F below.
+        if (ui::pages::editorCtrlKey(k, this->getShiftKeyPressed(), down, repeat))
+            return false;
         // Ctrl+F in the menu goes to its search box (ui/search.cpp), not to a
         // hotkey bound to F: the box isn't taking typing yet as F goes down.
-        // Ctrl is read from this dispatcher (Geode sets its modifiers right
-        // before every key it hands on), not from ImGui, which never sees
-        // these keys go down (ui/search.hpp, ctrlFIsMine).
-        if (key == enumKeyCodes::KEY_F && ui::search::ctrlFIsMine(this->getControlKeyPressed())) {
+        // Ctrl is read from this dispatcher too (Geode sets its modifiers
+        // right before every key it hands on: ui::ctrlHeld), not from ImGui
+        // alone, which never sees these keys go down (ui/search.hpp,
+        // ctrlFIsMine).
+        if (key == enumKeyCodes::KEY_F && ui::search::ctrlFIsMine(ui::ctrlHeld())) {
             if (down && !repeat)
                 ui::search::focusBox();
-            return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+            return true;
         }
 
         // Switched off (core/bot_switch.hpp), only the menu key does anything.
@@ -179,7 +277,7 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
 #endif
         }
         if (!live)
-            return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+            return true;
 
         // Held-repeat keys: frame step and step back, only while paused.
         if (down && gb->updater.m_paused) {
@@ -190,7 +288,7 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
                 gb->updater.userStepBack();
         }
 
-        return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+        return true;
     }
 
 #ifdef GEODE_IS_MACOS

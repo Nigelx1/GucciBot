@@ -201,6 +201,8 @@ namespace gucci::mcp {
     void registerBandsTools(Server& server);
     // gucci_layout: the menu's Windows layout, for tests (layout_tool.cpp).
     void registerLayoutTools(Server& server);
+    // gucci_key (a key the way Geode hands one on) and gucci_editor (the Frame Editor), keys_tool.cpp.
+    void registerKeysTools(Server& server);
 
     // Who owns the run right now: "render", "analyzer", "pathfinder", or ""
     // for nobody. The driving tools refuse while it isn't "". Defined in

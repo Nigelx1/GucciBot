@@ -3637,6 +3637,7 @@ namespace gucci::mcp {
         registerShareTools(server);
         registerBandsTools(server);
         registerLayoutTools(server);
+        registerKeysTools(server);
     }
 
 } // namespace gucci::mcp

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-c (Pathfinder: a death on a plan's last tick goes back instead of being decided past, so level complete means the macro replays)"
+    "2026-11-18-d (Frame Editor: Ctrl+Z, Ctrl+Y, Ctrl+A and Ctrl-click work from a real keyboard on both GD versions)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
