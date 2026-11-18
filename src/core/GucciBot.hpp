@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-f (Pathfinder: hardening from the post-landing review: a death in run-on ticks is marked where it happened, an ahead dead end is handed over at once, and a hit during GD's end animation on a locked player is not a dead end)"
+    "2026-11-18-g (Frame Editor: Delete, Backspace, Escape, the arrows and Shift+wheel work from a real keyboard on both GD versions; ImGui Ctrl and Shift no longer stick on 2.2091; arrows in a menu text box type no a)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

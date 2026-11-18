@@ -73,6 +73,9 @@ namespace gucci::ui {
     // being typed in), so on Geode 5 it never sees Ctrl go down, and on
     // Geode 6 its Ctrl sticks down after Ctrl is let go.
     bool ctrlHeld();
+    // Shift is held, the same way (keybinds::shiftDown): ImGui's io.KeyShift
+    // has the same two faults on Windows.
+    bool shiftHeld();
 
     // Human-readable name of a key code ("Left Alt", "F5", "Unbound").
     std::string keyName(int keyCode);
