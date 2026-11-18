@@ -2407,7 +2407,16 @@ namespace gucci::ui {
         std::string g_speedTest;  // the last speed test's result (step R0 of AI_PATHFINDER_PLAN.md)
         std::string g_legText;    // the last "find a way to the next gate" (step R3)
 
+        void pagePathfinderMain();
+
+        // The Pathfinder page: the Pathfinder's own card, then its queue
+        // (tools/queue.hpp, Juice's idea).
         void pagePathfinder() {
+            pagePathfinderMain();
+            pages::pathfinderQueueCard();
+        }
+
+        void pagePathfinderMain() {
 #if !GB_NATIVE_ENGINE
             // GucciBot (2026-11-15): the Pathfinder runs here too, without the
             // trigger model (absense/world reads GD's Windows memory layout).
