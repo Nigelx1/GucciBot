@@ -17,5 +17,7 @@ namespace gucci::keybinds {
     // Windows: what GucciBot's own KeyboardInputEvent listener saw; elsewhere
     // the keyboard dispatcher's modifier. false on iOS.
     bool ctrlDown();
+    // ... and Shift (ui::shiftHeld reads it), the same way.
+    bool shiftDown();
 
 } // namespace gucci::keybinds

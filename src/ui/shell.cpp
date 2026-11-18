@@ -357,6 +357,16 @@ namespace gucci::ui {
         return false;
     }
 
+    bool shiftHeld() {
+        if (keybinds::shiftDown())
+            return true;
+#if !defined(GEODE_IS_WINDOWS)
+        if (ImGui::GetCurrentContext() && ImGui::GetIO().KeyShift)
+            return true;
+#endif
+        return false;
+    }
+
     std::string keyName(int k) {
         if (k == 0)
             return "Unbound";

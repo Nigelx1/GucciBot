@@ -125,6 +125,10 @@ namespace gucci::ui::pages {
             return GucciEngine::get()->replay.m_actionAtom.m_actions;
         }
 
+        // Assistant Access (editortest::wheel): a turn of the mouse wheel over
+        // the lanes at their next draw.
+        float g_testWheel = 0.f;
+
         // Why the macro can't be edited right now, or nullptr.
         const char* lockReason() {
             auto* gb = GucciEngine::get();
@@ -624,16 +628,19 @@ namespace gucci::ui::pages {
 
             // ---- input
 
-            if (hovered) {
-                if (io.MouseWheel != 0.f) {
-                    if (io.KeyShift) {
-                        s.start -= static_cast<double>(io.MouseWheel) * v.w * 0.15 * s.fpp;
-                        clampView(s, v.w);
-                    } else {
-                        zoomAround(s, v, std::clamp(io.MousePos.x, v.x0, right),
-                                   std::pow(0.8, static_cast<double>(io.MouseWheel)));
-                    }
+            float const wheel = g_testWheel != 0.f ? std::exchange(g_testWheel, 0.f) : hovered ? io.MouseWheel : 0.f;
+            if (wheel != 0.f) {
+                // Shift as the game's keyboard has it (ui::shiftHeld): ImGui's
+                // io.KeyShift never goes down on Geode 5 and sticks down after
+                // Shift is let go on Geode 6.
+                if (shiftHeld()) {
+                    s.start -= static_cast<double>(wheel) * v.w * 0.15 * s.fpp;
+                    clampView(s, v.w);
+                } else {
+                    zoomAround(s, v, std::clamp(io.MousePos.x, v.x0, right), std::pow(0.8, static_cast<double>(wheel)));
                 }
+            }
+            if (hovered) {
                 if (io.MouseWheelH != 0.f) {
                     s.start -= static_cast<double>(io.MouseWheelH) * v.w * 0.15 * s.fpp;
                     clampView(s, v.w);
@@ -1220,19 +1227,20 @@ namespace gucci::ui::pages {
         }
 
         // Keys while the page has focus and no field is being typed in.
-        // Ctrl+Z / Ctrl+Y / Ctrl+A from a real keyboard come through
-        // editorCtrlKey (below) instead: imgui-cocos never hands ImGui a key
-        // going down while no box has the keyboard, so these checks only see
-        // keys put straight into ImGui (or handed to it while it wanted the
-        // keyboard). `ctrlTaken`: one of those came from the game's keyboard
-        // this frame, so the Ctrl ones here stand aside.
-        void shortcuts(State& s, bool ctrlTaken) {
+        // From a real keyboard they come through editorCtrlKey and editorKey
+        // (below) instead: imgui-cocos never hands ImGui a key going down
+        // while no box has the keyboard (and has no Escape at all), so these
+        // checks only see keys put straight into ImGui, handed to it while it
+        // wanted the keyboard, or Backspace, which it is also handed through
+        // cocos's text input on every press. `gameKeys`: a key came from the
+        // game's keyboard just now, so these stand aside (no key done twice).
+        void shortcuts(State& s, bool gameKeys) {
             ImGuiIO const& io = ImGui::GetIO();
-            if (io.WantTextInput)
+            if (io.WantTextInput || gameKeys)
                 return;
-            bool const ctrl = io.KeyCtrl && !ctrlTaken;
+            bool const ctrl = io.KeyCtrl;
             if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
-                if (io.KeyShift)
+                if (shiftHeld())
                     redo(s);
                 else
                     undo(s);
@@ -1245,9 +1253,9 @@ namespace gucci::ui::pages {
             } else if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
                 s.sel.clear();
             } else if (!s.sel.empty() && ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
-                moveSelection(s, io.KeyShift ? -10 : -1);
+                moveSelection(s, shiftHeld() ? -10 : -1);
             } else if (!s.sel.empty() && ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
-                moveSelection(s, io.KeyShift ? 10 : 1);
+                moveSelection(s, shiftHeld() ? 10 : 1);
             }
         }
 
@@ -1274,12 +1282,27 @@ namespace gucci::ui::pages {
         int g_focusedFrame = -100;
         int g_keysLiveFrame = -100;
 
-        // A Ctrl key from the game's keyboard (editorCtrlKey), done at the
-        // editor's next draw.
-        enum class CtrlKey { None, Undo, Redo, SelectAll };
-        CtrlKey g_ctrlKey = CtrlKey::None;
-        int g_ctrlKeyFrame = -100;
+        // Keys from the game's keyboard (editorCtrlKey, editorKey), done at
+        // the editor's next draw, in order (a held arrow can repeat twice in
+        // one frame).
+        enum class EdKey { Undo, Redo, SelectAll, Delete, Deselect, Move };
+        struct GameKey {
+            EdKey what;
+            int64_t by = 0;  // a move: frames
+        };
+        std::vector<GameKey> g_gameKeys;
+        int g_gameKeyFrame = -100;  // the last one taken
         int g_ctrlKeysTaken = 0;
+        int g_keysTaken = 0;  // editorKey's presses
+        // A key whose press editorKey took: its repeats and its release are
+        // the editor's too, so the game never sees half of it.
+        bool g_held[256] = {};
+        int g_escapeFrame = -100;  // the frame editorKey took an Escape
+
+        void takeGameKey(GameKey k) {
+            g_gameKeys.push_back(k);
+            g_gameKeyFrame = ImGui::GetFrameCount();
+        }
 
         // Assistant Access (editortest): a bar clicked, a focus change.
         int g_testClick = -1;
@@ -1301,6 +1324,7 @@ namespace gucci::ui::pages {
         // Ctrl+A: those keys go to ImGui, as the hook hands them on).
         if (!fresh(g_focusedFrame) || !isOpen() || ImGui::GetIO().WantTextInput || !ctrlHeld())
             return false;
+        enum class CtrlKey { None, Undo, Redo, SelectAll };
         CtrlKey what = CtrlKey::None;
         if (keyCode == static_cast<int>(enumKeyCodes::KEY_Z))
             what = shift ? CtrlKey::Redo : CtrlKey::Undo;
@@ -1312,11 +1336,63 @@ namespace gucci::ui::pages {
             return false;  // a key going up goes on, whatever it is
         // Held down, it repeats: taken, but done once.
         if (!repeat) {
-            g_ctrlKey = what;
-            g_ctrlKeyFrame = ImGui::GetFrameCount();
+            takeGameKey({what == CtrlKey::Undo ? EdKey::Undo : what == CtrlKey::Redo ? EdKey::Redo : EdKey::SelectAll});
             ++g_ctrlKeysTaken;
         }
         return true;
+    }
+
+    bool editorKey(int keyCode, bool down, bool repeat) {
+        if (keyCode <= 0 || keyCode >= 256)
+            return false;
+        bool& held = g_held[keyCode];
+        if (!down)
+            return std::exchange(held, false);
+        if (repeat && !held)
+            return false;  // a press the editor didn't take: the rest stays the game's
+        GameKey k{EdKey::Delete};
+        switch (static_cast<enumKeyCodes>(keyCode)) {
+            case enumKeyCodes::KEY_Delete:
+            case enumKeyCodes::KEY_Backspace:
+                k.what = EdKey::Delete;
+                break;
+            case enumKeyCodes::KEY_Escape:
+                k.what = EdKey::Deselect;
+                break;
+            case enumKeyCodes::KEY_Left:
+            case enumKeyCodes::KEY_Right:
+                // Shift as the keyboard has it as this key goes down.
+                k.what = EdKey::Move;
+                k.by = (shiftHeld() ? 10 : 1) * (keyCode == static_cast<int>(enumKeyCodes::KEY_Left) ? -1 : 1);
+                break;
+            default:
+                return false;
+        }
+        // The editor listened for keys at its last draw (focused, no drag),
+        // the menu is still open, and nothing is being typed in.
+        bool const listening = editorKeysLive() && isOpen() && !ImGui::GetIO().WantTextInput;
+        if (repeat) {
+            // Held: an arrow moves again; the others did their part on the press.
+            if (k.what == EdKey::Move && listening)
+                takeGameKey(k);
+            return true;
+        }
+        held = false;
+        // A press is the editor's only when it has something to act on: with
+        // nothing selected, Escape still pauses the level, an arrow still
+        // moves a platformer player, and a hotkey on the key still fires.
+        if (!listening || st().sel.empty())
+            return false;
+        held = true;
+        takeGameKey(k);
+        ++g_keysTaken;
+        if (k.what == EdKey::Deselect)
+            g_escapeFrame = ImGui::GetFrameCount();
+        return true;
+    }
+
+    bool editorTookBack() {
+        return ImGui::GetCurrentContext() && ImGui::GetFrameCount() == g_escapeFrame;
     }
 
     void editor() {
@@ -1359,17 +1435,26 @@ namespace gucci::ui::pages {
             g_focusedFrame = ImGui::GetFrameCount();
         if (live)
             g_keysLiveFrame = ImGui::GetFrameCount();
-        // (Not drawn since, the editor drops it: no undo when it opens again.)
-        CtrlKey const key = fresh(g_ctrlKeyFrame) ? std::exchange(g_ctrlKey, CtrlKey::None) : CtrlKey::None;
-        g_ctrlKey = CtrlKey::None;
+        // (Not drawn since, the editor drops them: no undo when it opens again.)
+        std::vector<GameKey> keys;
+        if (fresh(g_gameKeyFrame))
+            keys.swap(g_gameKeys);
+        g_gameKeys.clear();
         if (live) {
-            if (key == CtrlKey::Undo)
-                undo(s);
-            else if (key == CtrlKey::Redo)
-                redo(s);
-            else if (key == CtrlKey::SelectAll)
-                selectAll(s);
-            shortcuts(s, key != CtrlKey::None);
+            for (GameKey const& k : keys) {
+                switch (k.what) {
+                    case EdKey::Undo: undo(s); break;
+                    case EdKey::Redo: redo(s); break;
+                    case EdKey::SelectAll: selectAll(s); break;
+                    case EdKey::Delete: deleteSelection(s); break;
+                    case EdKey::Deselect: s.sel.clear(); break;
+                    case EdKey::Move: moveSelection(s, k.by); break;
+                }
+            }
+            // ImGui's own keys stand aside for two frames after one from the
+            // game: Backspace reaches it too (through cocos's text input),
+            // maybe a frame later.
+            shortcuts(s, ImGui::GetFrameCount() - g_gameKeyFrame <= 2);
         }
         ImGui::PopID();
     }
@@ -1386,8 +1471,19 @@ namespace gucci::ui::pages {
             i.canRedo = s.history.canRedo();
             i.message = s.msg.text;
             i.ctrlKeysTaken = g_ctrlKeysTaken;
+            i.keysTaken = g_keysTaken;
             i.lastClickCtrl = g_testCtrlSeen;
+            if (!s.sel.empty()) {
+                uint32_t const idx = ed::itemOfKey(s.model, s.sel.front());
+                if (idx != ed::kNone && s.model.items[idx].press < macro().size())
+                    i.selFirstFrame = static_cast<int64_t>(macro()[s.model.items[idx].press].m_frame);
+            }
+            i.viewStart = s.start;
+            i.framesPerPx = s.fpp;
             return i;
+        }
+        void wheel(float turns) {
+            g_testWheel = turns;
         }
         void clickBar(int n) {
             g_testClick = n;

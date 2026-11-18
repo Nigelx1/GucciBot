@@ -163,8 +163,19 @@ namespace {
 // imgui-cocos (a lower number goes first), and never stops a key. A Ctrl key
 // says itself whether it's down; any other key carries Geode's own record of
 // the modifiers held (its KeyStateTracker), which puts the two right again.
+// Shift is read the same way (shiftDown), for the same two reasons.
 namespace {
     bool g_ctrlLeft = false, g_ctrlRight = false;
+    bool g_shiftLeft = false, g_shiftRight = false;  // the same for Shift (shiftDown)
+
+    // A Ctrl or Shift key says itself whether it's down; any other key
+    // carries whether that modifier is held, which puts the two right again.
+    void track(bool& left, bool& right, bool held) {
+        if (!held)
+            left = right = false;
+        else if (!left && !right)
+            left = true;
+    }
 }
 
 $execute {
@@ -179,13 +190,24 @@ $execute {
                 case enumKeyCodes::KEY_RightContol:
                     g_ctrlRight = down;
                     break;
+                case enumKeyCodes::KEY_LeftShift:
+                case enumKeyCodes::KEY_Shift:
+                    g_shiftLeft = down;
+                    break;
+                case enumKeyCodes::KEY_RightShift:
+                    g_shiftRight = down;
+                    break;
                 default:
-                    if (!static_cast<bool>(d.modifiers & KeyboardModifier::Control))
-                        g_ctrlLeft = g_ctrlRight = false;
-                    else if (!g_ctrlLeft && !g_ctrlRight)
-                        g_ctrlLeft = true;
                     break;
             }
+            bool const ctrlKey = d.key == enumKeyCodes::KEY_LeftControl || d.key == enumKeyCodes::KEY_Control ||
+                                 d.key == enumKeyCodes::KEY_RightContol;
+            bool const shiftKey = d.key == enumKeyCodes::KEY_LeftShift || d.key == enumKeyCodes::KEY_Shift ||
+                                  d.key == enumKeyCodes::KEY_RightShift;
+            if (!ctrlKey)
+                track(g_ctrlLeft, g_ctrlRight, static_cast<bool>(d.modifiers & KeyboardModifier::Control));
+            if (!shiftKey)
+                track(g_shiftLeft, g_shiftRight, static_cast<bool>(d.modifiers & KeyboardModifier::Shift));
             return ListenerResult::Propagate;
         },
         -1000)
@@ -194,6 +216,10 @@ $execute {
 
 bool gucci::keybinds::ctrlDown() {
     return g_ctrlLeft || g_ctrlRight;
+}
+
+bool gucci::keybinds::shiftDown() {
+    return g_shiftLeft || g_shiftRight;
 }
 #else
 bool gucci::keybinds::ctrlDown() {
@@ -205,6 +231,16 @@ bool gucci::keybinds::ctrlDown() {
     // dispatchKeyboardMSG; a lost focus lets go of every key through it too.
     auto* kb = CCKeyboardDispatcher::get();
     return kb && kb->getControlKeyPressed();
+#endif
+}
+
+bool gucci::keybinds::shiftDown() {
+#if defined(GEODE_IS_IOS)
+    return false;
+#else
+    // As ctrlDown, for Shift.
+    auto* kb = CCKeyboardDispatcher::get();
+    return kb && kb->getShiftKeyPressed();
 #endif
 }
 #endif
@@ -245,6 +281,12 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         // hotkey on that key. ImGui never sees them go down from a real
         // keyboard (ui/pages/editor.cpp, shortcuts), as with Ctrl+F below.
         if (ui::pages::editorCtrlKey(k, this->getShiftKeyPressed(), down, repeat))
+            return false;
+        // The same for its Delete, Backspace, Escape and Left/Right keys, but
+        // only while something is selected for them to act on: with nothing
+        // selected, Escape still pauses the level, the arrows still move a
+        // platformer player, and a hotkey on the key still fires.
+        if (ui::pages::editorKey(k, down, repeat))
             return false;
         // Ctrl+F in the menu goes to its search box (ui/search.cpp), not to a
         // hotkey bound to F: the box isn't taking typing yet as F goes down.

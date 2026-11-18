@@ -4,6 +4,7 @@
 
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/pages.hpp"
 #include "ui/probe.hpp"
 #include "ui/touch.hpp"
 
@@ -1024,6 +1025,10 @@ class $modify(GBSearchKeys, CCKeyboardDispatcher) {
 class $modify(GBSearchKeypad, CCKeypadDispatcher) {
     bool dispatchKeypadMSG(ccKeypadMSGType type) {
         if (type == kTypeBackClicked && ImGui::GetCurrentContext() && gucci::ui::search::takeBack())
+            return true;
+        // The Frame Editor took this press's Escape to clear its selection
+        // (ui/pages.hpp, editorKey): its back-click, where one comes too, isn't a pause.
+        if (type == kTypeBackClicked && gucci::ui::pages::editorTookBack())
             return true;
         return CCKeypadDispatcher::dispatchKeypadMSG(type);
     }
