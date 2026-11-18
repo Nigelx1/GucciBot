@@ -105,6 +105,23 @@ jobs:
           # The bindings the local Windows build uses (build/_deps/bindings-src).
           bindings-ref: d641858f3e1cd2c6d86013c799f224ebdb8ec1cd
 
+      # Only on a failed build. The Windows jobs sometimes stop in the
+      # bindings' codegen configure at "Could NOT find Boost": PEGTL's
+      # std::filesystem test compiles failed, and why is only in CMake's
+      # configure log, so this prints those compiles' output. rerun-flaky.yml
+      # reruns such a run.
+      - name: Show the codegen configure's failed test compiles
+        if: failure()
+        shell: bash
+        run: |
+          f=build/bindings/codegen-build/CMakeFiles/CMakeConfigureLog.yaml
+          if [ -f "$f" ]; then
+            echo "Failed test compiles in $f (each one's build output, then its exit code):"
+            grep -n -B40 'exitCode: [1-9]' "$f" | tail -n 300
+          else
+            echo "No $f: the build stopped before the codegen configure, or got past it."
+          fi
+
   package:
     name: Package
     runs-on: ubuntu-latest

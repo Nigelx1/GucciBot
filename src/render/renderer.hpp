@@ -359,6 +359,11 @@ namespace gucci {
         // With 0 seconds after the end, the level-complete frame has been
         // captured: the next update stops the render (update()).
         bool m_completionCaptured = false;
+        // A playing macro's inputs left at the level end hold the end for at
+        // most kMacroTailWait seconds of level time (update()).
+        static constexpr double kMacroTailWait = 1.0;
+        double m_macroTailTime = 0.0;
+        bool m_macroTailDone = false;
 
         int m_sampleRate = 44100;
         int m_channels = 2;
