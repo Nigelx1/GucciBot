@@ -2,6 +2,7 @@
 #include "core/bot_switch.hpp"
 #include "hacks/autoclicker.hpp"
 #include "hacks/hitborders.hpp"
+#include "hacks/keybinds.hpp"
 #include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
 #include "trainers/trainer_core.hpp"
@@ -20,6 +21,14 @@ using namespace geode::prelude;
 using namespace gucci;
 
 namespace {
+
+    // Assistant Access's view of what went on to the game (hacks/keybinds.hpp).
+    uint32_t g_handedOn[256] = {};
+    uint32_t g_kept[256] = {};
+    void count(uint32_t (&table)[256], int k, bool down, bool repeat) {
+        if (down && !repeat && k > 0 && k < 256)
+            ++table[k];
+    }
 
     bool jumpKey(enumKeyCodes key) {
         return key == enumKeyCodes::KEY_Space || key == enumKeyCodes::KEY_Up || key == enumKeyCodes::KEY_W;
@@ -139,11 +148,22 @@ namespace {
 
 } // namespace
 
+uint32_t gucci::keybinds::handedOn(int keyCode) {
+    return keyCode > 0 && keyCode < 256 ? g_handedOn[keyCode] : 0;
+}
+
+uint32_t gucci::keybinds::kept(int keyCode) {
+    return keyCode > 0 && keyCode < 256 ? g_kept[keyCode] : 0;
+}
+
 #ifndef GEODE_IS_IOS // no keyboard dispatcher binding there
 class $modify(GucciKeys, CCKeyboardDispatcher) {
     bool dispatchKeyboardMSG(enumKeyCodes key, bool down, bool repeat, double timestamp) {
+        int const k = static_cast<int>(key);
         // Every key not kept goes on to the game from here.
-        if (!gucciHandle(key, down, repeat))
+        bool const handedOn = gucciHandle(key, down, repeat);
+        count(handedOn ? g_handedOn : g_kept, k, down, repeat);
+        if (!handedOn)
             return true;
         return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
     }

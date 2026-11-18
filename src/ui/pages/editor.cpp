@@ -1282,6 +1282,11 @@ namespace gucci::ui::pages {
         int g_ctrlKeyFrame = -100;
         int g_ctrlKeysTaken = 0;
 
+        // Assistant Access (editortest): a bar clicked, a focus change.
+        int g_testClick = -1;
+        bool g_testCtrlSeen = false;
+        int g_testFocus = -1;  // 1 focus, 0 let go
+
         bool fresh(int frame) {
             return ImGui::GetCurrentContext() && ImGui::GetFrameCount() - frame <= 1;
         }
@@ -1319,6 +1324,14 @@ namespace gucci::ui::pages {
         State& s = st();
         sync(s);
         const char* lock = lockReason();
+        if (g_testFocus >= 0 && !layout::drawingPage()) {
+            // The page's own window, as a click in it focuses it (or none).
+            if (g_testFocus == 1)
+                ImGui::SetWindowFocus();
+            else
+                ImGui::SetWindowFocus(nullptr);
+        }
+        g_testFocus = -1;
         // Taken before anything is drawn: the page (or a card in it) has focus.
         // In the Windows layout each card is a window of its own, not a child
         // of the page's, so it asks after the editor's three cards instead.
@@ -1330,6 +1343,18 @@ namespace gucci::ui::pages {
         headerCard(s, lock);
         timelineCard(s, lock == nullptr);
         inspectorCard(s, lock == nullptr);
+        if (g_testClick >= 0) {
+            // What a left click on that bar in the timeline does (lanesView),
+            // with Ctrl as ctrlHeld() reads it now; without Ctrl, the drag a
+            // real click would start isn't, only its selection change.
+            if (static_cast<size_t>(g_testClick) < s.model.items.size()) {
+                uint32_t const key = s.model.items[static_cast<size_t>(g_testClick)].key();
+                g_testCtrlSeen = ctrlHeld();
+                if (!ctrlClickBar(s, key) && !selected(s, key))
+                    s.sel = {key};
+            }
+            g_testClick = -1;
+        }
         bool const live = focused && s.drag == Drag::None;
         if (focused)
             g_focusedFrame = ImGui::GetFrameCount();
@@ -1349,5 +1374,28 @@ namespace gucci::ui::pages {
         }
         ImGui::PopID();
     }
+
+    namespace editortest {
+        Info info() {
+            State& s = st();
+            Info i;
+            i.focused = fresh(g_focusedFrame);
+            i.keysLive = editorKeysLive();
+            i.items = static_cast<int>(s.model.items.size());
+            i.selected = static_cast<int>(s.sel.size());
+            i.canUndo = s.history.canUndo();
+            i.canRedo = s.history.canRedo();
+            i.message = s.msg.text;
+            i.ctrlKeysTaken = g_ctrlKeysTaken;
+            i.lastClickCtrl = g_testCtrlSeen;
+            return i;
+        }
+        void clickBar(int n) {
+            g_testClick = n;
+        }
+        void focus(bool on) {
+            g_testFocus = on ? 1 : 0;
+        }
+    } // namespace editortest
 
 } // namespace gucci::ui::pages
