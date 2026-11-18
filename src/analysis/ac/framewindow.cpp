@@ -9737,21 +9737,56 @@ static void drawLegLine(cocos2d::CCDrawNode* node,
     }
 }
 
-// Found by ID each time, never kept: a level that closes takes them with it.
-static cocos2d::CCDrawNode* legTrailNode(PlayLayer* pl, char const* id, int z,
-                                         bool& created) {
+// GucciBot (2026-11-18): held, not found by ID each frame. In a level with a
+// shader GD moves children out of the object layer they were added to (on
+// KOCMOC a trail node was in another layer one frame later), so the old ID
+// search missed the pair it made the frame before and made a new one every
+// frame: about 2 draw nodes a drawn frame for the whole run, and the run's end
+// removed only the newest pair, so the rest stayed drawn in the level through
+// restarts and playback (2026-11-18 test pass, S6: 1,064 nodes after one range
+// run). `held` keeps its own reference; a node that's no longer under this
+// level (it closed, or another opened) is let go and a new one made.
+static bool underLayer(cocos2d::CCNode* node, cocos2d::CCNode* root) {
+    for (auto* n = node; n; n = n->getParent())
+        if (n == root) return true;
+    return false;
+}
+
+static void letGoLegNode(cocos2d::CCDrawNode*& held) {
+    if (!held) return;
+    held->removeFromParent();
+    held->release();
+    held = nullptr;
+}
+
+static cocos2d::CCDrawNode* legTrailNode(PlayLayer* pl, cocos2d::CCDrawNode*& held,
+                                         char const* id, int z, bool& created) {
     created = false;
-    if (auto* node = typeinfo_cast<cocos2d::CCDrawNode*>(
-            pl->m_objectLayer->getChildByID(id)))
-        return node;
+    if (held && underLayer(held, pl)) return held;
+    letGoLegNode(held);
     auto* node = cocos2d::CCDrawNode::create();
     if (!node) return nullptr;
     node->setID(id);
     node->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
     node->m_bUseArea = false;  // as the macro path has it (macropath.cpp)
     pl->m_objectLayer->addChild(node, z);
+    node->retain();
+    held = node;
     created = true;
     return node;
+}
+
+// Any node of ours left in the layers GD puts level things in (one made by
+// a build before the fix above, say), by ID: only their own children, which
+// are few next to the objects (those sit in batch nodes).
+static void sweepLegNodes(PlayLayer* pl) {
+    for (cocos2d::CCNode* layer : {static_cast<cocos2d::CCNode*>(pl->m_objectLayer),
+                                   static_cast<cocos2d::CCNode*>(pl->m_inShaderObjectLayer),
+                                   static_cast<cocos2d::CCNode*>(pl->m_aboveShaderObjectLayer)}) {
+        if (!layer) continue;
+        for (char const* id : {"framewindow-leg-trail"_spr, "framewindow-leg-capture"_spr})
+            while (auto* node = layer->getChildByID(id)) node->removeFromParent();
+    }
 }
 
 void FrameWindowAnalyzer::openTrailLeg() {
@@ -9876,14 +9911,12 @@ void FrameWindowAnalyzer::dropLegTrail() {
     m_trailDrawn = UINT32_MAX;
     m_trailCaptureFrom = 0;
     m_trailCaptureTo = 0;
+    // (Wherever GD has moved them: see legTrailNode.)
+    letGoLegNode(m_legTrailNode);
+    letGoLegNode(m_legCaptureNode);
     if (!m_trailShown) return;
     m_trailShown = false;
-    auto* pl = PlayLayer::get();
-    if (!pl || !pl->m_objectLayer) return;
-    if (auto* node = pl->m_objectLayer->getChildByID("framewindow-leg-trail"_spr))
-        node->removeFromParent();
-    if (auto* node = pl->m_objectLayer->getChildByID("framewindow-leg-capture"_spr))
-        node->removeFromParent();
+    if (auto* pl = PlayLayer::get()) sweepLegNodes(pl);
 }
 
 void FrameWindowAnalyzer::updateLegTrail(PlayLayer* pl) {
@@ -9897,9 +9930,9 @@ void FrameWindowAnalyzer::updateLegTrail(PlayLayer* pl) {
 
     bool created = false;
     auto* capture =
-        legTrailNode(pl, "framewindow-leg-capture"_spr, 1602, created);
+        legTrailNode(pl, m_legCaptureNode, "framewindow-leg-capture"_spr, 1602, created);
     if (created) m_trailCaptureFrom = m_trailCaptureTo = 0;
-    auto* legs = legTrailNode(pl, "framewindow-leg-trail"_spr, 1603, created);
+    auto* legs = legTrailNode(pl, m_legTrailNode, "framewindow-leg-trail"_spr, 1603, created);
     if (created) m_trailDrawn = UINT32_MAX;
     if (!capture || !legs) return;
     m_trailShown = true;

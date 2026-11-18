@@ -1398,6 +1398,13 @@ class FrameWindowAnalyzer {
     size_t m_trailSample = NO_INDEX;
     bool m_legOpen = false;
     bool m_trailShown = false;
+    // GucciBot (2026-11-18): the two draw nodes, held (retained) rather than
+    // found by ID each frame. GD moves children out of a shader level's object
+    // layer (KOCMOC: the trail's nodes ended up in another layer a frame
+    // later), so the ID search missed them and made a new pair every frame;
+    // the old ones stayed in the level after the run (test pass S6).
+    cocos2d::CCDrawNode* m_legCaptureNode = nullptr;
+    cocos2d::CCDrawNode* m_legTrailNode = nullptr;
     uint32_t m_trailVersion = 0;
     uint32_t m_trailDrawn = UINT32_MAX;
     // The capture's line drawn: frames [from, to) of m_capturePath.
