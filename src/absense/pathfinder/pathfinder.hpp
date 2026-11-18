@@ -966,8 +966,6 @@ public:
     uint64_t m_stuckBest = 0;
     uint64_t m_stuckDecisions = 0;      // m_stats.decisions when the count last started over
     double m_stuckWallSeconds = 0.0;    // the wall clock since then (the rule with pf_stuck_work off; the 60-minute backstop)
-    uint64_t m_stuckIdleDecisions = 0;  // m_stats.decisions at the last look ...
-    double m_stuckIdleSeconds = 0.0;    // ... and the wall clock since one last began (the 20-minute backstop)
     std::chrono::steady_clock::time_point m_stuckClock{};
     // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): the furthest real tick
     // since the last fork jump while the new route is short of the old best
