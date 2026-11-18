@@ -1,5 +1,5 @@
 @echo off
-REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats, the menu art's PNG reader, Share my windows' picture and macro file, Hitborders' shapes, the AI pilot's networks, Ship Steering's controller, Save's rule, the queues and the Frame Editor's rules.
+REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats, the menu art's PNG reader, Share my windows' picture and macro file, Hitborders' shapes, the AI pilot's networks, Ship Steering's controller, Save's rule, the queues, the Trainer lane's rules and the Frame Editor's rules.
 
 setlocal
 set VCVARS="C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -108,6 +108,13 @@ cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
    tools\run_queue_tests.cpp /Fe:build\run_queue_tests.exe /Fo:build\ || exit /b 1
 
 build\run_queue_tests.exe || exit /b 1
+
+REM The Trainer lane's rules (src/trainers/lane_rules.hpp): a note's tier from its window, the early and
+REM late allowance, the judgment and which note a press answers.
+cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
+   tools\run_lane_tests.cpp /Fe:build\run_lane_tests.exe /Fo:build\ || exit /b 1
+
+build\run_lane_tests.exe || exit /b 1
 
 REM Frame Editor rules (src/tools/edit_core, ported from Absense's macro editor).
 cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^

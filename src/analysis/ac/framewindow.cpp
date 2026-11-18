@@ -10654,3 +10654,36 @@ void FrameWindowAnalyzer::updateTripLabel(PlayLayer* pl) {
 // GucciBot's menu is immediate-mode ImGui and calls applyLabel() and
 // testPlayhead() straight from its own buttons (ui/pages/calculate.cpp), so
 // there is nothing to register.
+
+// GucciBot (2026-11-17): analysis/ac/fw_file.hpp, for the Trainer's lane.
+#include "analysis/ac/fw_file.hpp"
+
+bool gucci::fwfile::readWindows(std::filesystem::path const& path, std::vector<Window>& out, double& tps) {
+    out.clear();
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) return false;
+    std::ifstream fd(path);
+    if (!fd) return false;
+    std::string data((std::istreambuf_iterator<char>(fd)), std::istreambuf_iterator<char>());
+    fwstore::StoredResults in;
+    if (!fwstore::fromJson(data, in)) return false;
+    tps = in.tps > 0.0 ? in.tps : 240.0;
+    out.reserve(in.marks.size());
+    for (auto const& m : in.marks) {
+        Window w;
+        w.frame = m.frame;
+        w.player2 = m.player2;
+        w.release = m.release;
+        w.window = m.window;
+        w.subframe = m.subframe;
+        w.cbf = m.cbf;
+        w.low = m.low;
+        w.high = m.high;
+        w.unbounded = m.unbounded;
+        w.hidden = m.hidden;
+        w.desynced = m.desynced;
+        w.manual = m.manual;
+        out.push_back(w);
+    }
+    return true;
+}
