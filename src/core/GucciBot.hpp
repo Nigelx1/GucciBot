@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-e (Pathfinder: the stuck rule counts 300 decisions without getting further instead of five minutes, with a 60-minute clock backstop)"
+    "2026-11-18-f (Pathfinder: hardening from the post-landing review: a death in run-on ticks is marked where it happened, an ahead dead end is handed over at once, and a hit during GD's end animation on a locked player is not a dead end)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

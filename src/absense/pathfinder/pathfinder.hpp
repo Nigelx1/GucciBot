@@ -911,6 +911,12 @@ public:
     bool m_restepping = false;
     bool m_wouldDie = false;
     uint64_t m_wouldDieTick = 0;
+    // GucciBot (2026-11-18, pfharden lane): the frame counter at the FIRST
+    // death the game was kept from dealing since m_wouldDie was last cleared
+    // (m_wouldDieTick is overwritten by every later hit). Set on the hit that
+    // turns m_wouldDie on, so every reset of m_wouldDie starts it afresh; only
+    // read while m_wouldDie is set (noteRunOnDeath).
+    uint64_t m_wouldDieFirstTick = 0;
     cocos2d::CCRect m_wouldDieRect;   // the player's inner hitbox when the game killed it
     bool m_wouldDieP2 = false;        // it was player 2 the game killed
     // GucciBot (2026-11-12): what the game killed the player with, for the
@@ -942,6 +948,9 @@ public:
     // restore lands before it; a run that reaches the end with one set is
     // not called complete (stop). UINT64_MAX: none.
     uint64_t m_deathKept = UINT64_MAX;
+    int m_liveGuardLines = 0;  // pfharden: tick()'s guard at done: (the game left live outside Committing)
+    int m_lockedDeathLines = 0;  // pfharden: hits onWouldDie let pass while player 1 is locked (logged)
+    bool m_endSeen = false;      // pfharden: GD's end animation seen this run (logged once)
 
     std::deque<Anchor> m_anchors;  // oldest first; the start state is kept apart
     Anchor m_startAnchor;

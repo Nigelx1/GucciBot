@@ -570,6 +570,9 @@ bool AbsensePathfinder::start() {
     m_expectReset = false;
     m_completed = false;
     m_deathKept = UINT64_MAX;
+    m_liveGuardLines = 0;
+    m_lockedDeathLines = 0;
+    m_endSeen = false;
     m_starts.clear();
     forgetRunMemo();
     m_probe = Probe{};
@@ -924,9 +927,33 @@ bool AbsensePathfinder::onWouldDie(PlayerObject* player, GameObject* object) {
     // Either player dying while the search drives the game is a dead end;
     // the death itself is skipped and the search goes back instead.
     if (!isRunning()) return false;
+    // GucciBot (2026-11-18, pfharden lane): a death GD itself would not deal
+    // is not a dead end. GD's destroyPlayer returns first while player 1 is
+    // locked (read from the game, see settleAnticheatSpike), and GD locks
+    // player 1 for its end-of-level animation, which drags the sprite on
+    // through whatever is in the way (Calculate's VSC capture "died" 215
+    // frames past the end, build -ef). This hook ran before GD's check, so
+    // such a hit came to afterTick as a real death, a few hundred ticks
+    // before levelComplete sets m_completed: the search backed away from a
+    // level it had already beaten. Swallowed as GD would, and not counted.
+    // Only where both hold (the end animation has started AND player 1 is
+    // locked): a hit with just one of them still counts, the safe side.
+    // The player that was hit must be locked too (review, 2026-11-18): if GD
+    // checked the hit player's own lock and left player 2 free in a dual, a
+    // player-2 hit there would be a real death. Single mode: the hit player
+    // is player 1, so nothing changes there.
+    if (auto* pl = PlayLayer::get();
+        pl && pl->m_levelEndAnimationStarted && pl->m_player1 && pl->m_player1->m_isLocked &&
+        (!player || player->m_isLocked)) {
+        if (m_lockedDeathLines++ < 10)
+            log("tick %llu: player 1 is locked for GD's end animation: a hit GD does not deal, not a death",
+                (unsigned long long)currentTick());
+        return true;
+    }
     const bool firstHit = !m_wouldDie;
     m_wouldDie = true;
     m_wouldDieTick = currentTick();
+    if (firstHit) m_wouldDieFirstTick = m_wouldDieTick;
     if (player) m_wouldDieRect = player->getObjectRect(0.3f, 0.3f);
     m_wouldDieP2 = player && PlayLayer::get() && player == PlayLayer::get()->m_player2;
     // Asked here, while the object is still at hand: the death is looked at a
@@ -1276,6 +1303,21 @@ void AbsensePathfinder::tick() {
                     // where the plan ends meanwhile.
                     if (m_ahead.active) {
                         decide();
+                        // GucciBot (2026-11-18, pfharden lane): a dead end
+                        // decided ahead is handed over here, at once, as the
+                        // Backtracking case below does it. Left to that case,
+                        // it waited for another pass of this loop, and when
+                        // the decision used up the slice there was none: the
+                        // game ran the next frame live with the phase at
+                        // Backtracking, where liveInput plays nothing and
+                        // keeps no books (a death in those ticks was never
+                        // recorded, and the history drifted from what the
+                        // game played).
+                        if (m_phase == Phase::Backtracking && m_ahead.active) {
+                            cancelAhead();
+                            m_aheadFailed = true;
+                            m_phase = Phase::Committing;
+                        }
                     } else if (m_planIndex < m_plan.size()) {
                         beginAhead();
                         if (!m_ahead.active) goto done;  // nothing to decide ahead of: wait for the plan
@@ -1332,6 +1374,18 @@ void AbsensePathfinder::tick() {
         }
     }
 done:
+    // GucciBot (2026-11-18, pfharden lane): the game never runs live past a
+    // slice with the phase other than Committing: liveInput would skip every
+    // tick of the next frame (no input, no bookkeeping). Stopped here
+    // instead, its last tick's bookkeeping done; the phase's own case carries
+    // on from where the game is next frame.
+    if (m_live && m_phase != Phase::Committing) {
+        static const char* const kPhase[] = {"idle", "deciding", "committing", "going back", "probing", "restoring", "done"};
+        if (m_liveGuardLines++ < 20)
+            log("tick %llu: the game was left live with the search %s; stopped it until that is done",
+                (unsigned long long)currentTick(), kPhase[(int)m_phase]);
+        pauseLive();
+    }
     m_lastSliceStart = frameStart;
     m_lastSliceMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frameStart).count();
     m_stats.sliceMs = m_lastSliceMs;
@@ -5234,7 +5288,16 @@ void AbsensePathfinder::noteRunOnDeath(uint64_t from) {
     if (!m_wouldDie) return;
     // The earliest tick it can have been (the first tick run on): going back
     // to before it is what clears it, so earlier is the safe side.
-    const uint64_t at = from + 1;
+    // GucciBot (2026-11-18, pfharden lane): no earlier than the frame counter
+    // the first of those deaths read, though. The counter goes up at the
+    // settled point after a tick's physics (tickSettledWork), so a death in
+    // tick T's step reads T, one less than afterTick's label for it (T + 1),
+    // and one GD deals between two ticks reads T + 1, exactly that label.
+    // Either way the mark is never later than the death's own label, so a
+    // restore that clears it has really gone back before the death; with
+    // from + 1 alone, a run-on death at from + 3 kept a restore to from + 2,
+    // which plays that death's tick again, from clearing it.
+    const uint64_t at = std::max(from + 1, m_wouldDieFirstTick);
     if (at >= m_deathKept) return;
     m_deathKept = at;
     log("tick %llu: the ticks run on past %llu with no bookkeeping died, and there was nothing to go back to; "
@@ -6047,6 +6110,14 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
         else m_forkPrevX = -1.0e30f;
     }
 
+    // GucciBot (2026-11-18, pfharden lane): once a run, where GD's end
+    // animation began and whether player 1 was locked for it (what the hit
+    // check in onWouldDie relies on).
+    if (!m_endSeen && pl->m_levelEndAnimationStarted) {
+        m_endSeen = true;
+        log("tick %llu: GD's end animation has started (player 1 %s)", (unsigned long long)now,
+            pl->m_player1->m_isLocked ? "locked" : "NOT locked");
+    }
     if (m_completed) return false;  // handled by tick()
 
     if (died) {
