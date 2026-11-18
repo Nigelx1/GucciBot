@@ -188,6 +188,7 @@ namespace gucci::mcp {
                         e["release_window"] = (double)n.releaseWindow;
                         e["tier"] = (int64_t)n.pressTier;
                         e["tail"] = (int64_t)n.tail;
+                        e["release_tier"] = (int64_t)n.releaseTier;
                         e["early"] = (int64_t)n.pressAllow.early;
                         e["late"] = (int64_t)n.pressAllow.late;
                         e["pressed"] = r.pressed;
