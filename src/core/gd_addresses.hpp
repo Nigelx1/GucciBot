@@ -171,8 +171,8 @@ namespace gucci::gdaddr {
         //    them with ordinary hooks (update, getModifiedDelta,
         //    processCommands) and ONE byte-checked patch at 0x3408f0 that
         //    makes GD's update take its step count from the bot. The 2.2091
-        //    build keeps GucciBot's off-Windows engine (240 TPS) until that
-        //    design is ported (STATUS.md, the next job).
+        //    build keeps GucciBot's off-Windows engine (240, or 162 TPS and
+        //    up) until that design is ported (STATUS.md, the next job).
         //  - the y-velocity rounding midhook in PlayerObject::updateJump
         //    (2.2081: 0x38c315, resume 0x38c34d; 2.2091 function 0x4e9b80).
         //    Silicate 1.1.2 has no such midhook, so High TPS Precision stays

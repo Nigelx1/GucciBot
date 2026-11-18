@@ -229,10 +229,11 @@ One download covers Windows, macOS, iOS and Android (32 and 64-bit). Windows is 
 
 2.0 comes as two files. `nigelx1.guccibot2208.geode` is GucciBot 2.0 for GD 2.2081 with Geode 5, on every platform. `nigelx1.guccibot2209.geode` is a preview for **GD 2.2091 on Windows**, with Geode 6.0.0-alpha.2. Both are built from the same code. Keep only one GucciBot file in your mods folder.
 
+- **Tick rates:** 240 TPS and any rate from 162 TPS up record and replay to exactly the same end. A macro made under 162 TPS plays at 240 instead, with a notice, so it won't end the same way. *Checked in a test game at 162, 240, 360 and 480 TPS, and with a 60 TPS macro.*
 - **What works on 2.2091:** recording and playback, practice checkpoints, Calculate, the trainers, rendering, the macro converter, themes, hitboxes and hitborders, and keeping a held click through a restart.
 - **Macros carry over.** 13 macros made on GD 2.2081 ended the same way on 2.2091: the same completions, and the same deaths at the same spot. Exports from the 2.2091 file say 2.2091.
 - **Safe mode covers 2.209's new systems.** When the bot or a cheat was on, deaths stay out of GD's death tracker and its upload, and playtime and practice attempts don't count. GD's own speed setting and its Ignore Damage both count as cheats. *Checked in a test game.* A platformer visit with the bot or a cheat on saves no progress and sends no leaderboard time. *Built, but not tested in a game yet: our test copies only open main levels, so a platformer save never ran.*
-- **Not in the preview yet:** the Pathfinder (and its AI engine), custom TPS (it runs at 240 TPS only), High TPS precision, and macOS, Android and iOS on 2.2091. They're planned for 2.0.1. Geode 6 itself is still an alpha.
+- **Not in the preview yet:** the Pathfinder (and its AI engine), tick rates under 162 TPS, TPS changes inside a macro, High TPS precision, and macOS, Android and iOS on 2.2091. They're planned for 2.0.1. Geode 6 itself is still an alpha.
 - *Checked in a signed-out test copy of GD 2.2091, on main levels only. Not tested by players yet.*
 
 ### Credits

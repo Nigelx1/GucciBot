@@ -215,8 +215,9 @@ if(GB_GEODE6)
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/logo.png" "${GB_MOD_ROOT}/logo.png" COPYONLY)
     # Geode shows about.md on the mod's page, so the 2.2091 file's copy says
     # which GD and Geode it's for and what this preview leaves out (no
-    # Pathfinder, 240 TPS only). The two lines that name 2.2081 are swapped
-    # word for word. If the requirements line was reworded, it's still found by
+    # Pathfinder; 240 and 162 TPS and up work, but not under 162, a TPS change
+    # inside a macro or High TPS precision). The two lines that name 2.2081 are
+    # swapped word for word. If the requirements line was reworded, it's still found by
     # its start ("- Geometry Dash 2.2081") and replaced whole. Any other
     # 2.2081 left after that becomes the 2.2091 version number, with a CMake
     # warning naming the line: a release-day edit to about.md must not stop
@@ -225,18 +226,18 @@ if(GB_GEODE6)
     file(READ "${CMAKE_CURRENT_SOURCE_DIR}/about.md" GB_ABOUT)
     string(REPLACE
         "- Geometry Dash 2.2081 on Windows, macOS, iOS or Android, Geode 5.10.1+ (macOS, iOS and Android are experimental: see Platforms)"
-        "- Geometry Dash ${GEODE_GD_VERSION} on Windows, with Geode ${GEODE_VERSION_FULL}. This file is a preview of GucciBot on GD ${GEODE_GD_VERSION}: everything except the Pathfinder, and the game runs at 240 TPS (no custom TPS yet). Those, and macOS and Android on GD ${GEODE_GD_VERSION}, come in 2.0.1. For another GD version or platform, use the GucciBot file made for it.\n- Keep only one GucciBot file in your mods folder."
+        "- Geometry Dash ${GEODE_GD_VERSION} on Windows, with Geode ${GEODE_VERSION_FULL}. This file is a preview of GucciBot on GD ${GEODE_GD_VERSION}: everything except the Pathfinder. 240 TPS and any tick rate from 162 TPS up work; tick rates under 162 TPS, a TPS change inside a macro and High TPS precision don't yet. Those, and macOS and Android on GD ${GEODE_GD_VERSION}, come in 2.0.1. For another GD version or platform, use the GucciBot file made for it.\n- Keep only one GucciBot file in your mods folder."
         GB_ABOUT "${GB_ABOUT}")
     string(REPLACE
         "- Silicate's full physics engine — exact GD 2.2081 offsets, proper TPS bypass,"
-        "- Silicate's physics engine — GD ${GEODE_GD_VERSION} offsets from Silicate 1.1.2, at 240 TPS in this preview,"
+        "- Silicate's physics engine — GD ${GEODE_GD_VERSION} offsets from Silicate 1.1.2, at 240 TPS or 162 TPS and up in this preview,"
         GB_ABOUT "${GB_ABOUT}")
     # The requirements line, reworded after the version: matched by its start.
     # (A newline goes in front so the first line can match too; it comes off
     # again below.)
     set(GB_ABOUT "\n${GB_ABOUT}")
     string(REGEX REPLACE "\n- Geometry Dash 2[.]2081[^\n]*"
-        "\n- Geometry Dash ${GEODE_GD_VERSION} on Windows, with Geode ${GEODE_VERSION_FULL}. This file is a preview of GucciBot on GD ${GEODE_GD_VERSION}: everything except the Pathfinder, and the game runs at 240 TPS (no custom TPS yet). Those, and macOS and Android on GD ${GEODE_GD_VERSION}, come in 2.0.1. For another GD version or platform, use the GucciBot file made for it.\n- Keep only one GucciBot file in your mods folder."
+        "\n- Geometry Dash ${GEODE_GD_VERSION} on Windows, with Geode ${GEODE_VERSION_FULL}. This file is a preview of GucciBot on GD ${GEODE_GD_VERSION}: everything except the Pathfinder. 240 TPS and any tick rate from 162 TPS up work; tick rates under 162 TPS, a TPS change inside a macro and High TPS precision don't yet. Those, and macOS and Android on GD ${GEODE_GD_VERSION}, come in 2.0.1. For another GD version or platform, use the GucciBot file made for it.\n- Keep only one GucciBot file in your mods folder."
         GB_ABOUT "${GB_ABOUT}")
     string(SUBSTRING "${GB_ABOUT}" 1 -1 GB_ABOUT)
     # Anything else that still names 2.2081: the version number is swapped and
