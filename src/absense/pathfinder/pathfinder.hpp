@@ -796,6 +796,7 @@ public:
         int mode = -1, mode2 = -1;     // the kinds of player it ends in (mode2: -1 without a second player)
     };
     AheadWait m_aheadWait;
+    void noteRunOnDeath(uint64_t from);  // pffix: a death in ticks run on with no bookkeeping
     void goLive();
     void pauseLive();
     void beginAhead();

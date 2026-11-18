@@ -606,13 +606,14 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
 
     // GucciBot (2026-11-17, pffix lane): the end reached on a path that went
     // through a death the game was kept from dealing is not a solution: its
-    // macro dies there when played. Said plainly, and nothing is saved.
+    // macro dies there when played. Said plainly (short: the queue's note
+    // keeps 157 characters of it, the clicks-a-second part included), and it
+    // is not saved as a solution; a queue still keeps it as its "furthest".
     const bool throughDeath = m_completed && m_deathKept != UINT64_MAX;
     const bool done = m_completed && !throughDeath;
     std::string why = reason;
     if (throughDeath) {
-        why = fmt::format("reached the end, but its path goes through a death at tick {} that the search never went "
-                          "back before, so a macro of it would die there: not a solution, nothing saved",
+        why = fmt::format("reached the end through a death at tick {} it never went back before: not a solution",
                           m_deathKept);
     }
     if (currentTick() >= m_stats.bestTick) rememberBest();
@@ -1212,13 +1213,17 @@ void AbsensePathfinder::tick() {
                     // ran on): back to where it was meant to stop.
                     const uint64_t at = m_pauseAt;
                     m_pauseAt = UINT64_MAX;
-                    if (currentTick() > at && rewindTo(at)) goto done;
+                    if (currentTick() > at) {
+                        if (rewindTo(at)) goto done;
+                        noteRunOnDeath(at);
+                    }
                 }
                 if (m_ahead.active && !m_live && currentTick() > m_ahead.tick) {
                     // The plan ran out mid-frame and the game ran on a tick
                     // or two past where the decision is about: back there
                     // first, so the plan it makes starts where it should.
                     if (rewindTo(m_ahead.tick)) goto done;  // the restore runs in the frozen tick
+                    noteRunOnDeath(m_ahead.tick);
                     cancelAhead();  // no stored frame to go back to: decide from where it is
                 }
                 decide();
@@ -5174,6 +5179,23 @@ void AbsensePathfinder::decide() {
     if (SLSettings::get()->pathfinder.smooth && !m_live && m_planIndex < m_plan.size()) goLive();
 }
 
+// GucciBot (2026-11-18, pffix lane): the frame's ticks ran on past `from`
+// with no bookkeeping of their own, and there was no stored frame to go back
+// to, so the search decides from where the game is. A death the game was kept
+// from dealing in those ticks (onWouldDie still has it: nothing reset it) is
+// on the path now, like one afterTick finds and nothing goes back before.
+void AbsensePathfinder::noteRunOnDeath(uint64_t from) {
+    if (!m_wouldDie) return;
+    // The earliest tick it can have been (the first tick run on): going back
+    // to before it is what clears it, so earlier is the safe side.
+    const uint64_t at = from + 1;
+    if (at >= m_deathKept) return;
+    m_deathKept = at;
+    log("tick %llu: the ticks run on past %llu with no bookkeeping died, and there was nothing to go back to; "
+        "deciding from here",
+        (unsigned long long)at, (unsigned long long)from);
+}
+
 void AbsensePathfinder::goLive() {
     if (m_live) return;
     m_live = true;
@@ -6719,10 +6741,12 @@ void AbsensePathfinder::finishRestore() {
             m_wouldDie = false;
             stepGame();
             if (m_wouldDie) {
-                // The game did not agree with itself; decide from here. The
-                // death it was kept from dealing is on the path now (pffix).
-                m_deathKept = std::min(m_deathKept, currentTick());
-                log("going back: the same inputs died at tick %llu this time; deciding from there",
+                // The game did not agree with itself; decide from here. Not a
+                // kept death (pffix): the first pass, the one a macro plays
+                // from the start, lived through this tick with these inputs;
+                // only the restored game died.
+                log("going back: the same inputs died at tick %llu this time (the first pass lived); deciding "
+                    "from there",
                     (unsigned long long)currentTick());
                 break;
             }
