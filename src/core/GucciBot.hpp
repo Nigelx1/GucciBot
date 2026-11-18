@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-h (Intentional death is disarmed whenever a recording ends, also after a Calculate trip back that stops short)"
+    "2026-11-17-i (Safe mode: a respawn at a checkpoint keeps the attempt's cheat mark)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

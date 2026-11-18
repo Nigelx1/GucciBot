@@ -110,6 +110,10 @@ namespace gucci::safemode {
         // A cheat was on at some point in this attempt (reset with the level).
         bool g_tainted = false;
 
+        // The reset under way goes back to a checkpoint, not to the start
+        // (noteCheckpointRespawn): the same attempt.
+        bool g_checkpointRespawn = false;
+
         // Forced by the gucci_force_safe_mode tool: until the game closes.
         bool g_forcedByTool = false;
 
@@ -134,6 +138,10 @@ namespace gucci::safemode {
 
     bool tainted() {
         return g_tainted;
+    }
+
+    void noteCheckpointRespawn() {
+        g_checkpointRespawn = true;
     }
 
     void forceForSession() {
@@ -403,7 +411,19 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
 
     void resetLevel() {
         PlayLayer::resetLevel();
-        safemode::g_tainted = safemode::cheatingNow(); // a new attempt
+        // A respawn at a checkpoint (practice or platformer, or a step back)
+        // carries on the same attempt: what was cheated before it still
+        // counts, so it only adds to the taint. Only a reset to the start
+        // is a new attempt that starts clean. Before (2026-11-17), every
+        // reset set it to what was on right now: record to a platformer
+        // checkpoint with intentional death armed, stop recording, die, and
+        // the run from the checkpoint counted as legit.
+        bool const sameAttempt = safemode::g_checkpointRespawn;
+        safemode::g_checkpointRespawn = false;
+        if (sameAttempt)
+            safemode::g_tainted = safemode::g_tainted || safemode::cheatingNow();
+        else
+            safemode::g_tainted = safemode::cheatingNow(); // a new attempt
     }
 
     void postUpdate(float dt) {

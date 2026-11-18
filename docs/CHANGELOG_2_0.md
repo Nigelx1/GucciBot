@@ -207,6 +207,7 @@ GucciBot's safe mode follows what the Demonlist allows, strictly. The aim is sim
 - **Closing the game with Assistant Access on no longer ends in a crash.** On GD 2.2081 every exit with it on aborted at the very end (Windows logged it as a crash; Geode wrote no crash log). *Checked in a test game: two closes, no crash event.*
 - **A macro's restart after a completion takes GD's end screen down** even without the Node IDs mod. Without it, the end screen stayed over the level when a macro restarted. *Checked in a test game, without Node IDs: the end screen went away and the next attempt ran.*
 - **Intentional death no longer stays armed after a recording ends.** Armed during a recording, the key stayed on after you stopped (or switched straight to playback, or Calculate's trip back stopped short), so the next death went back to a platformer checkpoint the recording had reached, or the first playback attempt played its inputs at the wrong frames. *Checked in a test game.*
+- **Safe mode: a respawn at a checkpoint keeps the attempt's cheat mark.** A cheat turned on and off before a checkpoint was forgotten when you respawned there, and the attempt looked clean. Only a restart from the start clears it now. *Checked in a test game.*
 
 ### Platforms
 
