@@ -366,8 +366,12 @@ namespace gucci {
     std::string gdVersionWarning(std::string const& madeOn, std::string const& current) {
         if (madeOn.empty() || current.empty() || madeOn == current)
             return {};
-        return "This macro was made on GD " + madeOn + "; you're on GD " + current +
-               ". It may not play the same.";
+        // A notice, never a block. The 11-17 cross-version test (12 main levels,
+        // every game mode, dual, swift clicks, both directions) played every macro
+        // the same on GD 2.2081 and 2.2091; the only difference was a ball on a slope
+        // in Dash, up to 0.00007 units for 157 ticks, so slopes get the caveat.
+        return "This macro was made on GD " + madeOn + ". It should play the same on GD " + current +
+               "; double-check frame-perfect slope parts.";
     }
 
     std::vector<uint8_t> GBR6File::serialize() const {
