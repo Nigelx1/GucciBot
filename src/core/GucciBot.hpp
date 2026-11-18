@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-e (Assistant Access test tools: walk in a platformer, open The Tower, read the checkpoints)"
+    "2026-11-17-f (Assistant Access: the game no longer aborts on exit with it on)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
