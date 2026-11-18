@@ -143,6 +143,7 @@ GucciBot's safe mode follows what the Demonlist allows, strictly. The aim is sim
 - **BrrrBot's snow** falls behind the menu while Settings > Look > Animations is on. Custom themes get a Snow switch. *Checked in a test game.*
 - Turning Animations off also stops the accent's pulse. The JMF Trainer page no longer shows the theme's name, subtitle, tag or quote. The sidebar's logo mark is bigger, easier to see and takes the theme's color. JupiterBot's SAFE chip is green.
 - The menu fits in a short game window.
+- **Menu opacity** (Settings > Look): how see-through the menu is, from 40% to 100% (the default, as before). It fades the window, the cards and the theme's backdrop picture, in the full menu and Compact Mode. Text and controls stay solid, and the boxes over the level stay as they are. *Checked in a test game on JupiterBot, SolarBot and RondoBot, the JMF Trainer page, the frame editor and Compact Mode.*
 
 ### Fixes
 

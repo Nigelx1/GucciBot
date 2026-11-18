@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-o (Disable bot puts the game's audio pitch back to normal)"
+    "2026-11-17-p (Settings, Look: Menu opacity, how see-through the menu is)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
