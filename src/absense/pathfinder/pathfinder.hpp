@@ -948,6 +948,8 @@ public:
     // not called complete (stop). UINT64_MAX: none.
     uint64_t m_deathKept = UINT64_MAX;
     int m_liveGuardLines = 0;  // pfharden: tick()'s guard at done: (the game left live outside Committing)
+    int m_lockedDeathLines = 0;  // pfharden: hits onWouldDie let pass while player 1 is locked (logged)
+    bool m_endSeen = false;      // pfharden: GD's end animation seen this run (logged once)
 
     std::deque<Anchor> m_anchors;  // oldest first; the start state is kept apart
     Anchor m_startAnchor;

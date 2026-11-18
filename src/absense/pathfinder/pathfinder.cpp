@@ -530,6 +530,8 @@ bool AbsensePathfinder::start() {
     m_completed = false;
     m_deathKept = UINT64_MAX;
     m_liveGuardLines = 0;
+    m_lockedDeathLines = 0;
+    m_endSeen = false;
     m_starts.clear();
     forgetRunMemo();
     m_probe = Probe{};
@@ -886,6 +888,24 @@ bool AbsensePathfinder::onWouldDie(PlayerObject* player, GameObject* object) {
     // Either player dying while the search drives the game is a dead end;
     // the death itself is skipped and the search goes back instead.
     if (!isRunning()) return false;
+    // GucciBot (2026-11-18, pfharden lane): a death GD itself would not deal
+    // is not a dead end. GD's destroyPlayer returns first while player 1 is
+    // locked (read from the game, see settleAnticheatSpike), and GD locks
+    // player 1 for its end-of-level animation, which drags the sprite on
+    // through whatever is in the way (Calculate's VSC capture "died" 215
+    // frames past the end, build -ef). This hook ran before GD's check, so
+    // such a hit came to afterTick as a real death, a few hundred ticks
+    // before levelComplete sets m_completed: the search backed away from a
+    // level it had already beaten. Swallowed as GD would, and not counted.
+    // Only where both hold (the end animation has started AND player 1 is
+    // locked): a hit with just one of them still counts, the safe side.
+    if (auto* pl = PlayLayer::get();
+        pl && pl->m_levelEndAnimationStarted && pl->m_player1 && pl->m_player1->m_isLocked) {
+        if (m_lockedDeathLines++ < 10)
+            log("tick %llu: player 1 is locked for GD's end animation: a hit GD does not deal, not a death",
+                (unsigned long long)currentTick());
+        return true;
+    }
     const bool firstHit = !m_wouldDie;
     m_wouldDie = true;
     m_wouldDieTick = currentTick();
@@ -6040,6 +6060,14 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
         else m_forkPrevX = -1.0e30f;
     }
 
+    // GucciBot (2026-11-18, pfharden lane): once a run, where GD's end
+    // animation began and whether player 1 was locked for it (what the hit
+    // check in onWouldDie relies on).
+    if (!m_endSeen && pl->m_levelEndAnimationStarted) {
+        m_endSeen = true;
+        log("tick %llu: GD's end animation has started (player 1 %s)", (unsigned long long)now,
+            pl->m_player1->m_isLocked ? "locked" : "NOT locked");
+    }
     if (m_completed) return false;  // handled by tick()
 
     if (died) {
