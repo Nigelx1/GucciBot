@@ -5003,6 +5003,36 @@ void FrameWindowAnalyzer::buildResumeMask() {
           m_resumeNumber, count, m_samples.size(), m_keptResults.size(), regrouped);
 }
 
+bool FrameWindowAnalyzer::probeTimeLeft(double& seconds, bool& capped) const {
+    seconds = 0.0;
+    capped = false;
+    if (!m_running || m_stage != "probe" || m_index >= m_samples.size()) return false;
+    size_t done = 0, left = 0;
+    for (size_t i = m_probeStartIndex; i < m_samples.size(); i++) {
+        if (!this->inProbeRange(i)) continue;
+        if (i < m_index)
+            done++;
+        else
+            left++;
+    }
+    // Timed from the end of the stage's first input: that one carries the
+    // stage's own start (on KOCMOC it took 15 s where the next took 2 to 3,
+    // and a guess that counted it came out 3 to 5 times too long).
+    if (done < 2 || m_probeFirstDoneAt == Clock::time_point{}) return false;
+    auto const now = Clock::now();
+    double const spent = std::chrono::duration<double>(now - m_probeFirstDoneAt).count();
+    seconds = spent / static_cast<double>(done - 1) * static_cast<double>(left);
+    if (int const cap = SLSettings::get()->frameWindow.timeCapMinutes; cap > 0) {
+        double const toCap =
+            cap * 60.0 - std::chrono::duration<double>(now - m_runStart).count();
+        if (toCap < seconds) {
+            seconds = std::max(0.0, toCap);
+            capped = true;
+        }
+    }
+    return true;
+}
+
 size_t FrameWindowAnalyzer::probeTotal() const {
     if (!m_partial) return m_samples.size();
     size_t n = 0;
@@ -5109,6 +5139,10 @@ void FrameWindowAnalyzer::runSnapshot(std::vector<FrameWindowMark>& marks,
 }
 
 void FrameWindowAnalyzer::nextClick() {
+    // GucciBot (2026-11-18): when the probe stage's first input was done
+    // (probeTimeLeft).
+    if (m_stage == "probe" && m_probeFirstDoneAt == Clock::time_point{})
+        m_probeFirstDoneAt = Clock::now();
     m_index++;
     while (m_index < m_samples.size() && !this->inProbeRange(m_index))
         m_index++;
@@ -5488,7 +5522,8 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
         // GucciBot (2026-11-15): out of this run's inputs (a range or a
         // Continue measures only some), and Continue picks up from here.
         this->finish(fmt::format("Stopped at the {}-minute time cap with {} of {} inputs measured. Raise the "
-                                 "cap (Calculate page, Speed), or press Continue from where it stopped to "
+                                 "cap (Calculate page: Advanced, Show advanced settings, Speed), or press Continue from where it "
+                                 "stopped to "
                                  "measure the rest.",
                                  cap, m_measured, this->probeTotal()),
                      true);
@@ -5615,6 +5650,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                         return;
                     }
                     m_probeStartIndex = m_index;
+                    m_probeFirstDoneAt = {};
                     if (m_resume)
                         m_status = fmt::format("Probing (continued from click {})", m_resumeNumber);
 
