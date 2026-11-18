@@ -70,6 +70,23 @@ jobs:
           cli: v4.0.1
           target: Win64
 
+      # Only on a failed build. The Windows jobs sometimes stop in the
+      # bindings' codegen configure at "Could NOT find Boost": PEGTL's
+      # std::filesystem test compiles failed, and why is only in CMake's
+      # configure log, so this prints those compiles' output. rerun-flaky.yml
+      # reruns such a run.
+      - name: Show the codegen configure's failed test compiles
+        if: failure()
+        shell: bash
+        run: |
+          f=build/bindings/codegen-build/CMakeFiles/CMakeConfigureLog.yaml
+          if [ -f "$f" ]; then
+            echo "Failed test compiles in $f (each one's build output, then its exit code):"
+            grep -n -B40 'exitCode: [1-9]' "$f" | tail -n 300
+          else
+            echo "No $f: the build stopped before the codegen configure, or got past it."
+          fi
+
       # The package has to be complete and say what it's for before anyone
       # gets it: the binary, the seven DLLs, mod.json for Geode 6.0.0-alpha.2
       # and GD 2.2091 on Windows only, and an about.md that doesn't claim
