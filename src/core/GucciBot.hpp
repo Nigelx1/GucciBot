@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-q (Settings, Diagnostics: a Log frame increments switch)"
+    "2026-11-18-a (Ctrl+F from a real keyboard reaches the menu search on both GD versions, and comments say GD full restart is Ctrl+R)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
