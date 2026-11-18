@@ -528,6 +528,7 @@ bool AbsensePathfinder::start() {
     m_wouldDie = false;
     m_expectReset = false;
     m_completed = false;
+    m_deathKept = UINT64_MAX;
     m_starts.clear();
     forgetRunMemo();
     m_probe = Probe{};
@@ -603,7 +604,17 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     // (logged before the decision below is let go of, and in the run's total).
     endFreeze("a decision when the run stopped");
 
-    const bool done = m_completed;
+    // GucciBot (2026-11-17, pffix lane): the end reached on a path that went
+    // through a death the game was kept from dealing is not a solution: its
+    // macro dies there when played. Said plainly, and nothing is saved.
+    const bool throughDeath = m_completed && m_deathKept != UINT64_MAX;
+    const bool done = m_completed && !throughDeath;
+    std::string why = reason;
+    if (throughDeath) {
+        why = fmt::format("reached the end, but its path goes through a death at tick {} that the search never went "
+                          "back before, so a macro of it would die there: not a solution, nothing saved",
+                          m_deathKept);
+    }
     if (currentTick() >= m_stats.bestTick) rememberBest();
     m_live = false;
     m_livePending = false;
@@ -662,7 +673,7 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     releaseAnchors();
 
     m_stats.seconds = secondsSince(m_startedAt);
-    m_stats.message = reason;
+    m_stats.message = why;
     // Clicks a second on the path played (step 5), on the page too: whether the
     // run clicks like a person is something to see without opening the log.
     const ClickRate cps = clickRate(m_history, updater.getTps());
@@ -680,7 +691,7 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     log("stopped: %s (%llu ticks committed, %llu decisions, %llu simulations, %llu backtracks, best tick %llu, %.1fs; "
         "the game froze %llu times waiting for a decision, %.1f s in all; "
         "%d clicks in %.1f s of play: %.1f a second on average, %d in the busiest second, from tick %d)",
-        reason.c_str(), (unsigned long long)m_stats.committedTicks, (unsigned long long)m_stats.decisions,
+        why.c_str(), (unsigned long long)m_stats.committedTicks, (unsigned long long)m_stats.decisions,
         (unsigned long long)m_stats.simulations, (unsigned long long)m_stats.backtracks,
         (unsigned long long)m_stats.bestTick, m_stats.seconds, (unsigned long long)m_stats.freezes,
         m_stats.freezeSeconds, cps.clicks, cps.seconds, cpsAverage, cps.busiest, cps.busiestFrom);
@@ -5971,6 +5982,7 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
         if (missHasSample) missExpected = m_planTrace[m_planIndex - 1];
         const size_t missTraceSize = m_planTrace.size();
         m_stats.deadEnds++;
+        m_deathKept = std::min(m_deathKept, now);  // until a restore lands before it
         pauseLive();
         cancelAhead();
         log("died at tick %llu while committing (%s)", (unsigned long long)now, m_stats.lastDecision.c_str());
@@ -6696,13 +6708,22 @@ void AbsensePathfinder::finishRestore() {
             if (idx < m_history2.size() && separateNow()) applyInput(m_history2[idx], true);
             m_wouldDie = false;
             stepGame();
-            if (m_wouldDie) break;  // the game did not agree with itself; decide from here
+            if (m_wouldDie) {
+                // The game did not agree with itself; decide from here. The
+                // death it was kept from dealing is on the path now (pffix).
+                m_deathKept = std::min(m_deathKept, currentTick());
+                log("going back: the same inputs died at tick %llu this time; deciding from there",
+                    (unsigned long long)currentTick());
+                break;
+            }
             keepStart();
         }
         m_wouldDie = false;
         tick = currentTick();
     }
     m_restepping = false;
+    // Back before the kept death: the tick that dealt it runs again (pffix).
+    if (tick < m_deathKept) m_deathKept = UINT64_MAX;
     const size_t idx = (size_t)(tick > m_stats.startTick ? tick - m_stats.startTick : 0);
     if (m_history.size() > idx) m_history.resize(idx);
     if (m_history2.size() > idx) m_history2.resize(idx);
