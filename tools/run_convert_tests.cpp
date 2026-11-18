@@ -11,6 +11,7 @@
 #include "tools/macro_convert.hpp"
 
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <map>
@@ -105,6 +106,74 @@ static void roundTrips() {
     CHECK(back.levelName == "Test Level", "GBR6: level name lost");
 }
 
+// yBot counts frames one lower than GucciBot (Nigel's real macros, 2026-11-18):
+// its frame 0 is GucciBot's 1, on the way in and on the way out.
+static void ybotFrames() {
+    std::printf("yBot frames\n");
+    auto const* f = find("ybot2");
+    CHECK(f && f->frameShift == 1, "ybot2: frameShift should be 1");
+    if (!f)
+        return;
+    // A file the way yBot writes one: version 0, 36 bytes of meta, no blobs,
+    // then delta<<4 | flags (bit 0 player one, bit 1 down, bits 2-3 button).
+    std::vector<uint8_t> b = {'y', 'b', 'o', 't', 0, 0, 0, 0, 36, 0, 0, 0, 0, 0, 0, 0};
+    b.resize(16 + 36, 0);
+    float const fps = 240.f;
+    std::memcpy(b.data() + 16 + 24, &fps, 4);
+    auto act = [&](unsigned delta, bool down, unsigned button) {
+        uint64_t v = (uint64_t(delta) << 4) | 1u | (down ? 2u : 0u) | (button << 2);
+        do {
+            uint8_t c = v & 0x7f;
+            v >>= 7;
+            b.push_back(c | (v ? 0x80 : 0));
+        } while (v);
+    };
+    act(0, true, 3);    // Right pressed on yBot's frame 0
+    act(0, true, 1);    // a jump on frame 0
+    b.push_back(0xA0);  // 10<<4, button 0: an FPS change on frame 10
+    b.push_back(0x01);
+    float const fps2 = 360.f;
+    b.insert(b.end(), (uint8_t const*)&fps2, (uint8_t const*)&fps2 + 4);
+    act(0, false, 1);  // let go on frame 10
+    act(5, true, 1);   // frame 15
+    auto const r = read(b, "macro.ybot");
+    CHECK(r.ok() && r.format->id == "ybot2", "ybot2: hand-made file didn't read as yBot");
+    if (!r.ok())
+        return;
+    std::multimap<int64_t, Key> want;
+    for (Input in : {Input{1, 3, true, false}, Input{1, 1, true, false}, Input{11, 1, false, false},
+                     Input{16, 1, true, false}})
+        want.emplace(in.frame, Key{in.frame, in.button, in.down, in.player2});
+    CHECK(keyed(r.macro, false) == want, "ybot2: frames not one up (first %lld)",
+          r.macro.inputs.empty() ? -1LL : (long long)r.macro.inputs[0].frame);
+    CHECK(r.macro.tps == 240.0 && r.macro.tpsChanges.size() == 1 && r.macro.tpsChanges[0].frame == 11 &&
+              r.macro.tpsChanges[0].tps == 360.0,
+          "ybot2: TPS change not shifted with the inputs");
+
+    // Back out: GucciBot's frames one down, so the same file comes back.
+    auto const w = write(r.macro, *f);
+    CHECK(w.error.empty(), "ybot2: write failed");
+    std::vector<uint8_t> const tailIn(b.begin() + 52, b.end()), tailOut(w.bytes.begin() + 52, w.bytes.end());
+    CHECK(tailIn == tailOut, "ybot2: actions written differ from yBot's own (%zu vs %zu bytes)", tailOut.size(),
+          tailIn.size());
+
+    // A GucciBot input on frame 0 has no yBot frame: it's left out with a
+    // note, never written as a negative or wrapped frame; a TPS change on
+    // GucciBot's frame 1 comes back on frame 1.
+    Macro m;
+    m.tps = 240.0;
+    m.inputs = {Input{0, 1, true, false}, Input{2, 1, false, false}, Input{7, 1, true, false}};
+    m.tpsChanges = {{1, 120.0}};
+    auto const w2 = write(m, *f);
+    CHECK(!w2.notes.empty(), "ybot2: frame-0 input dropped without a note");
+    auto const r2 = read(w2.bytes, "macro.ybot");
+    CHECK(r2.ok() && r2.macro.inputs.size() == 2 && r2.macro.inputs[0].frame == 2 && r2.macro.inputs[1].frame == 7,
+          "ybot2: frame-0 export came back wrong (%zu inputs)", r2.macro.inputs.size());
+    CHECK(r2.ok() && r2.macro.tps == 240.0 && r2.macro.tpsChanges.size() == 1 && r2.macro.tpsChanges[0].frame == 1 &&
+              r2.macro.tpsChanges[0].tps == 120.0,
+          "ybot2: a TPS change on frame 1 didn't come back on frame 1");
+}
+
 static std::vector<uint8_t> slurp(std::string const& path) {
     std::ifstream f(path, std::ios::binary);
     return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
@@ -162,6 +231,7 @@ static void realFile(std::string arg) {
 
 int main(int argc, char** argv) {
     roundTrips();
+    ybotFrames();
     if (argc > 1) {
         std::printf("Real macros\n");
         for (int k = 1; k < argc; k++)

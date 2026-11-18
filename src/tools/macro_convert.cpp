@@ -1569,6 +1569,12 @@ namespace gucci::convert {
         // meta (FPS as f32 at 24), the blobs, then varints of delta<<4 | flags,
         // flags bit 0 being player ONE. v1 shares the magic: f32 fps, i32
         // count, then (u32 frame, u32 state) records.
+        //
+        // yBot counts frames one lower than GucciBot, as Silicate does (the
+        // table's frameShift 1): Nigel's real yBot macros played on their
+        // levels prove it (2026-11-18: Bloodbath, Slaughterhouse and Stalemate
+        // die as saved and complete one frame later). v1 has no real file to
+        // check against; it is shifted the same way as v2, unproven.
 
         bool readYbot2(Bytes const& b, Macro& m, std::string& err) {
             Reader r(b, 8);
@@ -1605,14 +1611,12 @@ namespace gucci::convert {
                 m.inputs.push_back(mk(frame, flags & 2, (flags & 1) == 0, uint8_t(button)));
             }
             m.bot = "yBot";
-            for (auto it = m.tpsChanges.begin(); it != m.tpsChanges.end();) {
-                if (it->frame == 0) {
-                    m.tps = it->tps;
-                    it = m.tpsChanges.erase(it);
-                } else {
-                    ++it;
-                }
-            }
+            // A change on yBot's frame 0 is kept as a change: read() shifts it
+            // onto GucciBot's frame 1 with the inputs (yBot's frame 0 is
+            // GucciBot's 1), and only a change that lands on or before
+            // GucciBot's frame 0 becomes the starting rate there. Turning it
+            // into the starting rate here, before the shift, made a change
+            // GucciBot recorded on frame 1 come back as the starting rate.
             return true;
         }
 
@@ -2361,8 +2365,8 @@ namespace gucci::convert {
                 {{"scbf1", "Silicate CBF (.scbf1)", ".scbf1", true, false, 1, false}, readScbf, writeScbf},
                 {{"tcm", "TcBot (.tcm)", ".tcm", true, false, 0, true}, readTcm, writeTcm},
                 {{"ttr3", "ToastyReplay (.ttr3)", ".ttr3", true, false, 0, false}, readTtr3, writeTtr3},
-                {{"ybot2", "yBot (.ybot)", ".ybot", true, false, 0, false}, readYbot2, writeYbot2},
-                {{"ybot1", "yBot 1 (.ybot, older)", ".ybot", false, true, 0, false}, readYbot1, nullptr},
+                {{"ybot2", "yBot (.ybot)", ".ybot", true, false, 1, true}, readYbot2, writeYbot2},
+                {{"ybot1", "yBot 1 (.ybot, older)", ".ybot", false, true, 1, false}, readYbot1, nullptr},
                 {{"xdbot", "xdBot (.xd)", ".xd", true, true, 0, false}, readXdBot, writeXdBot},
                 {{"mhrbin", "Mega Hack Replay (.mhr)", ".mhr", true, true, 0, false}, readMhrBin, writeMhrBin},
                 {{"mhrjson", "Mega Hack Replay (JSON)", ".mhr.json", true, true, 0, false}, readMhrJson, writeMhrJson},
