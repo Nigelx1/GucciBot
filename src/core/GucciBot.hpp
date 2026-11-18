@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-i (Macro converter: yBot macros line up with GucciBot's frames (they played one frame early))"
+    "2026-11-18-j (Renders stop at the level end in Off and Record mode with a macro loaded)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
