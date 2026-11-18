@@ -788,8 +788,10 @@ namespace gucci::ui::pages {
             }
 
             // The bars.
-            ImU32 const colClick = u32(mix(pal.accent, pal.surface, 0.35f), 0.95f);
-            ImU32 const colClickP2 = u32(mix(mix(pal.accent, pal.ink, 0.35f), pal.surface, 0.35f), 0.95f);
+            // (The card colour solid: Menu opacity fades the card, not the bars.)
+            ImVec4 const card = withAlpha(pal.surface, 1.f);
+            ImU32 const colClick = u32(mix(pal.accent, card, 0.35f), 0.95f);
+            ImU32 const colClickP2 = u32(mix(mix(pal.accent, pal.ink, 0.35f), card, 0.35f), 0.95f);
             ImU32 const colLonePress = u32(pal.warn, 0.75f);
             ImU32 const colLoneRelease = u32(pal.muted, 0.9f);
             ImU32 const colProblem = u32(pal.bad, 0.95f);
