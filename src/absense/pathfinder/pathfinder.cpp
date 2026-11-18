@@ -1222,8 +1222,19 @@ void AbsensePathfinder::tick() {
                         // out in liveInput, so it is a freeze too (it was not
                         // counted). Not when the last tick's bookkeeping, run
                         // by pauseLive, has just found a death or a drift.
-                        if (m_phase == Phase::Committing && !m_completed) beginFreeze();
-                        m_phase = Phase::Deciding;
+                        // GucciBot (2026-11-17, pffix lane): nor is the phase
+                        // that bookkeeping set overwritten. A death on the
+                        // plan's last tick (a plan played into the death "to
+                        // see what the game says" ends exactly there) set
+                        // Backtracking, and this put Deciding over it: the
+                        // search decided on from the tick after a death the
+                        // game had been kept from dealing, and the saved macro
+                        // died there when played (Dry Out, 49.65%, a "100%
+                        // level complete" run).
+                        if (m_phase == Phase::Committing) {
+                            if (!m_completed) beginFreeze();
+                            m_phase = Phase::Deciding;
+                        }
                     }
                     break;
                 }
