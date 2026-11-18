@@ -464,7 +464,7 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         // (Red: a cheat with nothing keeping the run from counting.)
         if (auto* red = m_fields->red)
             red->setVisible(cheated && !safemode::autoSafeMode() && !GucciEngine::get()->protectedMode &&
-                            !safemode::forced() && !safemode::dotHidden());
+                            !safemode::forced() && !safemode::queueHold() && !safemode::dotHidden());
         if (auto* green = m_fields->green)
             green->setVisible(!cheated && safemode::greenDot());
     }

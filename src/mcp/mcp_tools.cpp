@@ -403,8 +403,10 @@ namespace gucci::mcp {
                     sm["switch"] = gb->protectedMode;
                     sm["forced"] = safemode::forced();
                     sm["auto"] = safemode::autoSafeMode();
+                    sm["queue_hold"] = safemode::queueHold();
                     sm["bot_runs_count"] =
-                        !gb->protectedMode && !safemode::forced() && !safemode::autoSafeMode();
+                        !gb->protectedMode && !safemode::forced() && !safemode::autoSafeMode() &&
+                        !safemode::queueHold();
                     sm["cheating_now"] = safemode::cheatingNow();
                     sm["tainted"] = safemode::tainted();
                     sm["legit_only"] = legit::on();
