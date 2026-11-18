@@ -248,6 +248,14 @@ namespace gucci::ui::pages {
                               .c_str());
             if (!fw.running() && !gb->fwAcReport.empty())
                 kit::Note(gb->fwAcReport.c_str(), gb->fwAcOk ? Tone::Muted : Tone::Warn);
+            // GucciBot (2026-11-17): GD 2.2091's own Ignore Damage was on while
+            // these were counted (FrameWindowAnalyzer::gdIgnoreDamage; kept in
+            // the windows file). Share my windows marks its picture too.
+            if (fw.gdIgnoreDamage() && (fw.running() || !fw.results().empty()))
+                kit::Note("GD's Ignore Damage was on while some of these windows were counted, so deaths didn't "
+                          "count: they aren't legit. It only exists in editor levels. Turn it off in the pause "
+                          "menu, then press Calculate again.",
+                          Tone::Bad);
             // GucciBot (2026-11-15): windows from 2.0.0-beta.5 or older on a 1-player level, with
             // clicks under the player-2 flag (FrameWindowAnalyzer::olderP2Count).
             if (auto* pl = PlayLayer::get(); pl && !fw.running() && fw.olderP2Count() && !fw.results().empty() &&

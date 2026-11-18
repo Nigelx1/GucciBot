@@ -4268,6 +4268,15 @@ namespace gucci::ui {
                     ImGui::TextDisabled("%s", timing.c_str());
                     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.f);
                     ImGui::TextUnformatted(fw.status().c_str());
+                    // GD 2.2091's own Ignore Damage, seen during this run or
+                    // kept from the windows before it (a Continue's, a range
+                    // run's): "was on", since it may be off now
+                    // (FrameWindowAnalyzer::gdIgnoreDamage).
+                    if (fw.gdIgnoreDamage()) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, look().tone(Tone::Bad));
+                        ImGui::TextUnformatted("GD's Ignore Damage was on for some of these windows: they won't be legit.");
+                        ImGui::PopStyleColor();
+                    }
                     ImGui::PopTextWrapPos();
                     if (kit::Button("Cancel", Tone::Bad))
                         GucciEngine::get()->cancelAnalysis();
