@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-j (Renders stop at the level end in Off and Record mode with a macro loaded)"
+    "2026-11-18-n (Sub-tick clicks: the note off Windows says inputs, not clicks)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
