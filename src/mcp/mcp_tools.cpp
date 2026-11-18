@@ -3627,6 +3627,8 @@ namespace gucci::mcp {
         // Where GD has the song: FMOD's position, the level time, GD's own
         // time for a position (src/mcp/song_time_tool.cpp).
         registerSongTimeTools(server);
+        // The Trainer's lane (src/mcp/trainer_lane_tool.cpp).
+        registerTrainerLaneTools(server);
         // Pressing any cocos UI's buttons (src/mcp/ui_tap_tool.cpp).
         registerUiTapTools(server);
         registerUiPressTools(server);
