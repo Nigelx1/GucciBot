@@ -1861,7 +1861,8 @@ namespace gucci::ui {
                 // nobody has checked on a phone or a Mac yet: if they disagree,
                 // every click records on the tick's edge. The count below
                 // shows which.
-                kit::Note("Untested on " GB_HERE ". If the count below says every click landed on the edge, it "
+                // (The count is of inputs, releases too: 5 clicks are 10.)
+                kit::Note("Untested on " GB_HERE ". If the count below says every input landed on the edge, it "
                           "isn't working here yet.",
                           Tone::Warn);
 #endif
