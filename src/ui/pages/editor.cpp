@@ -144,6 +144,18 @@ namespace gucci::ui::pages {
             return nullptr;
         }
 
+        // A level being played right now: not paused, not in GucciBot's
+        // frame step, or a level editor playtest running.
+        bool levelRunning() {
+            if (GucciEngine::get()->updater.m_paused)
+                return false;
+            if (auto* pl = PlayLayer::get())
+                return !pl->m_isPaused;
+            if (auto* lel = LevelEditorLayer::get())
+                return lel->m_playbackMode == PlaybackMode::Playing;
+            return false;
+        }
+
         // ------------------------------------------------------------ the model
 
         void rebuild(State& s, Actions const& a) {
@@ -1229,7 +1241,7 @@ namespace gucci::ui::pages {
         // Keys while the page has focus and no field is being typed in.
         // From a real keyboard they come through editorCtrlKey and editorKey
         // (below) instead: imgui-cocos never hands ImGui a key going down
-        // while no box has the keyboard (and has no Escape at all), so these
+        // while no box has the keyboard (and on Geode 5 has no Escape), so these
         // checks only see keys put straight into ImGui, handed to it while it
         // wanted the keyboard, or Backspace, which it is also handed through
         // cocos's text input on every press. `gameKeys`: a key came from the
@@ -1342,7 +1354,7 @@ namespace gucci::ui::pages {
         return true;
     }
 
-    bool editorKey(int keyCode, bool down, bool repeat) {
+    bool editorKey(int keyCode, bool down, bool repeat, bool otherMods) {
         if (keyCode <= 0 || keyCode >= 256)
             return false;
         bool& held = g_held[keyCode];
@@ -1382,6 +1394,24 @@ namespace gucci::ui::pages {
         // nothing selected, Escape still pauses the level, an arrow still
         // moves a platformer player, and a hotkey on the key still fires.
         if (!listening || st().sel.empty())
+            return false;
+        // Not with Ctrl, Alt or the Windows/Command key held: those are the
+        // system's and GD's shortcuts (Win+Left snaps the window), not a
+        // nudge or a delete.
+        if (otherMods)
+            return false;
+        // While the macro can't be edited (recording, playing in this level,
+        // Calculate or the Pathfinder running), a move or a delete would
+        // only show why not, and the key would be lost to the game: a
+        // platformer player recording with the arrows. Escape still selects
+        // nothing.
+        if (k.what != EdKey::Deselect && lockReason())
+            return false;
+        // While a level runs (not paused), the arrows are the player's: a
+        // platformer player who clicked a bar and then walks with the arrows
+        // must not nudge the click instead. Paused (GD's pause, or
+        // GucciBot's frame step) they move the selection.
+        if (k.what == EdKey::Move && levelRunning())
             return false;
         held = true;
         takeGameKey(k);

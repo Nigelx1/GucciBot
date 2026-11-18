@@ -238,6 +238,7 @@ namespace gucci::mcp {
                 case 1: {  // a frame later, the key
                     auto m = matjson::Value::object();
                     m["imgui_ctrl"] = ImGui::GetIO().KeyCtrl;
+                    m["imgui_shift"] = ImGui::GetIO().KeyShift;
                     m["cocos_ctrl"] = CCKeyboardDispatcher::get()->getControlKeyPressed();
                     m["ctrl_held"] = ui::ctrlHeld();
                     j.out["while_held"] = m;
@@ -270,6 +271,8 @@ namespace gucci::mcp {
                     // With nothing held: ImGui's Ctrl (stuck down after a
                     // Ctrl release on Geode 6) and ui::ctrlHeld().
                     j.out["after_imgui_ctrl"] = ImGui::GetIO().KeyCtrl;
+                    j.out["after_imgui_shift"] = ImGui::GetIO().KeyShift;
+                    j.out["after_imgui_alt"] = ImGui::GetIO().KeyAlt;
                     j.out["after_ctrl_held"] = ui::ctrlHeld();
                     j.out["after_shift_held"] = ui::shiftHeld();
                     j.out["after"] = stateJson(j.code);

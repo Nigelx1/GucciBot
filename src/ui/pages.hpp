@@ -30,8 +30,11 @@ namespace gucci::ui::pages {
     // a frame, ten with Shift as ui::shiftHeld() reads it). Taken only while
     // the editor listens for keys (focused, no drag), the menu is open, no
     // text box is active, and something is selected; then that key's repeats
-    // (an arrow moves again) and its release are taken too.
-    bool editorKey(int keyCode, bool down, bool repeat);
+    // (an arrow moves again) and its release are taken too. Not taken with
+    // `otherMods` (Ctrl, Alt or the Windows/Command key held: a shortcut),
+    // a move or delete while the macro can't be edited (recording, playing
+    // in the level), or an arrow while a level runs unpaused (the player's).
+    bool editorKey(int keyCode, bool down, bool repeat, bool otherMods);
     // ... it took an Escape this frame (a back-click for the same press is
     // kept from the game too: ui/search.cpp).
     bool editorTookBack();

@@ -993,7 +993,13 @@ namespace gucci::ui::search {
         // lets go (ImGui's own Escape, if it came too, put its text back).
         if (fieldActive())
             g_clearPending = true;
-        touch::letGoOfKeyboard(true);
+        // Only the box lets go: the window keeps its focus (not
+        // touch::letGoOfKeyboard, which drops that too), so after Escape in
+        // one of the Frame Editor's own fields its keys (Ctrl+Z, the arrows,
+        // Delete: ui/pages.hpp) are still its own. A phone's keyboard still
+        // goes away, as nothing wants text input any more.
+        if (ImGuiContext* g = ImGui::GetCurrentContext(); g && g->ActiveId != 0)
+            ImGui::ClearActiveID();
         return true;
     }
 
@@ -1002,8 +1008,8 @@ namespace gucci::ui::search {
 // Back while a menu text box is being typed in: the box lets go, and the
 // game doesn't go back (pause a level, leave a menu). Escape reaches cocos as
 // a keyboard key, which imgui-cocos keeps from the game while ImGui wants the
-// keyboard but doesn't hand to ImGui either (its key map has no Escape), so
-// it did nothing in a box: taken here first. A phone's back button (and, on
+// keyboard but, on Geode 5, doesn't hand to ImGui either (its key map there
+// has no Escape), so it did nothing in a box: taken here first. A phone's back button (and, on
 // some platforms, Escape as well) is cocos's keypad back-click. iOS has no
 // back button, and its keyboard modify headers don't build.
 #if !defined(GEODE_IS_IOS)
@@ -1035,14 +1041,16 @@ class $modify(GBSearchKeypad, CCKeypadDispatcher) {
 };
 #endif
 
-// Left or Right while a menu text box is typed in, on GD 2.2081 (Geode 5,
-// Windows): Geode hands cocos's text input an "a" alongside the arrow (GD's
-// own text fields read the key from it and move their cursor), and
-// imgui-cocos 9764333 types that "a" into the ImGui box; its Geode 6 version
-// (934958c) leaves it out. Taken here first, only while ImGui has the
-// keyboard, when imgui-cocos hands it to no cocos field anyway; the arrow key
-// itself still reaches ImGui and moves the cursor.
-#if defined(GEODE_IS_WINDOWS) && GEODE_COMP_GD_VERSION < 22090
+// An arrow while a menu text box is typed in, on Windows: Geode hands
+// cocos's text input an "a" alongside the arrow (GD's own text fields read
+// the key from it and move their cursor). Geode 5 does it for Left and Right,
+// and imgui-cocos 9764333 types that "a" into the ImGui box. Geode 6
+// (6.0.0-alpha.2, input.cpp) does it for Up and Down too, and imgui-cocos
+// 934958c leaves out only Left and Right, so Up or Down typed the "a" there.
+// Taken here first, only while ImGui has the keyboard, when imgui-cocos hands
+// it to no cocos field anyway; the arrow key itself still reaches ImGui and
+// moves the cursor.
+#if defined(GEODE_IS_WINDOWS)
 #include <Geode/modify/CCIMEDispatcher.hpp>
 
 class $modify(GBMenuArrowText, CCIMEDispatcher) {
@@ -1051,7 +1059,7 @@ class $modify(GBMenuArrowText, CCIMEDispatcher) {
     }
 
     void dispatchInsertText(char const* text, int len, enumKeyCodes keys) {
-        if ((keys == KEY_Left || keys == KEY_Right) && ImGui::GetCurrentContext() &&
+        if ((keys == KEY_Left || keys == KEY_Right || keys == KEY_Up || keys == KEY_Down) && ImGui::GetCurrentContext() &&
             ImGui::GetIO().WantCaptureKeyboard)
             return;
         CCIMEDispatcher::dispatchInsertText(text, len, keys);

@@ -164,9 +164,24 @@ namespace {
 // says itself whether it's down; any other key carries Geode's own record of
 // the modifiers held (its KeyStateTracker), which puts the two right again.
 // Shift is read the same way (shiftDown), for the same two reasons.
+//
+// It also mends ImGui's own Ctrl, Shift and Alt (the post-landing review of
+// 900213e): on the release of the last Ctrl key held, the event's modifiers
+// lose Control before imgui-cocos reads them, and the same for Shift and Alt,
+// so ImGui's io.KeyCtrl/KeyShift/KeyAlt go up with the key. Before, a Ctrl+Z
+// or a plain Ctrl tap left io.KeyCtrl set until some other key went up: the
+// menu didn't scroll with the wheel and a click on a slider opened it as a
+// text box; after Shift the wheel scrolled sideways everywhere. Geode copies
+// back only the event's key and action, and hands the dispatcher its own
+// record of the modifiers, so only what later listeners read changes.
 namespace {
     bool g_ctrlLeft = false, g_ctrlRight = false;
     bool g_shiftLeft = false, g_shiftRight = false;  // the same for Shift (shiftDown)
+    bool g_altLeft = false, g_altRight = false;      // and Alt (only to mend ImGui's)
+
+    void drop(KeyboardModifier& mods, uint8_t bit) {
+        mods.value = static_cast<uint8_t>(mods.value & ~bit);
+    }
 
     // A Ctrl or Shift key says itself whether it's down; any other key
     // carries whether that modifier is held, which puts the two right again.
@@ -197,6 +212,13 @@ $execute {
                 case enumKeyCodes::KEY_RightShift:
                     g_shiftRight = down;
                     break;
+                case enumKeyCodes::KEY_LeftMenu:
+                case enumKeyCodes::KEY_Alt:
+                    g_altLeft = down;
+                    break;
+                case enumKeyCodes::KEY_RightMenu:
+                    g_altRight = down;
+                    break;
                 default:
                     break;
             }
@@ -204,10 +226,24 @@ $execute {
                                  d.key == enumKeyCodes::KEY_RightContol;
             bool const shiftKey = d.key == enumKeyCodes::KEY_LeftShift || d.key == enumKeyCodes::KEY_Shift ||
                                   d.key == enumKeyCodes::KEY_RightShift;
+            bool const altKey = d.key == enumKeyCodes::KEY_LeftMenu || d.key == enumKeyCodes::KEY_Alt ||
+                                d.key == enumKeyCodes::KEY_RightMenu;
             if (!ctrlKey)
                 track(g_ctrlLeft, g_ctrlRight, static_cast<bool>(d.modifiers & KeyboardModifier::Control));
             if (!shiftKey)
                 track(g_shiftLeft, g_shiftRight, static_cast<bool>(d.modifiers & KeyboardModifier::Shift));
+            if (!altKey)
+                track(g_altLeft, g_altRight, static_cast<bool>(d.modifiers & KeyboardModifier::Alt));
+            // The last one of a modifier let go: it isn't held on its own
+            // release (Geode says it is), for imgui-cocos after this.
+            if (!down) {
+                if (ctrlKey && !g_ctrlLeft && !g_ctrlRight)
+                    drop(d.modifiers, KeyboardModifier::Control);
+                if (shiftKey && !g_shiftLeft && !g_shiftRight)
+                    drop(d.modifiers, KeyboardModifier::Shift);
+                if (altKey && !g_altLeft && !g_altRight)
+                    drop(d.modifiers, KeyboardModifier::Alt);
+            }
             return ListenerResult::Propagate;
         },
         -1000)
@@ -286,7 +322,10 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         // only while something is selected for them to act on: with nothing
         // selected, Escape still pauses the level, the arrows still move a
         // platformer player, and a hotkey on the key still fires.
-        if (ui::pages::editorKey(k, down, repeat))
+        // Ctrl, Alt and the Windows/Command key as Geode set them for this
+        // key: with one held it's a shortcut, not the editor's.
+        bool const otherMods = ui::ctrlHeld() || this->getAltKeyPressed() || this->getCommandKeyPressed();
+        if (ui::pages::editorKey(k, down, repeat, otherMods))
             return false;
         // Ctrl+F in the menu goes to its search box (ui/search.cpp), not to a
         // hotkey bound to F: the box isn't taking typing yet as F goes down.
