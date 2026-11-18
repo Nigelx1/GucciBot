@@ -17,6 +17,13 @@ namespace gucci::ui::pages {
     void clickSounds();  // pages/clicksounds.cpp
     void editor();       // pages/editor.cpp: Frame Editor (timeline of the loaded macro's inputs)
     bool editorKeysLive();  // ... its shortcuts were listening at its last draw (Assistant Access: gucci_layout)
+    // ... a key from the game's keyboard (hacks/keybinds.cpp), with Ctrl held
+    // as ui::ctrlHeld() reads it: Z (Shift+Z redoes), Y or A while the editor
+    // has the keyboard (its page or a card focused at its last draw, the menu
+    // open, no text box active) is its undo, redo or select all, done at its
+    // next draw. True when it's the editor's: the key goes no further (not to
+    // GD, not to a hotkey). A key going up is never taken.
+    bool editorCtrlKey(int keyCode, bool shift, bool down, bool repeat);
     void calculate();    // pages/calculate.cpp: Calculate (frame-window analyzer) settings + run
     void macroTools();   // pages/macro_tools.cpp: Macro Tools (diff, trim, merge, metadata, TPS changes)
     void editorTools();  // pages/editor_tools.cpp: Replace All and Macro Buffing (level editor)

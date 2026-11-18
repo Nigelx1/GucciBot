@@ -5,6 +5,7 @@
 #include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
 #include "trainers/trainer_core.hpp"
+#include "ui/pages.hpp"
 #include "ui/search.hpp"
 #include "ui/ui.hpp"
 
@@ -141,23 +142,39 @@ namespace {
 #ifndef GEODE_IS_IOS // no keyboard dispatcher binding there
 class $modify(GucciKeys, CCKeyboardDispatcher) {
     bool dispatchKeyboardMSG(enumKeyCodes key, bool down, bool repeat, double timestamp) {
+        // Every key not kept goes on to the game from here.
+        if (!gucciHandle(key, down, repeat))
+            return true;
+        return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+    }
+
+    // What GucciBot does with a key; false when it keeps it from the game.
+    bool gucciHandle(enumKeyCodes key, bool down, bool repeat) {
         int const k = static_cast<int>(key);
         auto* gb = GucciEngine::get();
 
         // A key-capture control in the menu takes the key first.
         if (down && !repeat && ui::feedKeyCapture(k))
-            return true;
+            return false;
         if (ImGui::GetIO().WantTextInput)
-            return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+            return true;
+        // Ctrl+Z, Ctrl+Y (Ctrl+Shift+Z) and Ctrl+A while the Frame Editor has
+        // the keyboard are its undo, redo and select all, and go no further:
+        // not to GD (its level editor has a Ctrl+Z of its own), not to a
+        // hotkey on that key. ImGui never sees them go down from a real
+        // keyboard (ui/pages/editor.cpp, shortcuts), as with Ctrl+F below.
+        if (ui::pages::editorCtrlKey(k, this->getShiftKeyPressed(), down, repeat))
+            return false;
         // Ctrl+F in the menu goes to its search box (ui/search.cpp), not to a
         // hotkey bound to F: the box isn't taking typing yet as F goes down.
-        // Ctrl is read from this dispatcher (Geode sets its modifiers right
-        // before every key it hands on), not from ImGui, which never sees
-        // these keys go down (ui/search.hpp, ctrlFIsMine).
-        if (key == enumKeyCodes::KEY_F && ui::search::ctrlFIsMine(this->getControlKeyPressed())) {
+        // Ctrl is read from this dispatcher too (Geode sets its modifiers
+        // right before every key it hands on: ui::ctrlHeld), not from ImGui
+        // alone, which never sees these keys go down (ui/search.hpp,
+        // ctrlFIsMine).
+        if (key == enumKeyCodes::KEY_F && ui::search::ctrlFIsMine(ui::ctrlHeld())) {
             if (down && !repeat)
                 ui::search::focusBox();
-            return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+            return true;
         }
 
         // Switched off (core/bot_switch.hpp), only the menu key does anything.
@@ -179,7 +196,7 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
 #endif
         }
         if (!live)
-            return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+            return true;
 
         // Held-repeat keys: frame step and step back, only while paused.
         if (down && gb->updater.m_paused) {
@@ -190,7 +207,7 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
                 gb->updater.userStepBack();
         }
 
-        return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+        return true;
     }
 
 #ifdef GEODE_IS_MACOS

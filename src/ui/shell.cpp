@@ -334,6 +334,24 @@ namespace gucci::ui {
         return true;
     }
 
+    bool ctrlHeld() {
+        if (ImGui::GetCurrentContext() && ImGui::GetIO().KeyCtrl)
+            return true;
+#if !defined(GEODE_IS_IOS)  // no keyboard dispatcher binding there
+        if (auto* kb = CCKeyboardDispatcher::get()) {
+            if (kb->getControlKeyPressed())
+                return true;
+#if defined(GEODE_IS_MACOS)
+            // Cmd+Z on a Mac. Not seen on one: whether cocos keeps Cmd apart
+            // from Control there is unread, so either counts.
+            if (kb->getCommandKeyPressed())
+                return true;
+#endif
+        }
+#endif
+        return false;
+    }
+
     std::string keyName(int k) {
         if (k == 0)
             return "Unbound";
