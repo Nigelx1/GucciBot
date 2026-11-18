@@ -123,20 +123,21 @@ constexpr double kStuckSeconds = 300.0;
 // then thinking plus level time played from 11-15) stopped 12 runs at those
 // three spots, 10 of them 2 to 41 decisions short of what the others needed
 // there. Measured in every lane's logs (199 runs, 11-15..11-17): the most any
-// run needed before getting further was 200 (Polargeist), then 173 (Forest
-// Temple at tick 17016) and 144 (GRIEF's two-player cube part after its fork
-// jump); at GRIEF's 18709, 68-70, and the two runs stopped there after 94 and
+// run needed before getting further was 200 (Polargeist at tick 10738, where
+// another run had been stopped by the clock), then 173 (Forest Temple at tick
+// 17016) and 144 (GRIEF's two-player cube part after its fork jump); at GRIEF's 18709, 68-70, and the two runs stopped there after 94 and
 // 97 on a longer way were still going. Runs stopped where that build got no
 // further at all ended at 85-148 decisions (Forest Temple before the fork
 // jump, 10 runs; 244-615 in 4 more on test switches), 118 (GRIEF's 71.22%
 // wall before the dual-portal rule), 253-312 (Geometrical Dominator, Cold
 // Sweat, a Bloodbath GPU test). 300 is 4.3 times what 18709 takes and 1.5
-// times the most any run has needed. A truly stuck run gets up to about 2.5
-// times the old rule's work: at the pace those runs made decisions, 12-18
-// minutes for Forest Temple's wall and 14 for GRIEF's instead of 5-6 (the
-// ones at 253-312 about as long as before), and the tick-1 walks of Society
-// and Cortex Break (23000 and 9000 cheap stops in five minutes) end in
-// seconds.
+// times the most any run has needed. The cost: a truly stuck run gets about
+// 2.5 times the old rule's work. Measured (11-17, loaded PC): Forest Temple
+// with the fork jump off stopped at its old wall after 300 decisions, 18.6
+// minutes of wall clock after it first died there, where the clock rule took
+// 5-10; at their pace GRIEF's old 71.22% wall would take about 14 (the runs
+// at 253-312 about as long as before). The tick-1 walks of Society and
+// Cortex Break (23000 and 9000 cheap stops in five minutes) end in seconds.
 constexpr uint64_t kStuckDecisions = 300;
 // ... and two wall-clock backstops, so nothing can run forever: no decision
 // begun for 20 minutes (a restore that never arrives, a decision that never
