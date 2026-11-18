@@ -27,6 +27,7 @@
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/binding/EndLevelLayer.hpp>
 #if GB_NATIVE_ENGINE
 #include <safetyhook.hpp>
 #else
@@ -410,7 +411,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             gb->practiceFix.clearPlatformer(true);
             resetLevel();
         } else if (upd.m_expectsDeath) {
-            if (auto* ell = getChildByID("EndLevelLayer"))
+            if (auto* ell = getChildByType<EndLevelLayer>(0))  // see resetLevel
                 ell->removeFromParent();
             m_gameState.m_totalTime = 0.0;
             m_gameState.m_levelTime = 0.0;
@@ -793,7 +794,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
         putRestartKeyHoldBack("PlayLayer::resetLevel");
 #endif
 
-        if (auto* ell = getChildByID("EndLevelLayer"))
+        // GD's end screen, by its type: the ID "EndLevelLayer" is only there
+        // when the geode.node-ids mod is installed, so without it a macro's
+        // restart after a completion left the end screen over the level.
+        // (Silicate's 2.2091 release finds it by type too.)
+        if (auto* ell = getChildByType<EndLevelLayer>(0))
             ell->removeFromParent();
 
         m_practiceMusicSync = true;

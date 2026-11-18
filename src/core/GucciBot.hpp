@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-f (Assistant Access: the game no longer aborts on exit with it on)"
+    "2026-11-17-g (A macro restart after a completion takes the end screen down without the Node IDs mod)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
