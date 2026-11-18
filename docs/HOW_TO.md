@@ -242,7 +242,7 @@ The Pathfinder finds its own way through a level. It tries moves in a copy of th
 In a test on Stereo Madness it took about 2 minutes. Harder levels can take much longer.
 
 - **Show the search** (on by default) draws what it's trying while the game waits: faint lines for the paths it tries, a red dot where one dies, the best one so far brighter, and a line in the corner saying how it's going **(new in 2.0)**. It doesn't change what the search decides.
-- A run that goes five minutes without getting any further stops and says where.
+- A run that makes 300 decisions in a row without getting any further stops and says where. It counts the search's own work, not time, so whether a run stops depends much less on how fast or busy your PC is (not entirely: an hour on the clock without getting further also stops a run, and a few spots don't always go the same way from run to run). On a hard spot giving up can take 20 minutes or more, so in a queue a level the search can't beat often uses up its whole time limit.
 - **Remember solutions** (off by default) lets it reuse what got past a spot last time.
 - **Rotate triggers (experimental)** (off by default, Windows only) makes its copy of the game turn rotating blocks the way the game does. On some levels that makes the search slower, so it's off **(new in 2.0)**.
 - The **AI** engine is still early. This download has no trained AI, so **AI** shows "No trained AI yet" and its **Start** stays grayed out. Use **Search (old)**.
