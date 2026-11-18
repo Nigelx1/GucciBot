@@ -566,6 +566,7 @@ bool AbsensePathfinder::start() {
     m_wouldDie = false;
     m_expectReset = false;
     m_completed = false;
+    m_deathKept = UINT64_MAX;
     m_starts.clear();
     forgetRunMemo();
     m_probe = Probe{};
@@ -639,7 +640,18 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     // (logged before the decision below is let go of, and in the run's total).
     endFreeze("a decision when the run stopped");
 
-    const bool done = m_completed;
+    // GucciBot (2026-11-17, pffix lane): the end reached on a path that went
+    // through a death the game was kept from dealing is not a solution: its
+    // macro dies there when played. Said plainly (short: the queue's note
+    // keeps 157 characters of it, the clicks-a-second part included), and it
+    // is not saved as a solution; a queue still keeps it as its "furthest".
+    const bool throughDeath = m_completed && m_deathKept != UINT64_MAX;
+    const bool done = m_completed && !throughDeath;
+    std::string why = reason;
+    if (throughDeath) {
+        why = fmt::format("reached the end through a death at tick {} it never went back before: not a solution",
+                          m_deathKept);
+    }
     if (currentTick() >= m_stats.bestTick) rememberBest();
     m_live = false;
     m_livePending = false;
@@ -698,7 +710,7 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     releaseAnchors();
 
     m_stats.seconds = secondsSince(m_startedAt);
-    m_stats.message = reason;
+    m_stats.message = why;
     // Clicks a second on the path played (step 5), on the page too: whether the
     // run clicks like a person is something to see without opening the log.
     const ClickRate cps = clickRate(m_history, updater.getTps());
@@ -716,7 +728,7 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     log("stopped: %s (%llu ticks committed, %llu decisions, %llu simulations, %llu backtracks, best tick %llu, %.1fs; "
         "the game froze %llu times waiting for a decision, %.1f s in all; "
         "%d clicks in %.1f s of play: %.1f a second on average, %d in the busiest second, from tick %d)",
-        reason.c_str(), (unsigned long long)m_stats.committedTicks, (unsigned long long)m_stats.decisions,
+        why.c_str(), (unsigned long long)m_stats.committedTicks, (unsigned long long)m_stats.decisions,
         (unsigned long long)m_stats.simulations, (unsigned long long)m_stats.backtracks,
         (unsigned long long)m_stats.bestTick, m_stats.seconds, (unsigned long long)m_stats.freezes,
         m_stats.freezeSeconds, cps.clicks, cps.seconds, cpsAverage, cps.busiest, cps.busiestFrom);
@@ -1246,13 +1258,17 @@ void AbsensePathfinder::tick() {
                     // ran on): back to where it was meant to stop.
                     const uint64_t at = m_pauseAt;
                     m_pauseAt = UINT64_MAX;
-                    if (currentTick() > at && rewindTo(at)) goto done;
+                    if (currentTick() > at) {
+                        if (rewindTo(at)) goto done;
+                        noteRunOnDeath(at);
+                    }
                 }
                 if (m_ahead.active && !m_live && currentTick() > m_ahead.tick) {
                     // The plan ran out mid-frame and the game ran on a tick
                     // or two past where the decision is about: back there
                     // first, so the plan it makes starts where it should.
                     if (rewindTo(m_ahead.tick)) goto done;  // the restore runs in the frozen tick
+                    noteRunOnDeath(m_ahead.tick);
                     cancelAhead();  // no stored frame to go back to: decide from where it is
                 }
                 decide();
@@ -1277,8 +1293,19 @@ void AbsensePathfinder::tick() {
                         // out in liveInput, so it is a freeze too (it was not
                         // counted). Not when the last tick's bookkeeping, run
                         // by pauseLive, has just found a death or a drift.
-                        if (m_phase == Phase::Committing && !m_completed) beginFreeze();
-                        m_phase = Phase::Deciding;
+                        // GucciBot (2026-11-17, pffix lane): nor is the phase
+                        // that bookkeeping set overwritten. A death on the
+                        // plan's last tick (a plan played into the death "to
+                        // see what the game says" ends exactly there) set
+                        // Backtracking, and this put Deciding over it: the
+                        // search decided on from the tick after a death the
+                        // game had been kept from dealing, and the saved macro
+                        // died there when played (Dry Out, 49.65%, a "100%
+                        // level complete" run).
+                        if (m_phase == Phase::Committing) {
+                            if (!m_completed) beginFreeze();
+                            m_phase = Phase::Deciding;
+                        }
                     }
                     break;
                 }
@@ -5206,6 +5233,23 @@ void AbsensePathfinder::decide() {
     if (SLSettings::get()->pathfinder.smooth && !m_live && m_planIndex < m_plan.size()) goLive();
 }
 
+// GucciBot (2026-11-18, pffix lane): the frame's ticks ran on past `from`
+// with no bookkeeping of their own, and there was no stored frame to go back
+// to, so the search decides from where the game is. A death the game was kept
+// from dealing in those ticks (onWouldDie still has it: nothing reset it) is
+// on the path now, like one afterTick finds and nothing goes back before.
+void AbsensePathfinder::noteRunOnDeath(uint64_t from) {
+    if (!m_wouldDie) return;
+    // The earliest tick it can have been (the first tick run on): going back
+    // to before it is what clears it, so earlier is the safe side.
+    const uint64_t at = from + 1;
+    if (at >= m_deathKept) return;
+    m_deathKept = at;
+    log("tick %llu: the ticks run on past %llu with no bookkeeping died, and there was nothing to go back to; "
+        "deciding from here",
+        (unsigned long long)at, (unsigned long long)from);
+}
+
 void AbsensePathfinder::goLive() {
     if (m_live) return;
     m_live = true;
@@ -6023,6 +6067,7 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
         if (missHasSample) missExpected = m_planTrace[m_planIndex - 1];
         const size_t missTraceSize = m_planTrace.size();
         m_stats.deadEnds++;
+        m_deathKept = std::min(m_deathKept, now);  // until a restore lands before it
         pauseLive();
         cancelAhead();
         log("died at tick %llu while committing (%s)", (unsigned long long)now, m_stats.lastDecision.c_str());
@@ -6748,13 +6793,24 @@ void AbsensePathfinder::finishRestore() {
             if (idx < m_history2.size() && separateNow()) applyInput(m_history2[idx], true);
             m_wouldDie = false;
             stepGame();
-            if (m_wouldDie) break;  // the game did not agree with itself; decide from here
+            if (m_wouldDie) {
+                // The game did not agree with itself; decide from here. Not a
+                // kept death (pffix): the first pass, the one a macro plays
+                // from the start, lived through this tick with these inputs;
+                // only the restored game died.
+                log("going back: the same inputs died at tick %llu this time (the first pass lived); deciding "
+                    "from there",
+                    (unsigned long long)currentTick());
+                break;
+            }
             keepStart();
         }
         m_wouldDie = false;
         tick = currentTick();
     }
     m_restepping = false;
+    // Back before the kept death: the tick that dealt it runs again (pffix).
+    if (tick < m_deathKept) m_deathKept = UINT64_MAX;
     const size_t idx = (size_t)(tick > m_stats.startTick ? tick - m_stats.startTick : 0);
     if (m_history.size() > idx) m_history.resize(idx);
     if (m_history2.size() > idx) m_history2.resize(idx);
