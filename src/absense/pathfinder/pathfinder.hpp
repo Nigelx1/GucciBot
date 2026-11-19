@@ -209,6 +209,16 @@ public:
     // the state it found; a queued start that paused the game itself to hold
     // it at frame 0 hands over the state from before - absense::requestStart).
     void setRestorePaused(bool paused) { m_savedPaused = paused; }
+    // GucciBot (2026-11-19, dlfix lane): the kind of start the next start()
+    // makes, set by absense::servicePendingStart just before it: whether GD's
+    // full restart began it (only such a run may start over, see retryStuck),
+    // and which try of the run it is (0 the first; k the stuck rule's k-th
+    // retry, whose random ideas have their seed salted by k). start() takes
+    // both once and puts them back to a first try from the current tick.
+    void setNextStart(bool fromBeginning, int attempt) {
+        m_nextFromBeginning = fromBeginning;
+        m_nextAttempt = attempt;
+    }
     // Time the updater spent putting an earlier state back (statistics).
     void noteRestoreTime(double seconds) { m_stats.secondsRestore += seconds; }
     // Lets go of all but the newest `keep` kept states (the memory guard);
@@ -859,6 +869,9 @@ public:
     // Stops with a reason the player is told about (a dialog), for the
     // stops that are not the player's own doing.
     void giveUp(const std::string& reason);
+    // The stuck rule's last resort (dlfix lane, 2026-11-19): true when the run
+    // was stopped to start over (see the definition), false to give up as before.
+    bool retryStuck(const std::string& why);
     uint64_t m_backtrackTarget = 0;
     uint64_t m_restepTo = 0;       // after a restore to a stored frame, step the history up to here
     uint64_t backDistance(int probe) const;
@@ -980,6 +993,15 @@ public:
     // since the last fork jump while the new route is short of the old best
     // (0: none); its moving on restarts the stuck clock.
     uint64_t m_forkBest = 0;
+    // GucciBot (2026-11-19, dlfix lane; retryStuck): the next start's kind
+    // (setNextStart), this run's (whether GD's full restart began it, and its
+    // try: 0, or the stuck rule's retry it is on), and when the run's first
+    // try started (the 60 minutes are for all its tries together).
+    bool m_nextFromBeginning = false;
+    int m_nextAttempt = 0;
+    bool m_fromBeginning = false;
+    int m_attempt = 0;
+    std::chrono::steady_clock::time_point m_runStartedAt{};
     // Frame pacing: a slice takes what is left of a frame at the target
     // frame rate. When the last frame came late the game's own share is
     // taken from it (the time between slices minus the slice) and the next

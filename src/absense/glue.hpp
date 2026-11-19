@@ -30,6 +30,12 @@ namespace absense {
     // beginning, the game is held at frame 0 so the search plays every tick.
     // False when there is no level to start in.
     bool requestStart(bool fromBeginning);
+    // GucciBot (2026-11-19, dlfix lane): the stuck rule's last resort
+    // (AbsensePathfinder::retryStuck) starting its stopped run over from the
+    // beginning: requestStart(true), as the `attempt`-th retry (its random
+    // ideas' seed salted by it); `wasPaused` is how the game goes back when
+    // the run is over. status() counts it as running meanwhile.
+    bool requestRetry(int attempt, bool wasPaused);
     bool startPending();
     void servicePendingStart();
     // The Pathfinder tab's "start from the beginning" switch (saved).

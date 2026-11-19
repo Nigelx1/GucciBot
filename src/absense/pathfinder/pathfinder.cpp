@@ -154,6 +154,10 @@ constexpr double kStuckWallSeconds = 3600.0;
 // A stall that ends after this many decisions is logged (with its decisions
 // and wall clock), so later runs show how close a stall came to the rule.
 constexpr uint64_t kStuckLogDecisions = 50;
+// GucciBot (2026-11-19, dlfix lane): how many times the stuck rule's last
+// resort may start a run over with new random ideas (see retryStuck). All
+// three salts it uses passed RobsVault's Deadlocked in the lane's runs.
+constexpr int kStuckRetries = 3;
 // GucciBot (2026-11-15, pf2 lane; pf_start_stop): how many times a spot whose
 // floor is the search's own start, with no stored frame before it, may fail
 // before the run stops (see escalate), and how close to the start the death
@@ -401,6 +405,12 @@ bool AbsensePathfinder::isTabu(uint64_t tick, const std::vector<TickInput>& inpu
 bool AbsensePathfinder::start() {
     auto* bot = Bot::get();
     auto* pl = PlayLayer::get();
+    // GucciBot (2026-11-19, dlfix lane): the kind of start this is
+    // (setNextStart), taken once, so a later start is a first try again.
+    const bool fromBeginning = m_nextFromBeginning;
+    const int attempt = m_nextAttempt;
+    m_nextFromBeginning = false;
+    m_nextAttempt = 0;
     m_stats = Stats{};
     world::g_upkeep = world::Upkeep{};  // logged at the stop
     world::g_pendingCheck = world::PendingCheck{};  // (with it)
@@ -596,6 +606,9 @@ bool AbsensePathfinder::start() {
     m_stuckClock = m_startedAt;
     restartStuckCount();
     m_forkBest = 0;
+    m_fromBeginning = fromBeginning;
+    m_attempt = attempt;
+    if (attempt == 0) m_runStartedAt = m_startedAt;  // a retry keeps its first try's start (retryStuck)
     m_stats.message = "Searching";
 
     absense::gpu::Client::get().setEnabled(SLSettings::get()->pathfinder.gpu);
@@ -634,6 +647,10 @@ bool AbsensePathfinder::start() {
               "that tick)"
             : "off (a run from a kept start takes whatever is marked used ahead of its player, and not under it, as "
               "unused)");
+    if (attempt > 0)
+        log("stuck: retry %d of %d under way: the same search from the level's beginning, with a new seed for its "
+            "random ideas (%.0f s of the run's %.0f minutes used before it)",
+            attempt, kStuckRetries, secondsSince(m_runStartedAt), kStuckWallSeconds / 60.0);
     return true;
 }
 
@@ -1173,6 +1190,10 @@ void AbsensePathfinder::tick() {
         if (!why.empty()) {
             log("%s: the furthest it got has not moved on (%llu decisions, %.0f s)", why.c_str(),
                 (unsigned long long)tries, m_stuckWallSeconds);
+            // GucciBot (2026-11-19, dlfix lane): the last resort, here only.
+            if (retryStuck(why)) return;
+            if (m_attempt > 0)
+                why += fmt::format(" (on its last try: it started over {} times with new random ideas)", m_attempt);
             giveUp(why);
             return;
         }
@@ -1804,6 +1825,10 @@ void AbsensePathfinder::buildCandidates(std::vector<Candidate>& out, bool held, 
         uint64_t seed = 0x9E3779B97F4A7C15ull ^ (m_decision.tick * 0xBF58476D1CE4E5B9ull) ^ ((uint64_t)visits << 40);
         if (auto* pl = PlayLayer::get(); pl && pl->m_level)
             seed ^= (uint64_t)(uint32_t)pl->m_level->m_levelID.value() * 0x94D049BB133111EBull;
+        // GucciBot (2026-11-19, dlfix lane): on the stuck rule's retry k (see
+        // retryStuck), salted by k, for a new set of random ideas everywhere.
+        // A first try (0) skips it: its ideas are exactly what they always were.
+        if (m_attempt != 0) seed ^= (uint64_t)(uint32_t)m_attempt * 0xD6E8FEB86659FD93ull;
         m_rng.seed((std::mt19937::result_type)(seed ^ (seed >> 29)));
     }
     for (int r = 0; r < randoms; r++) {
@@ -5573,6 +5598,55 @@ void AbsensePathfinder::giveUp(const std::string& reason) {
     cancelAhead();
     absense::modal::info({.title = "AbsensePathfinder stopped", .message = reason});
     stop(reason);
+}
+
+// GucciBot (2026-11-19, dlfix lane): the stuck rule's last resort. Where the
+// stuck rule or its 60-minute backstop (tick()) would end a run that GD's full
+// restart began, the run starts over from the level's beginning instead, with
+// a new seed for its random ideas: the same queued start as the Start button's
+// "from the beginning" (absense::requestRetry), so every piece of the search
+// starts fresh. At most kStuckRetries times, and no new try once the run's
+// tries together have used kStuckWallSeconds.
+// Why: the random ideas are seeded from the level ID, the tick and the visit
+// (buildCandidates), so a level gets the same random ideas on every run, and an
+// early random win can pick a route the search cannot get past later. On
+// RobsVault's copy of Deadlocked (77240630) build -p stopped at 51.59% (tick
+// 12539) after 401 decisions on every run; the route the search took parted
+// from the passing ones at a random idea at tick 2181. With the seed salted by
+// 1, 2, 3 or 4 it passed every time (285-553 s, cold replays complete), and
+// Clubstep with 1 and 2 (lanes/dlfix EXPERIMENTS.md).
+// Nothing else comes here: a run that completes, is stopped by the player or
+// the level, or ends on the start rule (escalate) never does, and the first
+// try's seed is untouched (the salt is 0), so such a run plays exactly as it
+// did before this existed.
+bool AbsensePathfinder::retryStuck(const std::string& why) {
+    const double used = secondsSince(m_runStartedAt);
+    const char* no = nullptr;
+    if (!m_fromBeginning)
+        no = "the run did not start at the level's beginning";
+    else if (m_attempt >= kStuckRetries)
+        no = "it has started over as many times as it may";
+    else if (used >= kStuckWallSeconds)
+        no = "the run has used its 60 minutes";
+    if (no) {
+        log("stuck: no retry: %s (try %d, %.0f s used)", no, m_attempt + 1, used);
+        return false;
+    }
+    const int next = m_attempt + 1;
+    log("stuck: retry %d of %d: %s; starting over from the level's beginning with a new seed for the random ideas "
+        "(%.0f s of the run's %.0f minutes used)",
+        next, kStuckRetries, why.c_str(), used, kStuckWallSeconds / 60.0);
+    const bool wasPaused = m_savedPaused;  // how the game goes back when the run is over
+    pauseLive();
+    cancelAhead();
+    stop(why);
+    // Held where it is until the restart takes it (stop() let it go as it was).
+    Bot::get()->updater().setPaused(true);
+    if (absense::requestRetry(next, wasPaused)) return true;
+    Bot::get()->updater().setPaused(wasPaused);
+    log("stuck: retry %d could not be queued (%s); stopping", next, absense::status().message.c_str());
+    absense::modal::info({.title = "AbsensePathfinder stopped", .message = why});
+    return true;  // stopped already
 }
 
 int AbsensePathfinder::widenLevel(uint64_t at) {

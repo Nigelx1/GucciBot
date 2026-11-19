@@ -95,6 +95,7 @@ namespace {
         bool resetDone = false;
         bool wasPaused = false;  // GucciBot's own pause, before the request
         int frames = 0;          // frames waited for the level to be ready
+        int attempt = 0;         // the stuck rule's retry this start is (requestRetry), or 0
     };
     PendingStart s_pending;
     std::string s_pendingNote;  // why a queued start gave up (status().message)
@@ -127,6 +128,14 @@ bool absense::requestStart(bool fromBeginning) {
     s_pending.fromBeginning = fromBeginning;
     s_pending.wasPaused = gucci::GucciEngine::get()->updater.m_paused;
     s_pendingNote.clear();
+    return true;
+}
+
+bool absense::requestRetry(int attempt, bool wasPaused) {
+    if (!requestStart(true) || !s_pending.active)
+        return false;
+    s_pending.attempt = attempt;
+    s_pending.wasPaused = wasPaused;  // the game was held paused by the run that stopped
     return true;
 }
 
@@ -183,6 +192,9 @@ void absense::servicePendingStart() {
         return;
     }
     s_pending.active = false;
+    // GucciBot (2026-11-19, dlfix lane): what kind of start this is, for the
+    // stuck rule's last resort (AbsensePathfinder::retryStuck).
+    Bot::get()->pathfinder().setNextStart(s_pending.fromBeginning && s_pending.resetDone, s_pending.attempt);
     if (absense::startPathfinder()) {
         if (s_pending.resetDone)
             Bot::get()->pathfinder().setRestorePaused(s_pending.wasPaused);
@@ -244,7 +256,10 @@ absense::Status absense::status() {
     auto& pf = Bot::get()->pathfinder();
     auto const& s = pf.stats();
     Status out;
-    out.running = pf.isRunning();
+    // GucciBot (2026-11-19, dlfix lane): a run starting over (the stuck rule's
+    // retry, requestRetry) is still running for whoever polls, in the frames
+    // between its stop and its new start.
+    out.running = pf.isRunning() || (s_pending.active && s_pending.attempt > 0);
     out.phase = s_pending.active ? "starting" : phaseName();
     out.progress = s.progress;
     out.bestProgress = s.bestProgress;
@@ -260,7 +275,10 @@ absense::Status absense::status() {
     out.lastDecision = s.lastDecision;
     out.message = s.message;
     out.exactStartFlags = out.running && SLSettings::get()->pathfinder.exactStartFlags;
-    if (s_pending.active)
+    if (s_pending.active && s_pending.attempt > 0)
+        out.message = fmt::format("Stuck: starting over from the beginning with new random ideas (retry {})...",
+                                  s_pending.attempt);
+    else if (s_pending.active)
         out.message = s_pending.fromBeginning ? "Restarting the level to start from its beginning..." : "Starting...";
     else if (!out.running && !s_pendingNote.empty())
         out.message = s_pendingNote;
