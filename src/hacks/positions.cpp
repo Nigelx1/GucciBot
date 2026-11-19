@@ -337,11 +337,11 @@ namespace gucci::positions {
                     gb->replay.m_actionAtom.m_actions.empty() ? 0u : gb->replay.m_actionAtom.m_actions.back().m_frame,
                     gb->replay.m_replayName};
             if (!s.haveKey || !(key == s.key)) {
-                bool const sameMacro = s.haveKey && key.actions == s.key.actions && key.count == s.key.count &&
-                                       key.lastFrame == s.key.lastFrame && key.name == s.key.name;
+                // Every new attempt reads the clicks afresh: the Frame Editor
+                // moves an input in place (edit_core), which changes nothing
+                // the key can see. One pass over the actions, once an attempt.
                 s.entries.clear();
-                if (!sameMacro)
-                    rebuildInputs(s, gb);
+                rebuildInputs(s, gb);
                 s.key = key;
                 s.haveKey = true;
             }
