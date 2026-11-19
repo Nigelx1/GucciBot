@@ -4,6 +4,7 @@
 
 #include "core/platform.hpp"
 #include "absense/compat/bot.hpp"
+#include "absense/compat/modal.hpp"
 #include "ai/job.hpp"
 #include "analysis/pathfinder.hpp"
 #include "absense/glue.hpp"
@@ -96,6 +97,7 @@ namespace {
         bool wasPaused = false;  // GucciBot's own pause, before the request
         int frames = 0;          // frames waited for the level to be ready
         int attempt = 0;         // the stuck rule's retry this start is (requestRetry), or 0
+        std::string why;         // ... and why the run before it stopped (said if the retry cannot start)
     };
     PendingStart s_pending;
     std::string s_pendingNote;  // why a queued start gave up (status().message)
@@ -131,13 +133,26 @@ bool absense::requestStart(bool fromBeginning) {
     return true;
 }
 
-bool absense::requestRetry(int attempt, bool wasPaused) {
+bool absense::requestRetry(int attempt, bool wasPaused, const std::string& why) {
     if (!requestStart(true) || !s_pending.active)
         return false;
     s_pending.attempt = attempt;
     s_pending.wasPaused = wasPaused;  // the game was held paused by the run that stopped
+    s_pending.why = why;
     return true;
 }
+
+namespace {
+    // GucciBot (2026-11-19, dlfix lane): a stuck run's retry that could not
+    // start says why the run stopped, and why it could not start over, as the
+    // stop it stands in for would have (the dialog, and the status line).
+    void retryFailed(const std::string& whyNot) {
+        s_pendingNote = fmt::format("{} - it tried to start over with new random ideas, but: {}", s_pending.why, whyNot);
+        geode::log::info("[AbsPF] stuck: retry {} could not start ({}); stopped: {}", s_pending.attempt, whyNot,
+                         s_pending.why);
+        absense::modal::info({.title = "AbsensePathfinder stopped", .message = s_pendingNote});
+    }
+}  // namespace
 
 bool absense::startPending() {
     return s_pending.active;
@@ -188,7 +203,10 @@ void absense::servicePendingStart() {
                                 : "The level did not get going within ten seconds; the start was given up.";
             // GucciBot (2026-11-19, dlfix lane): a stuck run's retry held the
             // game paused (retryStuck); given up, it goes back as it was.
-            if (s_pending.attempt > 0) upd.setPaused(s_pending.wasPaused);
+            if (s_pending.attempt > 0) {
+                upd.setPaused(s_pending.wasPaused);
+                retryFailed(s_pendingNote);
+            }
         } else if (upd.m_paused) {
             upd.stepOnce();
         }
@@ -201,8 +219,10 @@ void absense::servicePendingStart() {
     if (absense::startPathfinder()) {
         if (s_pending.resetDone)
             Bot::get()->pathfinder().setRestorePaused(s_pending.wasPaused);
-    } else if (s_pending.resetDone) {
-        upd.setPaused(s_pending.wasPaused);
+    } else {
+        if (s_pending.resetDone)
+            upd.setPaused(s_pending.wasPaused);
+        if (s_pending.attempt > 0) retryFailed(Bot::get()->pathfinder().stats().message);
     }
 }
 

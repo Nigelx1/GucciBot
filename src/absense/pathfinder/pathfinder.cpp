@@ -5642,7 +5642,7 @@ bool AbsensePathfinder::retryStuck(const std::string& why) {
     stop(why);
     // Held where it is until the restart takes it (stop() let it go as it was).
     Bot::get()->updater().setPaused(true);
-    if (absense::requestRetry(next, wasPaused)) return true;
+    if (absense::requestRetry(next, wasPaused, why)) return true;
     Bot::get()->updater().setPaused(wasPaused);
     log("stuck: retry %d could not be queued (%s); stopping", next, absense::status().message.c_str());
     absense::modal::info({.title = "AbsensePathfinder stopped", .message = why});

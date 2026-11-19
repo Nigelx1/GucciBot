@@ -34,8 +34,9 @@ namespace absense {
     // (AbsensePathfinder::retryStuck) starting its stopped run over from the
     // beginning: requestStart(true), as the `attempt`-th retry (its random
     // ideas' seed salted by it); `wasPaused` is how the game goes back when
-    // the run is over. status() counts it as running meanwhile.
-    bool requestRetry(int attempt, bool wasPaused);
+    // the run is over; `why` is why the run stopped, said if the retry cannot
+    // start after all. status() counts it as running meanwhile.
+    bool requestRetry(int attempt, bool wasPaused, const std::string& why);
     bool startPending();
     void servicePendingStart();
     // The Pathfinder tab's "start from the beginning" switch (saved).
