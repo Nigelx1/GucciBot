@@ -230,6 +230,12 @@ constexpr double kMaxRepairSeconds = 6.0;
 // inside what keepStart() and the stored frames keep, so a widened floor
 // still has a kept start to probe from instead of going back for real.
 constexpr double kMaxWidenSeconds = 2.0 * kBackSeconds + kLookahead;  // 10 s (keepStart and the stored frames keep this much and 64 ticks)
+// GucciBot (2026-11-19, dlfix lane; the TEST-ONLY knob pf_widen_seconds):
+// that reach, or the knob's when it is set above it (0, the default: 10 s).
+static double maxWidenSeconds() {
+    const double w = absense::widenSeconds();
+    return w > kMaxWidenSeconds ? w : kMaxWidenSeconds;
+}
 // How far (units) the real player may drift from the simulated plan before
 // the search thinks again, and how many ticks it plays at least in between.
 constexpr float kDivergence = 1.0f;
@@ -502,7 +508,11 @@ bool AbsensePathfinder::start() {
         const double scale = std::max(1.0, tps / 240.0);
         pf.m_storeEvery = (uint32_t)std::max(1.0, std::round(kStoreEvery * scale));
         const double limit = kBackSeconds * tps;
-        const double ticks = std::clamp(limit * 2.0 + kLookahead * tps + 64.0, 600.0, 20000.0);
+        // GucciBot (2026-11-19, dlfix lane; pf_widen_seconds, test only): as
+        // far back as the knob's reach when it is set above 10 s.
+        const double ticks = absense::widenSeconds() > kMaxWidenSeconds
+                                 ? std::clamp(maxWidenSeconds() * tps + 64.0, 600.0, 20000.0)
+                                 : std::clamp(limit * 2.0 + kLookahead * tps + 64.0, 600.0, 20000.0);
         // Exactly as many as the limit going back can use: every one is a
         // full game checkpoint, and 1500 of them on a big level is more than
         // a gigabyte of memory and a stall on every frame.
@@ -596,6 +606,7 @@ bool AbsensePathfinder::start() {
     m_stuckClock = m_startedAt;
     restartStuckCount();
     m_forkBest = 0;
+    m_lrWidenUsed = false;  // dlfix lane, pf_widen_seconds (test only)
     m_stats.message = "Searching";
 
     absense::gpu::Client::get().setEnabled(SLSettings::get()->pathfinder.gpu);
@@ -1075,7 +1086,11 @@ void AbsensePathfinder::keepStart(uint64_t at) {
     // stretched once), plus a little.
     const auto& cfg = SLSettings::get()->pathfinder;
     const double tps = Bot::get()->updater().getTps();
-    const size_t keep = (size_t)(kBackSeconds * tps * 2.0 + kLookahead * tps + 64.0);
+    // GucciBot (2026-11-19, dlfix lane; pf_widen_seconds, test only): as far
+    // back as the knob's reach when it is set above 10 s.
+    const size_t keep = absense::widenSeconds() > kMaxWidenSeconds
+                            ? (size_t)(maxWidenSeconds() * tps + 64.0)
+                            : (size_t)(kBackSeconds * tps * 2.0 + kLookahead * tps + 64.0);
     while (m_starts.size() > keep) m_starts.pop_front();
 }
 
@@ -1169,6 +1184,29 @@ void AbsensePathfinder::tick() {
                               m_stats.bestTick, tries);
         } else if (m_stuckWallSeconds >= kStuckWallSeconds) {
             why = fmt::format("stuck at x {:.0f} (tick {}) for 60 minutes", m_stats.bestX, m_stats.bestTick);
+        }
+        // GucciBot (2026-11-19, dlfix lane; the TEST-ONLY knob pf_widen_seconds):
+        // once a run, where the stuck rule would stop it during a walk back,
+        // the spot jumps to the knob's reach (its floor that far before it)
+        // and the walk goes on with a new count. Off (0, the default), never.
+        if (!why.empty() && absense::widenSeconds() > kMaxWidenSeconds && !m_lrWidenUsed && m_repair.active) {
+            if (!settled || (m_phase != Phase::Deciding && m_phase != Phase::Committing)) {
+                why.clear();  // mid-rewind or mid-probe: look again next tick
+            } else {
+                m_lrWidenUsed = true;
+                const double tpsW = std::max(1.0, Bot::get()->updater().getTps());
+                Trap* t = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tpsW / 240.0)));
+                const int want = (int)std::ceil(maxWidenSeconds() - kMaxRepairSeconds);
+                if (t && t->level < want - 1) t->level = want - 1;  // escalate adds one
+                log("last resort (test, pf_widen_seconds): %s; the walk back reaches %.0f s before the spot at tick %llu "
+                    "instead of stopping",
+                    why.c_str(), maxWidenSeconds(), (unsigned long long)m_repair.deathTick);
+                restartStuckCount();
+                m_lrWidenJump = true;
+                escalate("the stuck rule's last resort");
+                m_lrWidenJump = false;
+                return;
+            }
         }
         if (!why.empty()) {
             log("%s: the furthest it got has not moved on (%llu decisions, %.0f s)", why.c_str(),
@@ -1804,6 +1842,10 @@ void AbsensePathfinder::buildCandidates(std::vector<Candidate>& out, bool held, 
         uint64_t seed = 0x9E3779B97F4A7C15ull ^ (m_decision.tick * 0xBF58476D1CE4E5B9ull) ^ ((uint64_t)visits << 40);
         if (auto* pl = PlayLayer::get(); pl && pl->m_level)
             seed ^= (uint64_t)(uint32_t)pl->m_level->m_levelID.value() * 0x94D049BB133111EBull;
+        // GucciBot (2026-11-19, dlfix lane; the TEST-ONLY knob pf_seed_salt):
+        // a different set of random ideas everywhere (0, the default: today's).
+        if (const int salt = absense::seedSalt(); salt != 0)
+            seed ^= (uint64_t)(uint32_t)salt * 0xD6E8FEB86659FD93ull;
         m_rng.seed((std::mt19937::result_type)(seed ^ (seed >> 29)));
     }
     for (int r = 0; r < randoms; r++) {
@@ -3156,6 +3198,12 @@ bool AbsensePathfinder::beginRescueLeg(Decision& d) {
         goal.frontierCap = 128;
         goal.maxSteps = (int)std::lround(kDriveLegSteps * std::max(1.0, tps / 240.0) * widened);
         goal.maxMs = kDriveLegSafetyMs * widened;
+        // GucciBot (2026-11-19, dlfix lane; the TEST-ONLY knob pf_rescue_mult):
+        // a bigger rescue leg (1, the default: today's budgets).
+        if (const double rm = absense::rescueMult(); rm > 1.0) {
+            goal.maxSteps = (int)std::lround((double)goal.maxSteps * rm);
+            goal.maxMs *= rm;
+        }
         goal.dotsEvery = 0;
         goal.witnesses = 3;
         goal.calmTicks = 0;
@@ -3520,7 +3568,7 @@ void AbsensePathfinder::decide() {
             // ... and as far back as a widened spot's floor may go (a second more
             // a level, see escalate), or a stop below the old floor could not see
             // the spot and would approve ideas that only survive the horizon.
-            const double seeSeconds = std::min(kMaxWidenSeconds, kMaxRepairSeconds + (double)d.level);
+            const double seeSeconds = std::min(maxWidenSeconds(), kMaxRepairSeconds + (double)d.level);
             // GucciBot (2026-09-30): ... and the clearance past it. The floor is
             // put down exactly seeSeconds before the death (beginRepair,
             // beginBacktrack, escalate), so capped at seeSeconds a stop there
@@ -5639,13 +5687,15 @@ void AbsensePathfinder::escalate(const char* why) {
     // about 3 minutes a level, so the five-minute stuck rule ended both
     // 3-hour runs at level 1.
     if (absense::forkJump() && absense::forkDual() && forkJump(why, m_repair.floor, true)) return;
-    const double seconds = std::min(kMaxWidenSeconds, kMaxRepairSeconds + (double)level);
+    const double seconds = std::min(maxWidenSeconds(), kMaxRepairSeconds + (double)level);
     const uint64_t reach = (uint64_t)std::lround(seconds * tps);
     const uint64_t nearest = m_repair.deathTick > reach ? m_repair.deathTick - reach : 0;
     const uint64_t second = (uint64_t)std::max(1.0, std::round(tps));
     const uint64_t lowest = std::max(nearest, m_stats.startTick);
     const uint64_t stepped = m_repair.floor > second ? m_repair.floor - second : 0;
-    const uint64_t want = std::max(stepped, lowest);
+    // GucciBot (2026-11-19, dlfix lane; pf_widen_seconds, test only): the
+    // stuck rule's last resort jumps the floor to the whole reach at once.
+    const uint64_t want = m_lrWidenJump ? lowest : std::max(stepped, lowest);
     char moved[160];
     if (want < m_repair.floor) {
         std::snprintf(moved, sizeof(moved), "the floor goes from tick %llu to %llu", (unsigned long long)m_repair.floor,
@@ -5887,7 +5937,7 @@ bool AbsensePathfinder::moveStartBack() {
     // spot the start is close to can always take the next step.
     if (m_repair.active) {
         const uint64_t reach =
-            (uint64_t)std::lround(std::min(kMaxWidenSeconds, kMaxRepairSeconds + (double)widenLevel()) * tps);
+            (uint64_t)std::lround(std::min(maxWidenSeconds(), kMaxRepairSeconds + (double)widenLevel()) * tps);
         if (m_repair.deathTick > reach) earliest = std::max(earliest, m_repair.deathTick - reach);
     }
     if (earliest + 1 >= m_stats.startTick) return false;
@@ -6401,7 +6451,7 @@ void AbsensePathfinder::beginRepair() {
     // A widened spot's decisions see further (see decide), so its floor may too.
     {
         const uint64_t reach =
-            (uint64_t)std::lround(std::min(kMaxWidenSeconds, kMaxRepairSeconds + (double)trap->level) * tps);
+            (uint64_t)std::lround(std::min(maxWidenSeconds(), kMaxRepairSeconds + (double)trap->level) * tps);
         const uint64_t earliest = obstacle > reach ? obstacle - reach : m_stats.startTick;
         if (m_repair.floor < earliest) m_repair.floor = std::max(earliest, m_stats.startTick);
     }
@@ -6559,7 +6609,7 @@ void AbsensePathfinder::beginBacktrack() {
             // Everything down to the limit was hopeless: allow one more
             // window, as far as an idea can still be checked against the spot.
             const uint64_t reach =
-                (uint64_t)std::lround(std::min(kMaxWidenSeconds, kMaxRepairSeconds + (double)widenLevel()) * tps);
+                (uint64_t)std::lround(std::min(maxWidenSeconds(), kMaxRepairSeconds + (double)widenLevel()) * tps);
             const uint64_t earliest = m_repair.deathTick > reach ? m_repair.deathTick - reach : m_stats.startTick;
             const uint64_t want = m_repair.floor > m_stats.startTick + limit ? m_repair.floor - limit : m_stats.startTick;
             const uint64_t next = std::max(want, std::max(earliest, m_stats.startTick));

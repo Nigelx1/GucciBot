@@ -201,6 +201,22 @@ namespace absense {
     // pf_fork_dual, this launch only; on by default since 2026-11-17).
     bool forkDual();
     void setForkDual(bool on);
+    // GucciBot (2026-11-19, dlfix lane): TEST-ONLY knobs for the Deadlocked
+    // stall experiments, this launch only (gucci_test_set), never saved. Each
+    // default is today's behavior exactly.
+    //  - pf_seed_salt: mixed into the seed of the random ideas (0 = today's seed).
+    //  - pf_widen_seconds: how far before a spot the walk back may reach at
+    //    most (0 = today's 10 s); above 10 the kept starts and stored frames
+    //    grow to match, and once a run, where the stuck rule would stop it,
+    //    the spot jumps to that reach instead and the walk goes on.
+    //  - pf_rescue_mult: a multiplier on the rescue legs' step and clock
+    //    budgets (1 = today's).
+    int seedSalt();
+    void setSeedSalt(int salt);
+    double widenSeconds();
+    void setWidenSeconds(double seconds);
+    double rescueMult();
+    void setRescueMult(double mult);
     // ... and its kill switch, never saved either (gucci_test_set
     // pf_pending_cells, on by default): on a level with rows of sections
     // (ORBIT, Heliopolis) a run writes back what the real game moved a
