@@ -100,6 +100,16 @@ class AbsensePathfinder {
         uint64_t driveDecisions = 0;  // step 5 (Route drives): decisions played as a leg to the next gate's option
         uint64_t driveHandoffs = 0;   // ... and decided by today's engine instead (no option got through)
         uint64_t driveNoGate = 0;     // ... of those, with no gate to aim at (past the last one, say)
+        // GucciBot (2026-11-19, orbs lane): the stuck rule's backup plan (see
+        // engageOrbBackup): ideas whose run touched an orb without clicking it
+        // and were run again with a click there, the extra runs and their
+        // ticks, the ideas that kept a click, and the decisions played with one.
+        uint64_t orbIdeas = 0;
+        uint64_t orbRuns = 0;
+        uint64_t orbTicks = 0;
+        uint64_t orbKept = 0;
+        uint64_t orbPlayed = 0;
+        uint64_t orbCapped = 0;  // ... and the decisions whose extra runs ran out (kOrbDecisionRuns)
         uint64_t startTick = 0;
         uint64_t currentTick = 0;
         uint64_t bestTick = 0;
@@ -253,6 +263,13 @@ public:
         int legChanges = 0;
         int legFast = 0;
         float legRoom = 0.0f;
+        // GucciBot (2026-11-19, orbs lane): the stuck rule's backup plan
+        // (evaluateOrbs). The ticks of `inputs` it put an orb click on, the
+        // idea's own script before them (both empty when it added none: always
+        // outside the backup plan), and how long the idea lasted without them.
+        std::vector<int> orbAt;
+        std::vector<TickInput> orbRaw;
+        int orbFrom = -1;
     };
 
     // A decision in progress (decide() works in slices).
@@ -447,6 +464,11 @@ public:
         int passChecked = 0;
         int passChosen = -1;
         bool passDone = false;
+        // GucciBot (2026-11-19, orbs lane): the backup plan's extra runs in
+        // this decision (capped, see kOrbDecisionRuns), and whether the cap
+        // has been logged.
+        int orbRuns = 0;
+        bool orbCapped = false;
     };
 
     struct Anchor {
@@ -522,6 +544,17 @@ public:
     bool trimStep(Decision& d);
     void addCandidate(std::vector<Candidate>& out, std::vector<TickInput> inputs, std::string name, bool held);
     bool evaluate(Candidate& c, int horizon, bool held, std::vector<TraceSample>* trace = nullptr);
+    // GucciBot (2026-11-19, orbs lane): evaluate() while the stuck rule's
+    // backup plan is on (m_orbBackup): the idea is run, and where its copy
+    // touches an orb without clicking it, run again with a click there, a few
+    // ticks of the contact each; the click is kept when the copy lasts longer
+    // with it, and the next orb the kept version touches is tried the same
+    // way, a few orbs at most. What it keeps is part of the idea's inputs.
+    bool evaluateOrbs(Candidate& c, int horizon, bool held, std::vector<TraceSample>* trace,
+                      const Trajectory::SimStart* from);
+    // The stuck rule's backup plan begins (see the definition), once a run.
+    void engageOrbBackup(const std::string& why);
+    bool orbBackupWaits() const { return m_phase == Phase::Restoring || m_restorePending || m_restepping; }
     // Runs made from a kept start, remembered by start and script: a run is a
     // pure function of the two, and the passes and retries of a repair walk the
     // same stops from the same kept starts again. Forgotten whenever a kept
@@ -538,6 +571,11 @@ public:
         Trajectory::Killer killer;
         std::vector<TickInput> script;  // a steered idea's or the search's script
         int claimed = -1;
+        // GucciBot (2026-11-19, orbs lane): a run of the backup plan's
+        // (evaluateOrbs, its own salt): the clicks it added (script then holds
+        // the script with them in it), and how long the idea lasted without.
+        std::vector<int> orbAt;
+        int orbFrom = -1;
     };
     std::unordered_map<uint64_t, RunMemo> m_runMemo;
     // The memo is only cleared when the real game moves, and a walk on a spot
@@ -980,6 +1018,11 @@ public:
     // since the last fork jump while the new route is short of the old best
     // (0: none); its moving on restarts the stuck clock.
     uint64_t m_forkBest = 0;
+    // GucciBot (2026-11-19, orbs lane): the stuck rule's backup plan is on
+    // (engageOrbBackup, once a run, for the rest of it), and the tick the game
+    // stood at when it began. Off, every decision is made as it always was.
+    bool m_orbBackup = false;
+    uint64_t m_orbBackupTick = 0;
     // Frame pacing: a slice takes what is left of a frame at the target
     // frame rate. When the last frame came late the game's own share is
     // taken from it (the time between slices minus the slice) and the next
