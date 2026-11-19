@@ -175,18 +175,21 @@ namespace gucci::lanerules {
 
     // Which counted window a macro click's press (or release) takes. The
     // windows file keys a window by frame, press or release, and player, not
-    // by button. `ownClicks` / `otherClicks`: how many of the macro's clicks,
-    // of this player and of the other one, press (or release) on that frame;
-    // `ownWindow` / `otherWindow`: whether a window is counted there under
-    // each player. Its own player's window first. The other player's only
-    // when that player has no click of its own there (a 1-player level's
-    // dual fixes count under the other flag); in a 2-player level it belongs
-    // to that player's click. Two clicks of one player on one frame (a jump
-    // and a Left or Right) take none: the file doesn't say whose it is.
+    // by button. `ownButtons`: how many different buttons of this player
+    // press (or release) on that frame (two clicks of one button there, a
+    // tap on another's release tick, share its window). `otherClicks`: how
+    // many of the other player's clicks do, leaving out this click's exact
+    // twin (same press, release and button: a 1-player macro's double-flag
+    // copy). `ownWindow` / `otherWindow`: whether a window is counted there
+    // under each player. Its own player's window first. The other player's
+    // only when that player has no click of its own there (a 1-player
+    // level's dual fixes count under the other flag); in a 2-player level it
+    // belongs to that player's click. A jump and a Left or Right of one
+    // player on one frame take none: the file doesn't say whose it is.
     enum class WindowPick : uint8_t { None, Own, Other };
 
-    inline WindowPick pickWindow(int ownClicks, int otherClicks, bool ownWindow, bool otherWindow) {
-        if (ownClicks != 1)
+    inline WindowPick pickWindow(int ownButtons, int otherClicks, bool ownWindow, bool otherWindow) {
+        if (ownButtons != 1)
             return WindowPick::None;
         if (ownWindow)
             return WindowPick::Own;

@@ -940,6 +940,7 @@ namespace gucci {
                 uint32_t pressFrame = 0;
                 uint32_t releaseFrame = 0;
                 bool player2 = false;
+                uint8_t button = 1;  // 1 jump, 2 left, 3 right
                 float pressWindow = 0.f;
                 float releaseWindow = 0.f;
                 // The shifts, in ticks, Calculate found still live (low..high).
