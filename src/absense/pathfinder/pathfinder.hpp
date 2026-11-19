@@ -1000,7 +1000,7 @@ public:
     // GucciBot (2026-11-19, dlfix lane; retryStuck): the next start's kind
     // (setNextStart), this run's (whether GD's full restart began it, and its
     // try: 0, or the stuck rule's retry it is on), and when the run's first
-    // try started (the 60 minutes are for all its tries together).
+    // try started (no new try starts once the run has used 60 minutes).
     bool m_nextFromBeginning = false;
     int m_nextAttempt = 0;
     bool m_fromBeginning = false;

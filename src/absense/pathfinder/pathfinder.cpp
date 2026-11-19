@@ -5642,12 +5642,16 @@ void AbsensePathfinder::giveUp(const std::string& reason) {
 }
 
 // GucciBot (2026-11-19, dlfix lane): the stuck rule's last resort. Where the
-// stuck rule or its 60-minute backstop (tick()) would end a run that GD's full
-// restart began, the run starts over from the level's beginning instead, with
-// a new seed for its random ideas: the same queued start as the Start button's
-// "from the beginning" (absense::requestRetry), so every piece of the search
-// starts fresh. At most kStuckRetries times, and no new try once the run's
-// tries together have used kStuckWallSeconds.
+// stuck rule (tick()) would end a run that GD's full restart began (the Start
+// button with "Start from the beginning" on, a queue, MCP's from_beginning),
+// the run starts over from the level's beginning instead, with a new seed for
+// its random ideas: the same queued start as that switch's (absense::
+// requestRetry), so every piece of the search starts fresh. At most
+// kStuckRetries times, and no new try starts once the run's tries together
+// have used kStuckWallSeconds; a try already under way then runs to its own
+// end (a win, or its own stuck rule), so a run can last 60 minutes plus one
+// try. The 60-minute backstop itself never starts a try over: its stall is
+// counted inside the run's time, so by then the 60 minutes are always used.
 // Why: the random ideas are seeded from the level ID, the tick and the visit
 // (buildCandidates), so a level gets the same random ideas on every run, and an
 // early random win can pick a route the search cannot get past later. On
