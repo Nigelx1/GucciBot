@@ -81,7 +81,7 @@ namespace gucci::ui::pages {
 
         kit::Section("You");
         changed |= kit::SwitchRow("Show yourself as a dot",
-                                  "A yellow dot where the game last tested you, over your icon", &set.point);
+                                  "A dot where the game last tested you, over your icon", &set.point);
         changed |= kit::SwitchRow("Your path", "A thin line through your center, one point a tick", &set.path);
         if (set.path)
             changed |= kit::SliderRow("Path length", "Ticks kept; at 240 TPS, 240 is one second", &set.pathTicks,

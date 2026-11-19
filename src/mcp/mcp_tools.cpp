@@ -2361,7 +2361,9 @@ namespace gucci::mcp {
             "every collision pass of a real player is checked, did GD's own pass kill it against "
             "was its center in a deadly region, whether or not the borders are shown. \"audit\" "
             "reads the counts and the latest disagreements, \"audit_off\" stops it. A death "
-            "noclip saves still counts as GD's. Reads only: nothing in the game changes.",
+            "noclip saves still counts as GD's. The three audit actions also return `colors`: "
+            "each part's color in effect (lethal, touch, special, marks = the path, clicks and dot, "
+            "positions) as #RRGGBBAA. Reads only: nothing in the game changes.",
             schemaOf({{"action", "string", "regions (default), audit, audit_on or audit_off"},
                       {"radius", "integer", "regions: how far from player 1 to list, in level units (default 90)"}}),
             [](matjson::Value const& a) {
@@ -2389,6 +2391,7 @@ namespace gucci::mcp {
                     notes.push(n);
                 out["notes"] = notes;
                 out["shown"] = overlay->settings.show;
+                out["colors"] = overlay->colors();
                 return out;
             },
         });

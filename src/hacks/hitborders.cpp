@@ -64,6 +64,12 @@ namespace gucci {
         constexpr const char* kPartKeys[HitborderOverlay::PartCount] = {"lethal", "touch", "special", "marks",
                                                                          "positions"};
 
+        // The marks' (path, clicks, dot) default until 2026-11-19, packed as
+        // packColour does: yellow, full alpha. load() turns a save holding
+        // exactly this white once, and kMarksWhiteKey records that it ran.
+        constexpr uint32_t kOldMarksDefault = 0xFFFF00FFu;
+        constexpr const char* kMarksWhiteKey = "hitborder_marks_white_once";
+
         // Modifiers Show Hitboxes draws whether or not they are touch
         // triggered (the speed portals among them): the same list.
         constexpr std::array<int, 7> kAlwaysShownModifiers = {200, 201, 202, 203, 1334, 1816, 3643};
@@ -816,11 +822,14 @@ namespace gucci {
             st.rgba[part][3] = 1.f;
         };
         // Sampled from NaN GD's look (RESEARCH.md §1): red #FF0000, blue
-        // #1414FF, green #00FF00, the path and dots yellow.
+        // #1414FF, green #00FF00. The path, its clicks and the dot are white,
+        // as NaN GD's v0.8.1 draws them (Nigel's call, 2026-11-19; they were
+        // yellow until then, and load() turns a save's untouched yellow white
+        // once).
         set(Lethal, 1.f, 0.f, 0.f);
         set(Touch, 20.f / 255.f, 20.f / 255.f, 1.f);
         set(Special, 0.f, 1.f, 0.f);
-        set(Marks, 1.f, 1.f, 0.f);
+        set(Marks, 1.f, 1.f, 1.f);
         // Yellow, as NaN GD's possible positions are.
         set(Positions, 1.f, 1.f, 0.f);
         return st;
@@ -865,6 +874,25 @@ namespace gucci {
         settings.darken = flag("hitborder_darken", def.darken);
         settings.darkness = static_cast<float>(
             std::clamp(mod->getSavedValue<double>("hitborder_darkness", def.darkness), 0.0, 1.0));
+        // The marks' default went from yellow to white (2026-11-19). A save
+        // can't say whether its yellow was picked or never touched: save()
+        // writes every color whenever anything on the card changes, and the
+        // loop below writes the default in for a missing key, so nearly every
+        // save that ever loaded hitborders holds the old yellow. So a save
+        // holding exactly that default (#FFFF00, full alpha) is read as never
+        // picked and turns white, once: kMarksWhiteKey (saved) says this ran,
+        // so a yellow picked again afterwards stays. Any other saved color is
+        // left as it is.
+        if (!mod->getSavedValue<bool>(kMarksWhiteKey, false)) {
+            auto const key = std::string("hitborder_") + kPartKeys[Marks] + "_color";
+            auto const white = static_cast<int64_t>(packColour(def.rgba[Marks]));
+            if (mod->hasSavedValue(key) &&
+                mod->getSavedValue<int64_t>(key, white) == static_cast<int64_t>(kOldMarksDefault)) {
+                mod->setSavedValue<int64_t>(key, white);
+                log::info("[Hitborders] the path's saved color was the old default yellow: now white (once)");
+            }
+            mod->setSavedValue<bool>(kMarksWhiteKey, true);
+        }
         for (int i = 0; i < PartCount; ++i) {
             auto const packed = mod->getSavedValue<int64_t>(std::string("hitborder_") + kPartKeys[i] + "_color",
                                                             packColour(def.rgba[i]));
@@ -1433,6 +1461,13 @@ namespace gucci {
         }
         run.killed = false;
         run.killer = nullptr;
+    }
+
+    matjson::Value HitborderOverlay::colors() const {
+        auto out = matjson::Value::object();
+        for (int i = 0; i < PartCount; ++i)
+            out[kPartKeys[i]] = fmt::format("#{:08X}", packColour(settings.rgba[i]));
+        return out;
     }
 
     matjson::Value HitborderOverlay::describe(float radius) {

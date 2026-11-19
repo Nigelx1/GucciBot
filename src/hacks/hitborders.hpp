@@ -5,7 +5,8 @@
 // gaps it has are what is drawn. Red is where the player's center dies, blue
 // where its box touches something solid (lands, slides, snaps), green orbs,
 // pads, portals and touch triggers. The player's path and clicks are drawn in
-// yellow behind it (the player as a dot too, if asked). Drawn the way NaN GD
+// white behind it (the player as a dot too, if asked; yellow until
+// 2026-11-19, when Nigel made them white like NaN GD's). Drawn the way NaN GD
 // draws his (2026-11-10, Nigel: "jus do it like him"): used orbs, pads and
 // portals stay drawn, the path is half as thick as the outlines, no dot by
 // default, and the level darkened under the borders so they stand out.
@@ -53,7 +54,7 @@ namespace gucci {
             bool useTilt = true;    // rotated objects against the icon's tilt
             bool merged = true;     // one outline around overlapping regions
             bool player2 = true;    // player 2's own borders, as outlines, where they differ from player 1's
-            bool point = false;     // the player as a yellow dot (NaN's videos have none)
+            bool point = false;     // the player as a dot, in the marks' color (NaN's videos have none)
             bool path = true;       // the player's own path, one point a tick
             int pathTicks = 240;
             bool clicks = true;     // a dot where the player pressed, a ring where it let go
@@ -75,6 +76,9 @@ namespace gucci {
         Settings settings;
         static Settings defaults();
         static const char* partLabel(Part part);
+        // The colors in effect, by saved key (lethal, touch, special, marks,
+        // positions) as "#RRGGBBAA", for gucci_hitborders.
+        matjson::Value colors() const;
         void load();
         void save() const;
         // Show hitborders, flipped by the keybind and saved.

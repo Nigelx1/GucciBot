@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-19-c (Possible positions: NaN GD's yellow band of where a macro's player could be, off by default)"
+    "2026-11-19-d (Hitborders path line defaults to white, like NaN GD's; a save with the old untouched yellow turns white once)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
