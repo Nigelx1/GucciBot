@@ -174,9 +174,11 @@ namespace gucci::trainers::lane {
             g_settingsLoaded = true;
             auto* mod = Mod::get();
             Settings const d;
-            g_settings.style = mod->getSavedValue<int64_t>("trainer_lane_style", (int64_t)d.style) == 1
-                                   ? Style::Classic
-                                   : Style::Lane;
+            // Classic unless Lane was picked and saved (0): the old bar is the
+            // default since 2026-11-18.
+            g_settings.style = mod->getSavedValue<int64_t>("trainer_lane_style", (int64_t)d.style) == 0
+                                   ? Style::Lane
+                                   : Style::Classic;
             g_settings.leadTicks =
                 (int)std::clamp<int64_t>(mod->getSavedValue<int64_t>("trainer_lane_lead", d.leadTicks), 24, 960);
             g_settings.size = std::clamp((float)mod->getSavedValue<double>("trainer_lane_size", d.size), 0.6f, 2.f);

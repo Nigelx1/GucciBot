@@ -14,7 +14,8 @@
 // The drawing is ui/pages/trainer_lane.cpp. trainers/trainer_core feeds it
 // every press and release the bar takes, and every rewind.
 //
-// The old bar stays, as "Classic" (Settings: style).
+// The old bar stays, as "Classic" (Settings: style), and is the default
+// (Nigel, 2026-11-18: "make them an option with the old thing").
 
 #include "trainers/lane_rules.hpp"
 #include "trainers/trainer_core.hpp"
@@ -33,7 +34,9 @@ namespace gucci::trainers::lane {
 
     // Shared by both trainers. Saved as trainer_lane_*.
     struct Settings {
-        Style style = Style::Lane;
+        // Classic, the old bar, unless the player picked Lane (a saved
+        // style wins).
+        Style style = Style::Classic;
         // Ticks of lead: how far ahead of the hit marker the lane shows, at
         // the macro's tick rate (or the game's, in the level).
         int leadTicks = 300;

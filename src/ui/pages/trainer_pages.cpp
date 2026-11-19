@@ -42,6 +42,7 @@ namespace gucci::ui::pages {
         namespace fs = std::filesystem;
         namespace gfile = geode::utils::file;
         namespace tr = gucci::trainers;
+        namespace ln = gucci::trainers::lane;
         using tr::Kind;
 
         constexpr float kBarH = 92.f;
@@ -199,8 +200,13 @@ namespace gucci::ui::pages {
 
             double const span = std::max(0.5, (double)s.barWindowSec);
             double const pxPerSec = w / span;
-            double const left = s.posSec - span * 0.5;
-            double const right = s.posSec + span * 0.5;
+            // Centered on the clock as it is drawn (in the level, the tick the
+            // game is on now, not posSec from the start of the frame, which
+            // was a frame behind), as the lane is. Skimming below still moves
+            // posSec itself.
+            double const center = ln::now(k);
+            double const left = center - span * 0.5;
+            double const right = center + span * 0.5;
             auto x = [&](double t) { return p0.x + (float)((t - left) * pxPerSec); };
 
             // Skimming: the clock follows the mouse while the bar is held.
@@ -330,7 +336,6 @@ namespace gucci::ui::pages {
         // 720p, 1080p and 1440p. trainers/lane.* has the rules; this draws
         // them.
 
-        namespace ln = gucci::trainers::lane;
         using LTier = gucci::lanerules::Tier;
         using LVerdict = gucci::lanerules::Verdict;
 
@@ -1476,12 +1481,14 @@ namespace gucci::ui::pages {
                                &s.barLoop))
                 tr::saveSettings(k);
             {
-                int style = (int)ln::settings().style;
-                const char* const styles[] = {"Lane", "Classic"};
-                if (kit::DropdownRow("Style", "Lane: notes scroll into a hit marker, sized by their window. "
-                                              "Classic: the old bar, the macro's clicks over yours.",
+                // Classic first: the default (the saved value is still the
+                // Style enum: 0 Lane, 1 Classic).
+                int style = ln::settings().style == ln::Style::Lane ? 1 : 0;
+                const char* const styles[] = {"Classic", "Lane"};
+                if (kit::DropdownRow("Style", "Classic: the bar, the macro's clicks over yours. Lane: notes scroll "
+                                              "into a hit marker, sized by their window.",
                                      &style, styles, 2)) {
-                    ln::settings().style = (ln::Style)style;
+                    ln::settings().style = style == 1 ? ln::Style::Lane : ln::Style::Classic;
                     ln::saveSettings();
                 }
             }
