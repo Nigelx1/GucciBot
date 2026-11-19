@@ -480,23 +480,6 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setForkDual(wantBool("pf_fork_dual", val));
                              }});
-                // GucciBot (2026-11-19, dlfix lane): TEST-ONLY knobs for the
-                // Deadlocked stall experiments (glue.hpp), this launch only.
-                v.push_back({"pf_seed_salt", "int", Store::Memory,
-                             [] { return matjson::Value(static_cast<int64_t>(absense::seedSalt())); },
-                             [](matjson::Value const& val, bool) {
-                                 absense::setSeedSalt(static_cast<int>(wantInt("pf_seed_salt", val, 0, 1000000)));
-                             }});
-                v.push_back({"pf_widen_seconds", "number", Store::Memory,
-                             [] { return matjson::Value(absense::widenSeconds()); },
-                             [](matjson::Value const& val, bool) {
-                                 absense::setWidenSeconds(wantNumber("pf_widen_seconds", val, 0.0, 60.0));
-                             }});
-                v.push_back({"pf_rescue_mult", "number", Store::Memory,
-                             [] { return matjson::Value(absense::rescueMult()); },
-                             [](matjson::Value const& val, bool) {
-                                 absense::setRescueMult(wantNumber("pf_rescue_mult", val, 1.0, 16.0));
-                             }});
                 // The cell-by-cell write-back on a level with rows (on by
                 // default); off for the old pass of everything, to compare.
                 v.push_back({"pf_pending_cells", "bool", Store::Memory,

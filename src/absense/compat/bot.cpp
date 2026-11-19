@@ -683,38 +683,6 @@ void absense::setForkDual(bool on) {
     g_forkDual = on;
 }
 
-namespace {
-// GucciBot (2026-11-19, dlfix lane): TEST-ONLY knobs (see glue.hpp); the
-// defaults are today's behavior.
-int g_seedSalt = 0;
-double g_widenSeconds = 0.0;
-double g_rescueMult = 1.0;
-}
-
-int absense::seedSalt() {
-    return g_seedSalt;
-}
-
-void absense::setSeedSalt(int salt) {
-    g_seedSalt = salt;
-}
-
-double absense::widenSeconds() {
-    return g_widenSeconds;
-}
-
-void absense::setWidenSeconds(double seconds) {
-    g_widenSeconds = seconds;
-}
-
-double absense::rescueMult() {
-    return g_rescueMult;
-}
-
-void absense::setRescueMult(double mult) {
-    g_rescueMult = mult;
-}
-
 bool absense::pendingVerify() {
     return world::g_pendingVerify;
 }

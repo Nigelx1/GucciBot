@@ -980,12 +980,6 @@ public:
     // since the last fork jump while the new route is short of the old best
     // (0: none); its moving on restarts the stuck clock.
     uint64_t m_forkBest = 0;
-    // GucciBot (2026-11-19, dlfix lane; the TEST-ONLY knob pf_widen_seconds):
-    // the stuck rule's one jump to the knob's reach was used this run, and
-    // escalate() is making that jump now.
-    bool m_lrWidenUsed = false;
-    bool m_lrWidenJump = false;
-    bool m_lrWidenPending = false;  // ... set while no repair was active: the next one (beginRepair) jumps
     // Frame pacing: a slice takes what is left of a frame at the target
     // frame rate. When the last frame came late the game's own share is
     // taken from it (the time between slices minus the slice) and the next
