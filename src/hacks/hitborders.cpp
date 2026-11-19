@@ -46,6 +46,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <deque>
@@ -714,6 +715,7 @@ namespace gucci {
         // each lane's fill, then its own outline.
         void paintPositions(State& s, HitborderOverlay::Settings const& set, float width, float scale,
                             hb::Rect const& cull) {
+            auto const t0 = std::chrono::steady_clock::now();
             bool const merged = s.useMerged;
             CCDrawNode*& node = merged ? s.posMerged : s.posPlain;
             if (!node) {
@@ -789,7 +791,9 @@ namespace gucci {
             }
             s.havePositions = true;
             s.positionsMerged = merged;
-            positions::noteDrawn(quads, segments);
+            positions::noteDrawn(
+                quads, segments,
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
         }
 
     } // namespace

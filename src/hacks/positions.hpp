@@ -61,8 +61,9 @@ namespace gucci::positions {
     // Everything dropped (the level going, the switch off).
     void clear();
 
-    // hitborders.cpp, after it emitted the band for a frame.
-    void noteDrawn(int quads, int segments);
+    // hitborders.cpp, after it emitted the band for a frame (`ms`: the CPU
+    // time that took).
+    void noteDrawn(int quads, int segments, double ms);
 
     // Tunables for tests (gucci_test_set; not saved).
     float& budgetMs();

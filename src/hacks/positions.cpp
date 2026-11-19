@@ -64,6 +64,8 @@ namespace gucci::positions {
             uint64_t framesDrawn = 0;
             int lastQuads = 0;
             int lastSegments = 0;
+            double drawMsTotal = 0.0;
+            double drawMsMax = 0.0;
         };
 
         struct RealSample {
@@ -440,11 +442,13 @@ namespace gucci::positions {
         s.key = Key{};
     }
 
-    void noteDrawn(int quads, int segments) {
+    void noteDrawn(int quads, int segments, double ms) {
         auto& c = g().counters;
         c.framesDrawn++;
         c.lastQuads = quads;
         c.lastSegments = segments;
+        c.drawMsTotal += ms;
+        c.drawMsMax = std::max(c.drawMsMax, ms);
     }
 
     float& budgetMs() {
@@ -471,6 +475,8 @@ namespace gucci::positions {
         out["draw_nodes"] = HitborderOverlay::get()->positionsNodesMade();
         out["drawing"] = shouldDraw();
         out["frame"] = static_cast<int64_t>(gb->updater.getFrame());
+        // Drawn frames so far (cocos' count), for a frame rate over a stretch.
+        out["director_frames"] = static_cast<int64_t>(CCDirector::get()->getTotalFrames());
         out["budget_ms"] = static_cast<double>(s.budgetMs);
         out["lookahead_s"] = static_cast<double>(s.lookaheadSec);
         out["inputs"] = static_cast<int64_t>(s.inputs.size());
@@ -490,6 +496,9 @@ namespace gucci::positions {
         c["frames_drawn"] = static_cast<int64_t>(s.counters.framesDrawn);
         c["last_quads"] = static_cast<int64_t>(s.counters.lastQuads);
         c["last_segments"] = static_cast<int64_t>(s.counters.lastSegments);
+        c["draw_ms_avg"] = s.counters.framesDrawn ? s.counters.drawMsTotal / static_cast<double>(s.counters.framesDrawn)
+                                                  : 0.0;
+        c["draw_ms_max"] = s.counters.drawMsMax;
         out["counters"] = c;
 
         auto list = matjson::Value::array();
