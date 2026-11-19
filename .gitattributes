@@ -4,3 +4,5 @@
 tools/testdata/** -text
 tools/testdata/**/*.png binary
 tools/testdata/**/*.rgba binary
+# The AI's built-in network (resources/ai/pilot.gbnn): raw weights, never text.
+*.gbnn binary

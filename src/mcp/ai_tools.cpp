@@ -167,11 +167,11 @@ namespace gucci::mcp {
         server.addTool({
             "gucci_ai_reload",
             "Load the AI's networks again: pilot.gbnn, critic.gbnn and reader.gbnn from AI_ROOT\\weights (else the "
-            "copies shipped with the mod in resources/ai; none are shipped yet). A network trained for another "
+            "copies shipped with the mod: only pilot.gbnn ships, the built-in AI). A network trained for another "
             "layout is refused, and the answer says which layout it was trained for. `dir` loads from another "
             "folder for the rest of this launch (relative: under AI_ROOT; \"\" goes back to the default, which "
             "is GUCCIBOT_AI_WEIGHTS when the game was started with it). Returns {models: [{name, loaded, "
-            "path, layout_hash, inputs, outputs, error}], pilot_loaded, critic_loaded, reader_loaded, obs_layout_hash, "
+            "path, built_in, layout_hash, inputs, outputs, error}], pilot_loaded, critic_loaded, reader_loaded, obs_layout_hash, "
             "tape_layout_hash, weights_dir, summary}.",
             schemaFor({{"dir", "string", "the weights folder for this launch (default: unchanged)"}}),
             [](matjson::Value const& a) {
@@ -186,8 +186,8 @@ namespace gucci::mcp {
             "The AI pilot plays the open level in its own session of GD's physics: the real game is restarted and "
             "held at its start, then the pilot plays tick by tick. By default (practice false) the network alone "
             "plays: attempt 1 is its greedy best guess, later attempts start over from the level's start and sample "
-            "from its own odds at `temperature`; max_attempts 1 is a cold exam. With practice true (the old "
-            "hand-written practice rules, kept for comparison only): on each death it names the cause, "
+            "from its own odds at `temperature`; max_attempts 1 is a cold exam. With practice true (hand-written "
+            "practice rules: the Pathfinder page's Practice switch): on each death it names the cause, "
             "picks the decision most likely to be the mistake (the critic's advantage, or without a critic the "
             "pilot's least-sure decisions near its last presses and releases, most recent first), changes it and "
             "goes again from a saved state just before it. A finished run is saved as a GucciBot macro and played "
@@ -199,7 +199,7 @@ namespace gucci::mcp {
                        {"save_macro", "string", "name of the macro a finished run is saved as (default AI - <level>)"},
                        {"log_practice", "boolean", "write practice logs to AI_ROOT\\practice (default false)"},
                        {"judge", "boolean", "play a finished run in the real game to confirm it (default true)"},
-                       {"practice", "boolean", "use the old hand-written practice rules (default false: the network alone)"},
+                       {"practice", "boolean", "use the hand-written practice rules, the page's Practice (default false: the network alone)"},
                        {"temperature", "number", "network alone: sampling temperature of attempts after the first (default 1)"}}),
             [](matjson::Value const& a) {
                 requireNoOwner();

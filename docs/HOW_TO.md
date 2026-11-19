@@ -245,7 +245,7 @@ In a test on Stereo Madness it took about 2 minutes. Harder levels can take much
 - A run that makes 300 decisions in a row without getting any further stops and says where. It counts the search's own work, not time, so whether a run stops depends much less on how fast or busy your PC is (not entirely: an hour on the clock without getting further also stops a run, and a few spots don't always go the same way from run to run). On a hard spot giving up can take 20 minutes or more, so in a queue a level the search can't beat often uses up its whole time limit.
 - **Remember solutions** (off by default) lets it reuse what got past a spot last time.
 - **Rotate triggers (experimental)** (off by default, Windows only) makes its copy of the game turn rotating blocks the way the game does. On some levels that makes the search slower, so it's off **(new in 2.0)**.
-- The **AI** engine is still early. This download has no trained AI, so **AI** shows "No trained AI yet" and its **Start** stays grayed out. Use **Search (old)**.
+- The **AI** engine is an early AI: a small network, trained on human play, decides each click. It comes with the mod, so its **Start** works, but it's weak and beats very few levels. Turn on **Practice** and it keeps trying a level: after each death it changes the decision most likely to be the mistake and tries again from just before it. To get a level done, use **Search (old)**.
 
 How good is it? In Claude's test runs it beat Stereo Madness, Clubstep, Theory of Everything 2, Deadlocked, The Nightmare, Bloodbath, Slaughterhouse and Forest Temple from scratch. It can't beat everything yet: GRIEF, LIMBO, ORBIT and Heliopolis are still out of reach. A Pathfinder run counts as a cheat.
 

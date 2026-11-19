@@ -64,6 +64,7 @@ namespace gucci::ai::pilot {
             net::Net net;
             std::string path;
             std::string error;
+            bool builtIn = false;  // the copy that ships with the mod, not the user's own
         };
 
         struct Models {
@@ -78,13 +79,25 @@ namespace gucci::ai::pilot {
             return m;
         }
 
-        fs::path findWeights(char const* name) {
+        // The user's own first (weightsDir()), else the copy that ships with the
+        // mod. GucciBot (2026-11-19): the pilot ships from 2.0 on, so the AI
+        // engine's Start works without training anything (Nigel: "whats the
+        // point of even having the interface if its greyed out"). Its source is
+        // resources/ai/pilot.gbnn; Geode puts every resource file straight in
+        // the mod's resources folder, so the package holds it at
+        // resources/nigelx1.guccibot/pilot.gbnn and it is found in `res`.
+        fs::path findWeights(char const* name, bool& builtIn) {
             std::error_code ec;
+            builtIn = false;
             std::string const file = std::string(name) + ".gbnn";
+            if (auto const own = weightsDir() / file; fs::is_regular_file(own, ec)) return own;
             fs::path const res = gucci::stdPath(Mod::get()->getResourcesDir());
-            for (fs::path const& dir : {weightsDir(), res / "ai", res}) {
+            for (fs::path const& dir : {res / "ai", res}) {
                 auto const p = dir / file;
-                if (fs::is_regular_file(p, ec)) return p;
+                if (fs::is_regular_file(p, ec)) {
+                    builtIn = true;
+                    return p;
+                }
             }
             return {};
         }
@@ -93,7 +106,7 @@ namespace gucci::ai::pilot {
             m.net = net::Net();
             m.path.clear();
             m.error.clear();
-            auto const p = findWeights(m.name);
+            auto const p = findWeights(m.name, m.builtIn);
             if (p.empty()) {
                 m.error = fmt::format("no {}.gbnn", m.name);
                 return;
@@ -122,6 +135,7 @@ namespace gucci::ai::pilot {
             o["name"] = m.name;
             o["loaded"] = m.net.loaded();
             o["path"] = m.path.empty() ? matjson::Value(nullptr) : matjson::Value(m.path);
+            o["built_in"] = !m.path.empty() && m.builtIn;
             if (m.net.loaded()) {
                 o["layout_hash"] = m.net.layoutHash();
                 o["kind"] = m.net.kind() == net::Kind::Mlp ? "mlp" : "conv1d";
@@ -442,13 +456,12 @@ namespace gucci::ai::pilot {
                 m_running = true;
                 m_freeRng = ((uint64_t)m_levelId * 0x100000001B3ull) ^ 0xD1B54A32D192ED03ull;
                 if (opt.practice)
-                    say(fmt::format("Playing {} with the pilot and the old practice rules (comparison only){}; up to {} "
-                                    "attempts and {:.0f} seconds.",
+                    say(fmt::format("Playing {} with the AI and Practice{}; up to {} attempts and {:.0f} seconds.",
                                     m_levelName,
                                     m_critic ? ", the critic picking mistakes" : ", mistakes picked from the pilot's own doubts",
                                     opt.maxAttempts, opt.maxSeconds));
                 else
-                    say(fmt::format("Playing {} with the network alone, no practice rules: attempt 1 is its best guess, "
+                    say(fmt::format("Playing {} with the AI alone, no Practice: attempt 1 is its best guess, "
                                     "later attempts start over and sample from its own odds. Up to {} attempts and {:.0f} "
                                     "seconds.",
                                     m_levelName, opt.maxAttempts, opt.maxSeconds));
@@ -1282,12 +1295,18 @@ namespace gucci::ai::pilot {
         if (!M.tried) reload();
         if (!M.pilot.net.loaded()) {
             if (M.pilot.path.empty())
-                return fmt::format("No trained AI yet: there is no pilot.gbnn in {}. The trainer (tools/ai) puts it "
-                                   "there; then press Reload.",
+                return fmt::format("No trained AI: there is no pilot.gbnn in {}, and the built-in one is missing from "
+                                   "the mod's files. The trainer (tools/ai) puts one there; then press Reload.",
                                    utf8(weightsDir()));
+            if (M.pilot.builtIn) return fmt::format("The built-in AI can't be used: {}", M.pilot.error);
             return fmt::format("The pilot in {} can't be used: {}", M.pilot.path, M.pilot.error);
         }
-        std::string s = fmt::format("Pilot loaded ({}).", M.pilot.path);
+        // GucciBot (2026-11-19): names the network in use. The built-in one is
+        // the AI loop's network of 2026-11-15: imitation of human macros
+        // (11-03), then reinforcement learning on its own runs (11-10), then
+        // more on Stereo Madness practice (11-15).
+        std::string s = M.pilot.builtIn ? std::string("Built-in AI (trained on human play, then on its own runs, Nov 2026).")
+                                        : fmt::format("Your own AI: pilot loaded ({}).", M.pilot.path);
         if (M.critic.net.loaded()) s += " Critic loaded.";
         else s += " No critic: mistakes are picked from the pilot's own doubts.";
         return s;
@@ -1342,9 +1361,11 @@ namespace gucci::ai::pilot {
     }
 
     // GucciBot (2026-11-09): the search engine is the default until a trained
-    // network ships in the package (Nigel's call). None does yet, so with AI as
+    // network ships in the package (Nigel's call). None did then, so with AI as
     // the default a new install's Pathfinder page opened on "No trained AI yet"
     // with Start greyed out. Someone who picked an engine keeps their pick.
+    // 2026-11-19: one ships now (findWeights), and the search stays the
+    // default for 2.0: it is far stronger than this early AI.
     bool engineAi() {
         return Mod::get()->getSavedValue<bool>("pf_engine_ai", false);
     }

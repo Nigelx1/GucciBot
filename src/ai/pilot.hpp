@@ -39,14 +39,16 @@ namespace gucci::ai::pilot {
     void setWeightsDir(std::string const& dir);
 
     // Loads pilot.gbnn, critic.gbnn and reader.gbnn from weightsDir(), else
-    // the copies shipped with the mod (resources/ai; none yet). A network
-    // trained for another layout is refused with a message saying which.
-    // Returns {models: [...], pilot_loaded, critic_loaded, reader_loaded,
-    // obs_layout_hash, tape_layout_hash, weights_dir}.
+    // the copies shipped with the mod (resources/ai: only pilot.gbnn ships,
+    // since 2026-11-19). A network trained for another layout is refused with
+    // a message saying which. Returns {models: [...] (each with built_in),
+    // pilot_loaded, critic_loaded, reader_loaded, obs_layout_hash,
+    // tape_layout_hash, weights_dir}.
     matjson::Value reload();
     // The pilot is loaded (loads once on first ask).
     bool ready();
-    // One plain line for the menu: what is loaded, or why nothing is.
+    // One plain line for the menu: which pilot is loaded (the built-in one or
+    // the user's own), or why none is.
     std::string weightsLine();
     // The loaded pilot for the other AI jobs (the rollout), or null; its
     // hold_logit output and the file it came from.
@@ -79,7 +81,7 @@ namespace gucci::ai::pilot {
     Live const& live();
     void setLiveJob(int id);
 
-    // The Pathfinder page's engine: the AI (default) or the old search.
+    // The Pathfinder page's engine: the AI or the search (the default).
     bool engineAi();
     void setEngineAi(bool on);
 

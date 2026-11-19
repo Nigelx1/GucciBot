@@ -50,7 +50,8 @@
       "resources/brand/*.png",
       "resources/ffmpeg_libs/*.dll",
       "resources/ffmpeg_libs/*.dylib",
-      "resources/fw_assets/*.wav"
+      "resources/fw_assets/*.wav",
+      "resources/ai/pilot.gbnn"
     ]
   },
   "tags": [

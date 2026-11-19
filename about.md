@@ -84,7 +84,7 @@ What still needs Windows:
 
 Makes a macro for you. Open a level with nothing recorded, start Pathfinder, and it plays the level itself until it reaches the end -- then saves that run as a macro named after the level.
 
-Pick the engine at the top of the Pathfinder page. **Search (old)** is the default, and it's the one that plays today. Under it, **Search** picks one of its two searches, Absense or Classic (both below). **AI** is the part still being built for 2.0: trained networks meant to play the level and practice it. No trained network ships with the mod yet, so with AI picked the page says so and its Start stays grayed out.
+Pick the engine at the top of the Pathfinder page. **Search (old)** is the default, and by far the stronger one. Under it, **Search** picks one of its two searches, Absense or Classic (both below). **AI** is an early AI: a small network, trained on human play and then on its own runs, decides each click. It comes with the mod, so its Start works, but it's weak and beats very few levels. **Practice** keeps it trying a level: after each death it changes the decision most likely to be the mistake and tries again from just before it.
 
 **Absense** (Search's default) — Absent's pathfinder from Absense, ported in whole.
 

@@ -2392,7 +2392,9 @@ namespace gucci::ui {
 
         // The AI pilot (stage D of the AI build, 2026-11-02): trained networks
         // play and practice the level in its own session of GD's physics. It
-        // never touches the old search below.
+        // never touches the old search below. GucciBot (2026-11-19): a network
+        // ships with the mod (ai/pilot.cpp findWeights), so Start works without
+        // training anything, and the page says plainly how weak it is.
         std::string g_aiError;  // why the last Start was refused
 
         void aiPathfinder() {
@@ -2409,6 +2411,9 @@ namespace gucci::ui {
                 }
             }
             bool const ready = pilot::ready();
+            kit::Hint("An early AI: a small network, trained on human play, decides each click. It's weak and beats "
+                      "very few levels. Practice (below) keeps it trying a level. To get a level done, use Search "
+                      "(old): it's much stronger.");
             kit::Note(pilot::weightsLine().c_str(), ready ? Tone::Muted : Tone::Warn);
             int attempts = std::clamp(geode::Mod::get()->getSavedValue<int>("pf_ai_max_attempts", 50000), 1, 1000000);
             int seconds = std::clamp(geode::Mod::get()->getSavedValue<int>("pf_ai_max_seconds", 300), 10, 3600);
@@ -2417,14 +2422,17 @@ namespace gucci::ui {
             if (kit::SliderRow("Time limit", "It stops after this long", &seconds, 10, 3600, "%d s"))
                 geode::Mod::get()->setSavedValue("pf_ai_max_seconds", seconds);
             bool oldRules = geode::Mod::get()->getSavedValue<bool>("pf_ai_old_practice", false);
-            if (kit::SwitchRow("Old practice rules", "For comparison only: hand-written rules pick a decision to change "
-                               "after each death", &oldRules))
+            // 2026-11-19: was "Old practice rules", "For comparison only"; the
+            // same switch and saved value (off by default), named for what it
+            // does now that it's the way the built-in AI finishes a level.
+            if (kit::SwitchRow("Practice", "After each death, hand-written rules change the decision most likely to "
+                               "be the mistake and try again from just before it, keeping what gets further", &oldRules))
                 geode::Mod::get()->setSavedValue("pf_ai_old_practice", oldRules);
-            kit::Hint(oldRules ? "Now: the network plays, and after each death the old hand-written rules change one of "
-                                 "its decisions and retry from just before it."
-                               : "Now: the network plays alone. Attempt 1 is its best guess; each later attempt starts "
-                                 "over and lets it try its own less likely choices. It gets better from training, not "
-                                 "from rules.");
+            kit::Hint(oldRules ? "Now: the AI plays, and after each death Practice changes one of its decisions and "
+                                 "tries again from just before it."
+                               : "Now: the AI plays alone. Attempt 1 is its best guess; each later attempt starts "
+                                 "over and lets it try its own less likely choices. The network itself doesn't "
+                                 "change while it plays.");
             kit::RowBegin("", nullptr);
             if (!running) {
                 ImGui::BeginDisabled(!PlayLayer::get() || !ready || legit::on());  // a pathfinder run is a cheat
@@ -2506,8 +2514,8 @@ namespace gucci::ui {
             ImGui::BeginDisabled(anyRun);
             if (kit::ChoiceRow("Engine",
                                anyRun ? "Stop the run first"
-                                      : "AI: trained networks play the level and practice it. Search (old): the "
-                                        "searches from before the AI",
+                                      : "AI: an early, weak AI; a small trained network decides each click. Search "
+                                        "(old): the searches from before the AI, and much stronger",
                                &brain, brains, 2))
                 gucci::ai::pilot::setEngineAi(brain == 0);
             ImGui::EndDisabled();

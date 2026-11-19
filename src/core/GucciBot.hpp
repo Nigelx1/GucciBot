@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-19-d (Hitborders path line defaults to white, like NaN GD's; a save with the old untouched yellow turns white once)"
+    "2026-11-19-e (AI engine ships with a built-in network: Start works without training anything; the page says plainly it is an early, weak AI, and Old practice rules is now Practice)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
