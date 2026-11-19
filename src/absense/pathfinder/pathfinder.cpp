@@ -1214,12 +1214,16 @@ void AbsensePathfinder::tick() {
             // Not on the 60-minute backstop: that one is there so nothing runs
             // forever, and it keeps counting through the backup plan. While a
             // restore is under way the plan waits for it to land (the stop and
-            // its lines wait with it); the slice goes on as usual meanwhile.
+            // its lines wait with it; the slice goes on as usual meanwhile) -
+            // but never past the backstop's 60 minutes, which the rules above
+            // do not reach once the work rule has fired: a restore that never
+            // lands still ends the run.
             const bool backup = !m_orbBackup && !backstop;
-            if (!backup || !orbBackupWaits()) {
+            const bool waits = backup && orbBackupWaits();
+            if (!waits || m_stuckWallSeconds >= kStuckWallSeconds) {
                 log("%s: the furthest it got has not moved on (%llu decisions, %.0f s)", why.c_str(),
                     (unsigned long long)tries, m_stuckWallSeconds);
-                if (backup) {
+                if (backup && !waits) {
                     engageOrbBackup(why);
                     return;
                 }
@@ -5978,13 +5982,20 @@ void AbsensePathfinder::engageOrbBackup(const std::string& why) {
     m_decision = Decision{};
     m_pairSecondPass = false;
     m_probe = Probe{};
+    // A jump back still to be made (a probe's way on, a fork or route jump) is
+    // dropped, and the forced decision it was going back for with it.
     m_goTo = UINT64_MAX;
+    m_forkForceAt = UINT64_MAX;
+    m_forceRouteAt = UINT64_MAX;
 
     m_orbBackup = true;
     const uint64_t now = currentTick();
     m_orbBackupTick = now;
     m_stuckDecisions = m_stats.decisions;
     if (!absense::stuckWork()) m_stuckWallSeconds = 0.0;
+    // From here only the best tick moving on starts the count over (a fork
+    // jump's new route counted its own furthest too: pf_fork_dual).
+    m_forkBest = 0;
 
     const double scale = std::max(1.0, bot->updater().getTps() / 240.0);
     // In realtime the game can stand a tick or two past where the walk began.
