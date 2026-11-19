@@ -896,6 +896,15 @@ bool AbsensePathfinder::adoptRunBest() {
     m_stats.bestTick = m_runBest.tick;
     m_stats.bestX = m_runBest.x;
     m_stats.bestProgress = m_runBest.progress;
+    // The message says so too: its stuck place and clicks a second are this
+    // try's, the percent and the saved path the earlier try's. It goes before
+    // " - furthest path saved as <name>", which the queue reads the name from.
+    static constexpr const char* kOrdinal[] = {"first", "second", "third", "fourth"};
+    static_assert(kStuckRetries < 4, "one word for each try");
+    const int which = m_runBest.attempt;
+    if (which >= 0 && which < 4)
+        m_stats.message += fmt::format(" - the run's {} try got furthest ({:.2f}%)", kOrdinal[which],
+                                       m_runBest.progress * 100.0);
     m_runBest = RunBest{};  // kept once
     return true;
 }
