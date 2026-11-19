@@ -68,10 +68,11 @@ namespace gucci::ui::pages {
             kit::LegitGate gate;  // it shows the way: a cheat while it's on
             changed |= kit::SwitchRow(
                 "Possible positions",
-                "While a macro plays, a yellow band ahead of you: everywhere your center could be if each click "
-                "landed anywhere in its frame window (Calculate's window when the macro has one, otherwise 4 ticks "
-                "either way), with the clicks after it kept where they are. It's widest where the timing matters "
-                "least and pinches where the timings meet again. It's an estimate: hidden copies of your player "
+                "While a macro plays, a yellow band ahead of you: where your center could go if one click at a "
+                "time landed anywhere in its frame window (Calculate's window when the macro has one, otherwise 4 "
+                "frames either way), with every other click kept where it is, so two clicks off at once can take "
+                "you outside it. It's widest where a click's timing moves you the most and pinches where the "
+                "timings land you in the same spot again. It's an estimate: hidden copies of your player "
                 "run each timing, not the real game, and moving objects are only approximated (more so off "
                 "Windows). Player 1 only, and not in platformer yet. It shows the way, so it counts as a cheat "
                 "while it's on. Possible positions were NaN GD's idea too; he isn't involved",

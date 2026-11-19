@@ -1,9 +1,9 @@
 #pragma once
 
 // Possible positions (Hitborders card; NaN GD's idea, he isn't involved): a
-// yellow band ahead of player 1 while a macro plays, everywhere its center
-// could be if each click landed anywhere in its frame window, with the clicks
-// after it kept where the macro has them.
+// yellow band ahead of player 1 while a macro plays: where its center could
+// go if one click at a time landed anywhere in its frame window, with every
+// other click kept where the macro has it.
 //
 // It's an estimate from the copies of the player (analysis/trajectory.hpp,
 // survivesScript, on Absense's simulation), not the real game: for each
