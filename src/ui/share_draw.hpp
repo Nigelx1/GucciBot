@@ -55,6 +55,11 @@ namespace gucci::ui::share {
         std::string kicker = "FRAME WINDOWS";  // the small line over the level name
         std::string level;                     // the level's name
         std::string details;                   // "ID 1234 · macro name · 448 inputs · 240 TPS"
+        // GucciBot (2026-11-17): set when the windows aren't legit (GD 2.2091's
+        // Ignore Damage was on while they were counted): drawn in red in the
+        // kicker's place, with the top edge red, so a picture can't pass for
+        // a legit one.
+        std::string warning;
 
         std::vector<Band> bands;
         std::string countedLine;  // "1,234 windows counted"

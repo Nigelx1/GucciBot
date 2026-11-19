@@ -7,6 +7,7 @@
 #include "tools/share_bundle.hpp"
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
+#include "hacks/keybinds.hpp"
 #include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
 #include "ui/ui.hpp"
@@ -53,6 +54,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <cmath>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -190,6 +192,8 @@ namespace gucci::ui {
             look().textScale = static_cast<float>(mod->getSavedValue<double>("ui_text_scale", 1.0));
             look().effects = mod->getSavedValue<bool>("ui_effects", true);
             look().accentCycle = mod->getSavedValue<bool>("theme_glow_cycle", false);
+            look().menuOpacity = std::clamp(static_cast<float>(mod->getSavedValue<double>("ui_menu_opacity", 1.0)),
+                                            Look::kMinMenuOpacity, 1.f);
             layout::load();
 #if defined(GEODE_IS_MOBILE)
             look().menuScale = static_cast<float>(mod->getSavedValue<double>("ui_menu_scale", 1.0));
@@ -275,6 +279,7 @@ namespace gucci::ui {
         if (!g_test.effects)
             mod->setSavedValue("ui_effects", look().effects);
         mod->setSavedValue("theme_glow_cycle", look().accentCycle);
+        mod->setSavedValue<double>("ui_menu_opacity", look().menuOpacity);
 #if defined(GEODE_IS_MOBILE)
         mod->setSavedValue<double>("ui_menu_scale", look().menuScale);
 #endif
@@ -328,6 +333,38 @@ namespace gucci::ui {
         g_captureTarget = nullptr;
         saveSettings();
         return true;
+    }
+
+    bool ctrlHeld() {
+        // The game keyboard's Ctrl (hacks/keybinds.hpp, ctrlDown), not ImGui's:
+        // on Windows ImGui never sees Ctrl go down on Geode 5, and on Geode 6
+        // its Ctrl sticks down after Ctrl is let go (imgui-cocos hands it the
+        // modifiers of every key going up, and Geode counts Ctrl as held on
+        // the Ctrl key's own release), so the next plain Z was an undo.
+        if (keybinds::ctrlDown())
+            return true;
+#if !defined(GEODE_IS_WINDOWS)
+        // Off Windows, as before (imgui-cocos's handling there is unread).
+        if (ImGui::GetCurrentContext() && ImGui::GetIO().KeyCtrl)
+            return true;
+#endif
+#if defined(GEODE_IS_MACOS)
+        // Cmd+Z on a Mac. Not seen on one: whether cocos keeps Cmd apart
+        // from Control there is unread, so either counts.
+        if (auto* kb = CCKeyboardDispatcher::get(); kb && kb->getCommandKeyPressed())
+            return true;
+#endif
+        return false;
+    }
+
+    bool shiftHeld() {
+        if (keybinds::shiftDown())
+            return true;
+#if !defined(GEODE_IS_WINDOWS)
+        if (ImGui::GetCurrentContext() && ImGui::GetIO().KeyShift)
+            return true;
+#endif
+        return false;
     }
 
     std::string keyName(int k) {
@@ -1188,7 +1225,16 @@ namespace gucci::ui {
                 log::warn("[GucciBot] {} isn't readable JSON, starting it again", indexFile);
             std::string const hash = geode::sha256(std::span<uint8_t const>(bytes)).toString();
             matjson::Value const seen = std::as_const(index)[hash];
-            std::string const nudge = std::to_string(ours || shared ? 0 : g_convertShift);
+            // Keyed by the nudge, plus the format's own frame shift when it has
+            // one ("0+1"). yBot's shift went from 0 to 1 (2026-11-18): an entry
+            // an older build wrote for a .ybot ("0") then misses, and the file
+            // is converted again instead of handing back the macro that played
+            // one frame early. A Silicate file imported before converts once
+            // more too; every other format keeps its key.
+            std::string nudge = std::to_string(ours || shared ? 0 : g_convertShift);
+            if (!ours && !shared)
+                if (auto const* f = convert::detect(bytes, fname); f && f->frameShift != 0)
+                    nudge += fmt::format("+{}", f->frameShift);
 
             // Imported before, at this nudge, and that macro is still the one
             // the import wrote, byte for byte. An entry written before the
@@ -1815,7 +1861,8 @@ namespace gucci::ui {
                 // nobody has checked on a phone or a Mac yet: if they disagree,
                 // every click records on the tick's edge. The count below
                 // shows which.
-                kit::Note("Untested on " GB_HERE ". If the count below says every click landed on the edge, it "
+                // (The count is of inputs, releases too: 5 clicks are 10.)
+                kit::Note("Untested on " GB_HERE ". If the count below says every input landed on the edge, it "
                           "isn't working here yet.",
                           Tone::Warn);
 #endif
@@ -3121,6 +3168,15 @@ namespace gucci::ui {
             kit::BeginCard("Look", nullptr);
             if (kit::SliderRow("Text size", nullptr, &look().textScale, 0.8f, 1.4f, "%.2fx"))
                 saveSettings();
+            {
+                // In percent; saved as 0.4 to 1.
+                float percent = std::round(look().menuOpacity * 100.f);
+                if (kit::SliderRow("Menu opacity", "How solid the menu is. The boxes over the level stay as they are",
+                                   &percent, Look::kMinMenuOpacity * 100.f, 100.f, "%.0f%%")) {
+                    look().menuOpacity = std::clamp(percent / 100.f, Look::kMinMenuOpacity, 1.f);
+                    saveSettings();
+                }
+            }
 #if defined(GEODE_IS_MOBILE)
             {
                 // Applied when the finger lifts: the slider grows and shrinks
@@ -3239,6 +3295,19 @@ namespace gucci::ui {
                     ImGui::TreePop();
                 }
             }
+            // The tick logs (GucciUpdater::m_logFrameIncrements): saved since
+            // before 2.0, with no row until now. For chasing a desync.
+            kit::Gap(0.3f);
+            // (The disguise doesn't name the files: they say guccibot.)
+            if (kit::SwitchRow("Log frame increments",
+                               disguised()
+                                   ? "Writes every frame-counter change and every input played back to log files "
+                                     "in the mod's save folder. For chasing a desync"
+                                   : "Writes every frame-counter change to guccibot_frameinc.log and every input "
+                                     "played back to guccibot_slope.log, in the mod's save folder. For chasing a "
+                                     "desync",
+                               &GucciEngine::get()->updater.m_logFrameIncrements))
+                saveEngineSwitch("debug_tick_logs", GucciEngine::get()->updater.m_logFrameIncrements);
             kit::EndCard();
             // GBot (the disguise) has no BIG BRRRR and doesn't mention it: the
             // card, the last one here, isn't drawn. Its saved switches are
@@ -3558,6 +3627,68 @@ namespace gucci::ui {
             }
         }
 
+        // Settings > Look > Menu opacity, for as long as it lives: the
+        // windows' and cards' fills (the palette's backdrop and surface, and
+        // the style's window and title bar colours) times look().menuOpacity,
+        // put back after. Around the full menu and Compact mode only, so the
+        // boxes over the level, drawn outside it, keep their own. At 1 it
+        // touches nothing: the theme's look exactly.
+        class MenuSeeThrough {
+        public:
+            MenuSeeThrough() {
+                m_scale = std::clamp(look().menuOpacity, Look::kMinMenuOpacity, 1.f);
+                if (m_scale >= 1.f)
+                    return;
+                m_on = true;
+                look().menuSeeThrough = m_scale;
+                auto& pal = look().pal;
+                m_pal = pal;
+                pal.opacity *= m_scale;  // the JMF look's sky reads this one
+                pal.backdrop.w *= m_scale;
+                pal.surface.w *= m_scale;
+                ImVec4* c = ImGui::GetStyle().Colors;
+                for (size_t i = 0; i < std::size(kSlots); ++i) {
+                    m_cols[i] = c[kSlots[i]];
+                    c[kSlots[i]].w *= m_scale;
+                }
+            }
+            ~MenuSeeThrough() {
+                if (!m_on)
+                    return;
+                look().menuSeeThrough = 1.f;
+                look().pal = m_pal;
+                ImVec4* c = ImGui::GetStyle().Colors;
+                for (size_t i = 0; i < std::size(kSlots); ++i)
+                    c[kSlots[i]] = m_cols[i];
+            }
+            MenuSeeThrough(MenuSeeThrough const&) = delete;
+            MenuSeeThrough& operator=(MenuSeeThrough const&) = delete;
+
+            // A theme's scene (the JMF sky, SolarBot's, the garden) and the
+            // snow are pictures drawn on the window, solid whatever its
+            // colour says: the vertices they added since `from`, faded the
+            // same way.
+            static void fade(ImDrawList* dl, int from) {
+                float const scale = std::clamp(look().menuOpacity, Look::kMinMenuOpacity, 1.f);
+                if (scale >= 1.f || !dl)
+                    return;
+                for (int i = std::max(0, from); i < dl->VtxBuffer.Size; ++i) {
+                    ImU32& col = dl->VtxBuffer[i].col;
+                    auto const a = static_cast<float>((col >> IM_COL32_A_SHIFT) & 0xFF);
+                    auto const faded = static_cast<ImU32>(std::lround(a * scale));
+                    col = (col & ~IM_COL32_A_MASK) | (faded << IM_COL32_A_SHIFT);
+                }
+            }
+
+        private:
+            static constexpr ImGuiCol kSlots[] = {ImGuiCol_WindowBg, ImGuiCol_TitleBg, ImGuiCol_TitleBgActive,
+                                                  ImGuiCol_TitleBgCollapsed, ImGuiCol_MenuBarBg};
+            float m_scale = 1.f;
+            bool m_on = false;
+            Palette m_pal;
+            ImVec4 m_cols[std::size(kSlots)];
+        };
+
         // The search's index (ui/search.hpp): every page the sidebar lists,
         // drawn once into a window off screen that takes no input, with the
         // kit reporting each card, row and button to the recorder. Clipped
@@ -3657,10 +3788,12 @@ namespace gucci::ui {
 #endif
             // Behind the pages: the page's own picture (the JMF sky), else the
             // theme's scene, else its snow.
+            int const backdropFrom = ImGui::GetWindowDrawList()->VtxBuffer.Size;
             if (Backdrop const backdrop = kPages[g_page].backdrop ? kPages[g_page].backdrop : sceneBackdrop())
                 backdrop();
             else if (themes::active().snow && look().effects)
                 drawSnow();
+            MenuSeeThrough::fade(ImGui::GetWindowDrawList(), backdropFrom);
             ImVec2 offset{0.f, 0.f};
             if (brrr->enabled) {
                 double const t = ImGui::GetTime();
@@ -3741,8 +3874,17 @@ namespace gucci::ui {
                     float const gap = ImGui::GetStyle().ItemSpacing.y;
                     ImVec2 const f0(a.x, a.y - std::floor(gap * 0.5f));
                     ImVec2 const f1(a.x + ImGui::GetContentRegionAvail().x, a.y + kRowH + (gap - std::floor(gap * 0.5f)));
-                    dl->AddRectFilled(f0, f1, u32(frame.outer), pal.radius);
-                    dl->AddRectFilled(ImVec2(f0.x + 1.f, f0.y + 1.f), ImVec2(f1.x - 1.f, f1.y - 1.f), u32(frame.inner), pal.radius);
+                    if (pal.surface.w >= 1.f) {
+                        dl->AddRectFilled(f0, f1, u32(frame.outer), pal.radius);
+                        dl->AddRectFilled(ImVec2(f0.x + 1.f, f0.y + 1.f), ImVec2(f1.x - 1.f, f1.y - 1.f), u32(frame.inner), pal.radius);
+                    } else {
+                        // Menu opacity under 100%: the card fill is see-through,
+                        // so the frame is drawn as its two rings (filled, her
+                        // gold showed through the fill, under the gold name).
+                        dl->AddRect(f0, f1, u32(frame.outer), pal.radius, 0, 1.f);
+                        dl->AddRect(ImVec2(f0.x + 1.25f, f0.y + 1.25f), ImVec2(f1.x - 1.25f, f1.y - 1.25f), u32(frame.inner),
+                                    pal.radius, 0, 1.5f);
+                    }
                     dl->AddRectFilled(ImVec2(f0.x + 2.5f, f0.y + 2.5f), ImVec2(f1.x - 2.5f, f1.y - 2.5f), u32(pal.surface), pal.radius);
                     ImVec2 const gem(f1.x - 14.f, (f0.y + f1.y) * 0.5f);
                     auto const diamond = [&](float halfH, float halfW, ImU32 color) {
@@ -4152,8 +4294,13 @@ namespace gucci::ui {
                     UseFont f(Font::Small);
                     ImGui::ProgressBar(fw.progress(), ImVec2(260.f, 0.f),
                                        fmt::format("Calculate {:.0f}%", fw.progress() * 100.f).c_str());
-                    // How long it has run, and a rough guess at the rest while
-                    // the main count runs (the passes after it aren't counted).
+                    // How long it has run, and a rough guess at the rest: of the
+                    // capture while it plays, then of the probing at its own pace
+                    // per input (the passes after it aren't counted). GucciBot
+                    // (2026-11-18): the probing had no guess at all on a range run
+                    // (its inputs are a small part of the macro's, so the old
+                    // percentage-based one never passed 5%), and the capture's
+                    // guess read as the whole run's (test pass S7).
                     double const elapsed = fw.elapsedSeconds();
                     auto const clock = [](double sec) {
                         int const s = static_cast<int>(sec);
@@ -4161,14 +4308,28 @@ namespace gucci::ui {
                     };
                     std::string timing = clock(elapsed) + " so far";
                     float const p = fw.progress();
-                    // GucciBot (2026-11-15): from where the probing started, so a
-                    // Continue that starts at 85% doesn't guess it's nearly done.
-                    float const done = p - fw.progressStart();
-                    if (done > 0.05f && p < 1.f && fw.stage() != "dependent" && fw.stage() != "suggest")
-                        timing += ", about " + clock(elapsed * (1.0 - p) / done) + " to go";
+                    double left = 0.0;
+                    bool capped = false;
+                    if (fw.stage() == "capture") {
+                        float const done = p - fw.progressStart();
+                        if (done > 0.05f && p < 1.f)
+                            timing += ", capture done in about " + clock(elapsed * (1.0 - p) / done);
+                    } else if (fw.probeTimeLeft(left, capped)) {
+                        timing += capped ? ", the time cap stops it in " + clock(left)
+                                         : ", about " + clock(left) + " to go";
+                    }
                     ImGui::TextDisabled("%s", timing.c_str());
                     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.f);
                     ImGui::TextUnformatted(fw.status().c_str());
+                    // GD 2.2091's own Ignore Damage, seen during this run or
+                    // kept from the windows before it (a Continue's, a range
+                    // run's): "was on", since it may be off now
+                    // (FrameWindowAnalyzer::gdIgnoreDamage).
+                    if (fw.gdIgnoreDamage()) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, look().tone(Tone::Bad));
+                        ImGui::TextUnformatted("GD's Ignore Damage was on for some of these windows: they won't be legit.");
+                        ImGui::PopStyleColor();
+                    }
                     ImGui::PopTextWrapPos();
                     if (kit::Button("Cancel", Tone::Bad))
                         GucciEngine::get()->cancelAnalysis();
@@ -4228,6 +4389,7 @@ namespace gucci::ui {
             // No Assistant Access tool runs inside the menu's frame: Calculate's
             // tick below steps and resets the level (mcp::Server::Hold).
             gucci::mcp::Server::Hold mcpHold;
+            gucci::mcp::Server::Busy mcpBusy;  // (mcp_server.hpp)
             // Assistant Access's menu probe (ui/probe.hpp): a frame a tool asked
             // for is captured from here to every return below. Nothing otherwise.
             probe::FrameGuard probeFrame;
@@ -4297,9 +4459,20 @@ namespace gucci::ui {
                         // the run ends, and the Calculate page may be shut (Nigel,
                         // 2026-10-21: "i dont see a finish message"). In lines
                         // that fit the screen (showNotice).
+                        // GucciBot (2026-11-18): whole. It was cut at 140 letters,
+                        // which ended the time cap's notice at "...where it sto..."
+                        // (test pass S7); showNotice wraps it to the screen's width.
+                        // (2026-11-18 review) A long one (the capture-death one is
+                        // about 500 letters, 10 lines on a small screen) stops at the
+                        // end of a sentence instead: the whole of it stays on the
+                        // Calculate page.
                         std::string text = analyzer.status();
-                        if (text.size() > 140)
-                            text = text.substr(0, 137) + "...";
+                        if (text.size() > 300) {
+                            size_t const cut = text.rfind(". ", 280);
+                            text = cut != std::string::npos && cut > 60
+                                       ? text.substr(0, cut + 1) + " The rest is on the Calculate page."
+                                       : text.substr(0, 277) + "...";
+                        }
                         showNotice("Calculate: " + text + kept,
                                    analyzer.lastRunOk() ? NotificationIcon::Success : NotificationIcon::Warning, 6.f);
                     }
@@ -4388,6 +4561,7 @@ namespace gucci::ui {
             }
             if (!g_open)
                 return;
+            MenuSeeThrough const seeThrough;  // Settings > Look > Menu opacity
             if (g_compact) {
                 drawCompact();
             } else {

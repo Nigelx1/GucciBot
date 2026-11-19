@@ -108,11 +108,52 @@ constexpr float kRescuePast = 60.0f;
 constexpr float kLegCellY = 10.0f;
 // Nigel (2026-10-22, answer 3 in docs/ROUTE_ENGINE_PLAN.md): five minutes on
 // one spot - the best tick not moving on - and the run stops and says where.
+// On the wall clock, this is the rule with the test switch pf_stuck_work off.
 constexpr double kStuckSeconds = 300.0;
-// GucciBot (2026-11-16, pf2 lane; pf_stuck_work): with the switch on, the
-// wall clock still stops a run whose best tick has not moved for this many
-// times the five minutes, so a search doing no work cannot run forever.
-constexpr double kStuckWallFactor = 4.0;
+// GucciBot (2026-11-17, pf3 lane; pf_stuck_work, on by default): the same
+// rule counted in the search's own work, not in time: this many decisions
+// begun in a row (m_stats.decisions: each decision and each stop of a walk
+// back) without the best tick moving on. The search's decisions mostly come
+// out the same on any PC (its budgets are steps, not time: Base After Base
+// made 194 decisions and 47419 simulations in 133 s, 150 s and 215 s on three
+// runs), so a run's stop depends far less on the PC than a clock's. Not fully:
+// GRIEF's runs still split two ways in ticks 17133-17812 (11-17/11-18, cause
+// not pinned down), and the backstop below is a clock. A clock did: GRIEF
+// needs the same 30 decisions to get past tick 12126, 62 past 15868 and 69-70
+// past 18709 on every run, but those took 109-468 s, 138-550 s and 256-417 s
+// of wall clock with the PC's load, and the five-minute rule (the wall clock,
+// then thinking plus level time played from 11-15) stopped 12 runs at those
+// three spots, 10 of them 2 to 41 decisions short of what the others needed
+// there. Measured in every lane's logs (199 runs, 11-15..11-17): the most any
+// run needed before getting further was 200 (Polargeist at tick 10738, where
+// another run had been stopped by the clock), then 173 (Forest Temple at tick
+// 17016) and 144 (GRIEF's two-player cube part after its fork jump); at GRIEF's 18709, 68-70, and the two runs stopped there after 94 and
+// 97 on a longer way were still going. Runs stopped where that build got no
+// further at all ended at 85-148 decisions (Forest Temple before the fork
+// jump, 10 runs; 244-615 in 4 more on test switches), 118 (GRIEF's 71.22%
+// wall before the dual-portal rule), 253-312 (Geometrical Dominator, Cold
+// Sweat, a Bloodbath GPU test). 300 is 4.3 times what 18709 takes and 1.5
+// times the most any run has needed. The cost: a truly stuck run gets about
+// 2.5 times the old rule's work. Measured (11-17, loaded PC): Forest Temple
+// with the fork jump off stopped at its old wall after 300 decisions, 18.6
+// minutes of wall clock after it first died there, where the clock rule took
+// 5-10; at their pace GRIEF's old 71.22% wall would take about 14 (the runs
+// at 253-312 about as long as before). The tick-1 walks of Society and
+// Cortex Break (23000 and 9000 cheap stops in five minutes) end in seconds.
+constexpr uint64_t kStuckDecisions = 300;
+// ... and one wall-clock backstop, so nothing can run forever (a restore that
+// never arrives, a decision that never ends): 60 minutes on the wall clock
+// without the best tick moving on, whatever the work. Not the old 20 minutes:
+// GRIEF's 18709 stall took up to 491 s on a loaded PC, and one decision can
+// take long too: the two-player decision at GRIEF's tick 27810 (two passes,
+// one count in m_stats.decisions) took 1537 s in gr_ln (847.7 + 689.2), 705 s
+// in fd3 (271 + 434) and 283-486 s on 11-18. A 20-minute "no decision begun"
+// backstop was tried in the lane and dropped in review (11-18) for that
+// reason: it would have cut gr_ln's route to 100%.
+constexpr double kStuckWallSeconds = 3600.0;
+// A stall that ends after this many decisions is logged (with its decisions
+// and wall clock), so later runs show how close a stall came to the rule.
+constexpr uint64_t kStuckLogDecisions = 50;
 // GucciBot (2026-11-15, pf2 lane; pf_start_stop): how many times a spot whose
 // floor is the search's own start, with no stored frame before it, may fail
 // before the run stops (see escalate), and how close to the start the death
@@ -528,6 +569,10 @@ bool AbsensePathfinder::start() {
     m_wouldDie = false;
     m_expectReset = false;
     m_completed = false;
+    m_deathKept = UINT64_MAX;
+    m_liveGuardLines = 0;
+    m_lockedDeathLines = 0;
+    m_endSeen = false;
     m_starts.clear();
     forgetRunMemo();
     m_probe = Probe{};
@@ -548,10 +593,8 @@ bool AbsensePathfinder::start() {
     m_lastRateAt = m_startedAt;
     m_lastRateTicks = 0;
     m_stuckBest = tick;
-    m_stuckSeconds = 0.0;
-    m_stuckWallSeconds = 0.0;
     m_stuckClock = m_startedAt;
-    m_stuckTicks = m_stats.committedTicks;
+    restartStuckCount();
     m_forkBest = 0;
     m_stats.message = "Searching";
 
@@ -603,7 +646,18 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     // (logged before the decision below is let go of, and in the run's total).
     endFreeze("a decision when the run stopped");
 
-    const bool done = m_completed;
+    // GucciBot (2026-11-17, pffix lane): the end reached on a path that went
+    // through a death the game was kept from dealing is not a solution: its
+    // macro dies there when played. Said plainly (short: the queue's note
+    // keeps 157 characters of it, the clicks-a-second part included), and it
+    // is not saved as a solution; a queue still keeps it as its "furthest".
+    const bool throughDeath = m_completed && m_deathKept != UINT64_MAX;
+    const bool done = m_completed && !throughDeath;
+    std::string why = reason;
+    if (throughDeath) {
+        why = fmt::format("reached the end through a death at tick {} it never went back before: not a solution",
+                          m_deathKept);
+    }
     if (currentTick() >= m_stats.bestTick) rememberBest();
     m_live = false;
     m_livePending = false;
@@ -662,7 +716,7 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     releaseAnchors();
 
     m_stats.seconds = secondsSince(m_startedAt);
-    m_stats.message = reason;
+    m_stats.message = why;
     // Clicks a second on the path played (step 5), on the page too: whether the
     // run clicks like a person is something to see without opening the log.
     const ClickRate cps = clickRate(m_history, updater.getTps());
@@ -680,7 +734,7 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     log("stopped: %s (%llu ticks committed, %llu decisions, %llu simulations, %llu backtracks, best tick %llu, %.1fs; "
         "the game froze %llu times waiting for a decision, %.1f s in all; "
         "%d clicks in %.1f s of play: %.1f a second on average, %d in the busiest second, from tick %d)",
-        reason.c_str(), (unsigned long long)m_stats.committedTicks, (unsigned long long)m_stats.decisions,
+        why.c_str(), (unsigned long long)m_stats.committedTicks, (unsigned long long)m_stats.decisions,
         (unsigned long long)m_stats.simulations, (unsigned long long)m_stats.backtracks,
         (unsigned long long)m_stats.bestTick, m_stats.seconds, (unsigned long long)m_stats.freezes,
         m_stats.freezeSeconds, cps.clicks, cps.seconds, cpsAverage, cps.busiest, cps.busiestFrom);
@@ -873,9 +927,33 @@ bool AbsensePathfinder::onWouldDie(PlayerObject* player, GameObject* object) {
     // Either player dying while the search drives the game is a dead end;
     // the death itself is skipped and the search goes back instead.
     if (!isRunning()) return false;
+    // GucciBot (2026-11-18, pfharden lane): a death GD itself would not deal
+    // is not a dead end. GD's destroyPlayer returns first while player 1 is
+    // locked (read from the game, see settleAnticheatSpike), and GD locks
+    // player 1 for its end-of-level animation, which drags the sprite on
+    // through whatever is in the way (Calculate's VSC capture "died" 215
+    // frames past the end, build -ef). This hook ran before GD's check, so
+    // such a hit came to afterTick as a real death, a few hundred ticks
+    // before levelComplete sets m_completed: the search backed away from a
+    // level it had already beaten. Swallowed as GD would, and not counted.
+    // Only where both hold (the end animation has started AND player 1 is
+    // locked): a hit with just one of them still counts, the safe side.
+    // The player that was hit must be locked too (review, 2026-11-18): if GD
+    // checked the hit player's own lock and left player 2 free in a dual, a
+    // player-2 hit there would be a real death. Single mode: the hit player
+    // is player 1, so nothing changes there.
+    if (auto* pl = PlayLayer::get();
+        pl && pl->m_levelEndAnimationStarted && pl->m_player1 && pl->m_player1->m_isLocked &&
+        (!player || player->m_isLocked)) {
+        if (m_lockedDeathLines++ < 10)
+            log("tick %llu: player 1 is locked for GD's end animation: a hit GD does not deal, not a death",
+                (unsigned long long)currentTick());
+        return true;
+    }
     const bool firstHit = !m_wouldDie;
     m_wouldDie = true;
     m_wouldDieTick = currentTick();
+    if (firstHit) m_wouldDieFirstTick = m_wouldDieTick;
     if (player) m_wouldDieRect = player->getObjectRect(0.3f, 0.3f);
     m_wouldDieP2 = player && PlayLayer::get() && player == PlayLayer::get()->m_player2;
     // Asked here, while the object is still at hand: the death is looked at a
@@ -1036,34 +1114,19 @@ void AbsensePathfinder::tick() {
         return;  // wait for the player
     }
 
-    // Five minutes without the best tick moving on, whatever the route setting:
-    // the run stops and says where (kStuckSeconds). Time between two slices
-    // counts up to ten seconds, so a hitch of the whole machine is not taken
-    // for minutes of searching.
+    // The stuck rule, whatever the route setting: the best tick not moving on
+    // for kStuckDecisions decisions in a row (pf_stuck_work, the default) or
+    // five minutes of wall clock (the switch off), and the run stops and says
+    // where. Wall-clock time between two slices counts up to ten seconds, so a
+    // hitch of the whole machine is not taken for minutes of searching.
+    // GucciBot (2026-11-17, pf3 lane): the work count replaces 11-15's
+    // thinking-plus-played clock (pf2 lane), which still depended on the PC:
+    // how much thinking fits in a frozen frame, and the game's own speed. Only
+    // when a stuck run ends changes; nothing decided reads any of this.
     {
         const auto now = std::chrono::steady_clock::now();
-        // GucciBot (2026-11-15, pf2 lane; the test switch pf_stuck_work):
-        // with the switch on, the clock counts only the search's own thinking
-        // (the last slice) and the level time the game played since (the
-        // ticks committed), never more than the wall clock. What it leaves
-        // out is the game's own frames while it is frozen waiting and the
-        // game running slow: on GRIEF in a test window about 40% of the wall
-        // clock, and more on a loaded PC. Measured with it (11-16, loaded
-        // PC, one run each): GRIEF with all five test switches on got past
-        // tick 18709, where the same switches without this one stopped on
-        // this rule. Nothing decided reads this clock: only when a stuck run
-        // ends changes. A run doing no work at all (a restore that never
-        // arrives) counts almost nothing, so the wall clock still stops it
-        // at kStuckWallFactor times the five minutes.
-        const uint64_t committed = m_stats.committedTicks;
         const double wall = std::clamp(std::chrono::duration<double>(now - m_stuckClock).count(), 0.0, 10.0);
-        double counted = wall;
-        if (absense::stuckWork()) {
-            const double tps = std::max(1.0, Bot::get()->updater().getTps());
-            const double played = committed > m_stuckTicks ? (double)(committed - m_stuckTicks) / tps : 0.0;
-            counted = std::min(wall, std::max(0.0, m_lastSliceMs) / 1000.0 + played);
-        }
-        m_stuckTicks = committed;
+        const uint64_t decisions = m_stats.decisions;
         // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): after a fork jump the
         // route is a new one, and until it gets past the old furthest tick, its
         // own furthest since the jump is what has to keep moving on. On GRIEF the
@@ -1080,21 +1143,36 @@ void AbsensePathfinder::tick() {
         if (m_forkBest != 0 && m_stats.bestTick != m_stuckBest) m_forkBest = 0;
         if (m_forkBest != 0 && settled && nowTick > m_forkBest && nowTick < m_stuckBest) {
             m_forkBest = nowTick;
-            m_stuckSeconds = 0.0;
-            m_stuckWallSeconds = 0.0;
+            restartStuckCount();
         } else if (m_stats.bestTick != m_stuckBest) {
+            // How close the stall that just ended came to the rule, for the
+            // next time its limit is looked at (kStuckLogDecisions).
+            const uint64_t tries = decisions - m_stuckDecisions;
+            if (tries >= kStuckLogDecisions)
+                log("stuck rule: the furthest moved on from tick %llu to %llu after %llu decisions (the rule stops at "
+                    "%llu) and %.0f s",
+                    (unsigned long long)m_stuckBest, (unsigned long long)m_stats.bestTick, (unsigned long long)tries,
+                    (unsigned long long)kStuckDecisions, m_stuckWallSeconds);
             m_stuckBest = m_stats.bestTick;
-            m_stuckSeconds = 0.0;
-            m_stuckWallSeconds = 0.0;
+            restartStuckCount();
         } else {
-            m_stuckSeconds += counted;
             m_stuckWallSeconds += wall;
         }
         m_stuckClock = now;
-        if (m_stuckSeconds >= kStuckSeconds || m_stuckWallSeconds >= kStuckSeconds * kStuckWallFactor) {
-            const std::string why =
-                fmt::format("stuck at x {:.0f} (tick {}) for 5 minutes", m_stats.bestX, m_stats.bestTick);
-            log("%s: the furthest it got has not moved on in that time", why.c_str());
+        const uint64_t tries = decisions - m_stuckDecisions;
+        std::string why;
+        if (!absense::stuckWork()) {
+            if (m_stuckWallSeconds >= kStuckSeconds)
+                why = fmt::format("stuck at x {:.0f} (tick {}) for 5 minutes", m_stats.bestX, m_stats.bestTick);
+        } else if (tries >= kStuckDecisions) {
+            why = fmt::format("stuck at x {:.0f} (tick {}): {} decisions in a row got no further", m_stats.bestX,
+                              m_stats.bestTick, tries);
+        } else if (m_stuckWallSeconds >= kStuckWallSeconds) {
+            why = fmt::format("stuck at x {:.0f} (tick {}) for 60 minutes", m_stats.bestX, m_stats.bestTick);
+        }
+        if (!why.empty()) {
+            log("%s: the furthest it got has not moved on (%llu decisions, %.0f s)", why.c_str(),
+                (unsigned long long)tries, m_stuckWallSeconds);
             giveUp(why);
             return;
         }
@@ -1201,13 +1279,17 @@ void AbsensePathfinder::tick() {
                     // ran on): back to where it was meant to stop.
                     const uint64_t at = m_pauseAt;
                     m_pauseAt = UINT64_MAX;
-                    if (currentTick() > at && rewindTo(at)) goto done;
+                    if (currentTick() > at) {
+                        if (rewindTo(at)) goto done;
+                        noteRunOnDeath(at);
+                    }
                 }
                 if (m_ahead.active && !m_live && currentTick() > m_ahead.tick) {
                     // The plan ran out mid-frame and the game ran on a tick
                     // or two past where the decision is about: back there
                     // first, so the plan it makes starts where it should.
                     if (rewindTo(m_ahead.tick)) goto done;  // the restore runs in the frozen tick
+                    noteRunOnDeath(m_ahead.tick);
                     cancelAhead();  // no stored frame to go back to: decide from where it is
                 }
                 decide();
@@ -1221,6 +1303,21 @@ void AbsensePathfinder::tick() {
                     // where the plan ends meanwhile.
                     if (m_ahead.active) {
                         decide();
+                        // GucciBot (2026-11-18, pfharden lane): a dead end
+                        // decided ahead is handed over here, at once, as the
+                        // Backtracking case below does it. Left to that case,
+                        // it waited for another pass of this loop, and when
+                        // the decision used up the slice there was none: the
+                        // game ran the next frame live with the phase at
+                        // Backtracking, where liveInput plays nothing and
+                        // keeps no books (a death in those ticks was never
+                        // recorded, and the history drifted from what the
+                        // game played).
+                        if (m_phase == Phase::Backtracking && m_ahead.active) {
+                            cancelAhead();
+                            m_aheadFailed = true;
+                            m_phase = Phase::Committing;
+                        }
                     } else if (m_planIndex < m_plan.size()) {
                         beginAhead();
                         if (!m_ahead.active) goto done;  // nothing to decide ahead of: wait for the plan
@@ -1232,8 +1329,19 @@ void AbsensePathfinder::tick() {
                         // out in liveInput, so it is a freeze too (it was not
                         // counted). Not when the last tick's bookkeeping, run
                         // by pauseLive, has just found a death or a drift.
-                        if (m_phase == Phase::Committing && !m_completed) beginFreeze();
-                        m_phase = Phase::Deciding;
+                        // GucciBot (2026-11-17, pffix lane): nor is the phase
+                        // that bookkeeping set overwritten. A death on the
+                        // plan's last tick (a plan played into the death "to
+                        // see what the game says" ends exactly there) set
+                        // Backtracking, and this put Deciding over it: the
+                        // search decided on from the tick after a death the
+                        // game had been kept from dealing, and the saved macro
+                        // died there when played (Dry Out, 49.65%, a "100%
+                        // level complete" run).
+                        if (m_phase == Phase::Committing) {
+                            if (!m_completed) beginFreeze();
+                            m_phase = Phase::Deciding;
+                        }
                     }
                     break;
                 }
@@ -1266,6 +1374,18 @@ void AbsensePathfinder::tick() {
         }
     }
 done:
+    // GucciBot (2026-11-18, pfharden lane): the game never runs live past a
+    // slice with the phase other than Committing: liveInput would skip every
+    // tick of the next frame (no input, no bookkeeping). Stopped here
+    // instead, its last tick's bookkeeping done; the phase's own case carries
+    // on from where the game is next frame.
+    if (m_live && m_phase != Phase::Committing) {
+        static const char* const kPhase[] = {"idle", "deciding", "committing", "going back", "probing", "restoring", "done"};
+        if (m_liveGuardLines++ < 20)
+            log("tick %llu: the game was left live with the search %s; stopped it until that is done",
+                (unsigned long long)currentTick(), kPhase[(int)m_phase]);
+        pauseLive();
+    }
     m_lastSliceStart = frameStart;
     m_lastSliceMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frameStart).count();
     m_stats.sliceMs = m_lastSliceMs;
@@ -1366,6 +1486,13 @@ void AbsensePathfinder::noteFrameCost(double gameMs, double restoreMs) {
     m_gameMs = cost;
     m_gameMsAvg = m_gameMsAvg <= 0.0 ? cost : m_gameMsAvg * 0.8 + cost * 0.2;
     m_stats.gameMs = cost;
+}
+
+// The stuck rule's counts start over (see tick()): the best tick moved on,
+// a fork jump, or the new route after one moved on.
+void AbsensePathfinder::restartStuckCount() {
+    m_stuckDecisions = m_stats.decisions;
+    m_stuckWallSeconds = 0.0;
 }
 
 void AbsensePathfinder::noteProgress() {
@@ -5152,6 +5279,32 @@ void AbsensePathfinder::decide() {
     if (SLSettings::get()->pathfinder.smooth && !m_live && m_planIndex < m_plan.size()) goLive();
 }
 
+// GucciBot (2026-11-18, pffix lane): the frame's ticks ran on past `from`
+// with no bookkeeping of their own, and there was no stored frame to go back
+// to, so the search decides from where the game is. A death the game was kept
+// from dealing in those ticks (onWouldDie still has it: nothing reset it) is
+// on the path now, like one afterTick finds and nothing goes back before.
+void AbsensePathfinder::noteRunOnDeath(uint64_t from) {
+    if (!m_wouldDie) return;
+    // The earliest tick it can have been (the first tick run on): going back
+    // to before it is what clears it, so earlier is the safe side.
+    // GucciBot (2026-11-18, pfharden lane): no earlier than the frame counter
+    // the first of those deaths read, though. The counter goes up at the
+    // settled point after a tick's physics (tickSettledWork), so a death in
+    // tick T's step reads T, one less than afterTick's label for it (T + 1),
+    // and one GD deals between two ticks reads T + 1, exactly that label.
+    // Either way the mark is never later than the death's own label, so a
+    // restore that clears it has really gone back before the death; with
+    // from + 1 alone, a run-on death at from + 3 kept a restore to from + 2,
+    // which plays that death's tick again, from clearing it.
+    const uint64_t at = std::max(from + 1, m_wouldDieFirstTick);
+    if (at >= m_deathKept) return;
+    m_deathKept = at;
+    log("tick %llu: the ticks run on past %llu with no bookkeeping died, and there was nothing to go back to; "
+        "deciding from here",
+        (unsigned long long)at, (unsigned long long)from);
+}
+
 void AbsensePathfinder::goLive() {
     if (m_live) return;
     m_live = true;
@@ -5662,8 +5815,8 @@ void AbsensePathfinder::noteForks(uint64_t now) {
 // The newest fork before the floor that this spot has not gone back to yet:
 // the game goes back for real to a second before its crossing, and the
 // decision there drives into the portal (decide). Bounded per spot and per
-// run; each jump starts the stuck clock over, or the five-minute rule would
-// end the run 30 s after it (Forest Temple's floor stayed at 18:55:17 and
+// run; each jump starts the stuck count over, or the stuck rule would
+// end the run soon after it (Forest Temple's floor stayed at 18:55:17 and
 // the rule stopped the run at 18:55:47). False when there is none.
 bool AbsensePathfinder::forkJump(const char* why, uint64_t floor, bool dualOnly) {
     if (m_forkJumps >= kForkJumpsPerRun) return false;
@@ -5692,8 +5845,7 @@ bool AbsensePathfinder::forkJump(const char* why, uint64_t floor, bool dualOnly)
         // The floor is the fork's tick now: a stop after it that fails walks
         // back to it, not past it into ticks the walk has already ruled out.
         m_repair.floor = std::min(m_repair.floor, target);
-        m_stuckSeconds = 0.0;
-        m_stuckWallSeconds = 0.0;
+        restartStuckCount();
         if (absense::forkDual()) m_forkBest = target;  // the new route's furthest, for the stuck rule (pf_fork_dual)
         m_repair.passes++;
         m_repair.probe = 0;
@@ -5958,6 +6110,14 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
         else m_forkPrevX = -1.0e30f;
     }
 
+    // GucciBot (2026-11-18, pfharden lane): once a run, where GD's end
+    // animation began and whether player 1 was locked for it (what the hit
+    // check in onWouldDie relies on).
+    if (!m_endSeen && pl->m_levelEndAnimationStarted) {
+        m_endSeen = true;
+        log("tick %llu: GD's end animation has started (player 1 %s)", (unsigned long long)now,
+            pl->m_player1->m_isLocked ? "locked" : "NOT locked");
+    }
     if (m_completed) return false;  // handled by tick()
 
     if (died) {
@@ -5970,6 +6130,7 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
         if (missHasSample) missExpected = m_planTrace[m_planIndex - 1];
         const size_t missTraceSize = m_planTrace.size();
         m_stats.deadEnds++;
+        m_deathKept = std::min(m_deathKept, now);  // until a restore lands before it
         pauseLive();
         cancelAhead();
         log("died at tick %llu while committing (%s)", (unsigned long long)now, m_stats.lastDecision.c_str());
@@ -6695,13 +6856,24 @@ void AbsensePathfinder::finishRestore() {
             if (idx < m_history2.size() && separateNow()) applyInput(m_history2[idx], true);
             m_wouldDie = false;
             stepGame();
-            if (m_wouldDie) break;  // the game did not agree with itself; decide from here
+            if (m_wouldDie) {
+                // The game did not agree with itself; decide from here. Not a
+                // kept death (pffix): the first pass, the one a macro plays
+                // from the start, lived through this tick with these inputs;
+                // only the restored game died.
+                log("going back: the same inputs died at tick %llu this time (the first pass lived); deciding "
+                    "from there",
+                    (unsigned long long)currentTick());
+                break;
+            }
             keepStart();
         }
         m_wouldDie = false;
         tick = currentTick();
     }
     m_restepping = false;
+    // Back before the kept death: the tick that dealt it runs again (pffix).
+    if (tick < m_deathKept) m_deathKept = UINT64_MAX;
     const size_t idx = (size_t)(tick > m_stats.startTick ? tick - m_stats.startTick : 0);
     if (m_history.size() > idx) m_history.resize(idx);
     if (m_history2.size() > idx) m_history2.resize(idx);

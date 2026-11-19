@@ -559,6 +559,7 @@ public:
     void releaseAnchors();
     void beginBacktrack();
     void finishRestore();
+    void restartStuckCount();
     void noteProgress();
     void rememberBest();
     void saveResult();
@@ -796,6 +797,7 @@ public:
         int mode = -1, mode2 = -1;     // the kinds of player it ends in (mode2: -1 without a second player)
     };
     AheadWait m_aheadWait;
+    void noteRunOnDeath(uint64_t from);  // pffix: a death in ticks run on with no bookkeeping
     void goLive();
     void pauseLive();
     void beginAhead();
@@ -909,6 +911,12 @@ public:
     bool m_restepping = false;
     bool m_wouldDie = false;
     uint64_t m_wouldDieTick = 0;
+    // GucciBot (2026-11-18, pfharden lane): the frame counter at the FIRST
+    // death the game was kept from dealing since m_wouldDie was last cleared
+    // (m_wouldDieTick is overwritten by every later hit). Set on the hit that
+    // turns m_wouldDie on, so every reset of m_wouldDie starts it afresh; only
+    // read while m_wouldDie is set (noteRunOnDeath).
+    uint64_t m_wouldDieFirstTick = 0;
     cocos2d::CCRect m_wouldDieRect;   // the player's inner hitbox when the game killed it
     bool m_wouldDieP2 = false;        // it was player 2 the game killed
     // GucciBot (2026-11-12): what the game killed the player with, for the
@@ -932,6 +940,17 @@ public:
     uint64_t m_planKnownDeath = UINT64_MAX;
     bool m_expectReset = false;
     bool m_completed = false;
+    // GucciBot (2026-11-17, pffix lane): the earliest tick (as afterTick
+    // labels it: the counter once the tick has run) at which the real game
+    // would have killed the player on the path kept now, the death kept from
+    // happening (onWouldDie) and never gone back before. A path through one
+    // is not a path the game plays: a macro of it dies there. Cleared when a
+    // restore lands before it; a run that reaches the end with one set is
+    // not called complete (stop). UINT64_MAX: none.
+    uint64_t m_deathKept = UINT64_MAX;
+    int m_liveGuardLines = 0;  // pfharden: tick()'s guard at done: (the game left live outside Committing)
+    int m_lockedDeathLines = 0;  // pfharden: hits onWouldDie let pass while player 1 is locked (logged)
+    bool m_endSeen = false;      // pfharden: GD's end animation seen this run (logged once)
 
     std::deque<Anchor> m_anchors;  // oldest first; the start state is kept apart
     Anchor m_startAnchor;
@@ -951,14 +970,12 @@ public:
 
     std::chrono::steady_clock::time_point m_startedAt;
     // How long the best tick has stood still, counted while the run runs (see
-    // tick(): five minutes of it and the run stops and says where).
+    // tick(): kStuckDecisions decisions of it, or five minutes with
+    // pf_stuck_work off, and the run stops and says where).
     uint64_t m_stuckBest = 0;
-    double m_stuckSeconds = 0.0;
-    double m_stuckWallSeconds = 0.0;  // the same on the wall clock (the backstop for pf_stuck_work)
+    uint64_t m_stuckDecisions = 0;      // m_stats.decisions when the count last started over
+    double m_stuckWallSeconds = 0.0;    // the wall clock since then (the rule with pf_stuck_work off; the 60-minute backstop)
     std::chrono::steady_clock::time_point m_stuckClock{};
-    // GucciBot (2026-11-15, pf2 lane; pf_stuck_work): committed ticks at the
-    // last look, for the level time played between two looks.
-    uint64_t m_stuckTicks = 0;
     // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): the furthest real tick
     // since the last fork jump while the new route is short of the old best
     // (0: none); its moving on restarts the stuck clock.

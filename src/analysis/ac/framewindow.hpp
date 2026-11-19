@@ -168,6 +168,13 @@ class FrameWindowAnalyzer {
     // cube clicks (fixed 2026-10-23, cf168a3). Kept in the file
     // ("olderP2Count") until a whole run counts every input again.
     bool olderP2Count() const { return m_olderP2Count; }
+    // GucciBot (2026-11-17): GD 2.2091's own Ignore Damage (editor levels
+    // only) was on while a run counted these windows, so deaths didn't kill
+    // and they aren't legit. Seen once a drawn frame while a run counts
+    // (tick); every run keeps the earlier mark. Saved in the windows file
+    // ("gdIgnoreDamage") until a whole run counts every input again without it.
+    // Only the 2.2091 file sets it: 2.2081 has no Ignore Damage.
+    bool gdIgnoreDamage() const { return m_gdIgnoreDamage; }
     // Changes whenever a running run has counted more, for the windows file
     // written while it runs (GucciEngine::keepRunningWindows).
     uint64_t runStamp() const {
@@ -406,6 +413,13 @@ class FrameWindowAnalyzer {
     double elapsedSeconds() const {
         return m_running ? std::chrono::duration<double>(std::chrono::steady_clock::now() - m_runStart).count() : 0.0;
     }
+    // GucciBot (2026-11-18): a rough time to go while the inputs are probed:
+    // this probe stage's own time per input so far (from the end of its first
+    // input), times the inputs it has
+    // left (the passes after it, ~N and suggestions, aren't counted). False
+    // until two inputs of the stage are done. `capped`: the time cap
+    // stops the run first, and `seconds` is the time until it does.
+    bool probeTimeLeft(double& seconds, bool& capped) const;
     // GucciBot: whether the last run finished cleanly, for the page to show
     // its result as a note or a warning after the run.
     bool lastRunOk() const { return m_lastOk; }
@@ -452,6 +466,7 @@ class FrameWindowAnalyzer {
         m_messages.clear();
         m_recountFrom = UINT32_MAX;
         m_olderP2Count = false;
+        m_gdIgnoreDamage = false;
         m_measured = 0;
         m_skipped = 0;
         m_desynced = 0;
@@ -1028,6 +1043,9 @@ class FrameWindowAnalyzer {
 
     void updateDisplay(PlayLayer* pl);
     std::chrono::steady_clock::time_point m_runStart{};
+    // GucciBot (2026-11-18): when the probe stage's first input was done
+    // (probeTimeLeft; none yet: the epoch).
+    std::chrono::steady_clock::time_point m_probeFirstDoneAt{};
     void updateTiming(PlayLayer* pl, FrameWindowMark const* mk);
     void refreshTiming(PlayLayer* pl);
 
@@ -1112,6 +1130,8 @@ class FrameWindowAnalyzer {
     std::vector<FrameWindowMark> m_recountOld;
     uint32_t m_recountFrom = UINT32_MAX;  // see recountFrom()
     bool m_olderP2Count = false;          // see olderP2Count()
+    bool m_gdIgnoreDamage = false;        // see gdIgnoreDamage()
+    bool m_gdIgnoreDamageSeen = false;    // Ignore Damage seen by the running run
     // This run counts every input again from some point on: a whole run, or
     // a Continue past a recountFrom mark (m_recountOld is its old windows).
     bool m_recounting = false;
@@ -1130,9 +1150,25 @@ class FrameWindowAnalyzer {
     // there on kept (`carried`) or not.
     uint32_t recountAfter(bool carried, uint32_t stopAt) const;
     // What the run would leave if it stopped now.
+    // GucciBot (2026-11-18): of the older windows `old`, those `fresh` doesn't
+    // replace: how many were measured, and how many were desynced (counted as
+    // skipped, as a run counts them). A window typed by hand for an input
+    // that was never measured is neither.
+    // (2026-11-18 review) Nor one this run tried and counted as skipped
+    // (`tried`, resumeKey keys): an input counts once.
+    static void keptCounts(std::vector<FrameWindowMark> const& fresh,
+                           std::vector<FrameWindowMark> const& old,
+                           std::vector<uint64_t> const& tried, int& measured,
+                           int& skipped);
+    // GucciBot (2026-11-18): the inputs this run counted as skipped (abortClick,
+    // and the stop at an input it couldn't reach), as resumeKey keys, so an
+    // older window kept for one isn't counted as measured too (keptCounts).
+    std::vector<uint64_t> m_skippedKeys;
+    void noteSkipped();
     void runSnapshot(std::vector<FrameWindowMark>& marks,
                      std::vector<FrameWindowMessage>& messages,
-                     uint32_t& recountFrom) const;
+                     uint32_t& recountFrom, int* keptMeasured = nullptr,
+                     int* keptSkipped = nullptr) const;
     bool writeResults(std::filesystem::path const& path,
                       std::vector<FrameWindowMark> const& marks,
                       std::vector<FrameWindowMessage> const& messages,
@@ -1154,8 +1190,11 @@ class FrameWindowAnalyzer {
     // capture has settled the samples (buildResumeMask); empty until then.
     std::vector<char> m_probeMask;
     void buildResumeMask();
-    // The counts from before a resumed run, added back when it finishes.
-    int m_resumePrevMeasured = 0;
+    // The desynced count from before a resumed run, added back when it
+    // finishes. (GucciBot, 2026-11-18: its measured and skipped come from the
+    // windows it keeps, keptCounts, not from the count before it: that count
+    // held the windows past where the run before it stopped, which it counts
+    // again, so a Continue counted them twice.)
     int m_resumePrevDesynced = 0;
     // How many inputs this run measures (all of them for a whole run).
     size_t probeTotal() const;
@@ -1388,6 +1427,13 @@ class FrameWindowAnalyzer {
     size_t m_trailSample = NO_INDEX;
     bool m_legOpen = false;
     bool m_trailShown = false;
+    // GucciBot (2026-11-18): the two draw nodes, held (retained) rather than
+    // found by ID each frame. GD moves children out of a shader level's object
+    // layer (KOCMOC: the trail's nodes ended up in another layer a frame
+    // later), so the ID search missed them and made a new pair every frame;
+    // the old ones stayed in the level after the run (test pass S6).
+    cocos2d::CCDrawNode* m_legCaptureNode = nullptr;
+    cocos2d::CCDrawNode* m_legTrailNode = nullptr;
     uint32_t m_trailVersion = 0;
     uint32_t m_trailDrawn = UINT32_MAX;
     // The capture's line drawn: frames [from, to) of m_capturePath.

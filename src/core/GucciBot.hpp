@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-m (The GD 2.2091 file's about.md and the 2.0 notes say what was proven: 240 and 162 TPS and up work; under 162 TPS, TPS changes inside a macro and High TPS precision come in 2.0.1)"
+    "2026-11-18-o (Calculate: no more FWDISP lines in the Geode log, and no false frame-jumped warning after a run that stopped mid-leg)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
@@ -559,8 +559,8 @@ namespace gucci {
         float m_lastTfp = 0.f;
         // Tick diagnostics, off by default: every frame-counter change in
         // guccibot_frameinc.log, and every input playback hands over in
-        // guccibot_slope.log. Saved as debug_tick_logs, with no menu row:
-        // for a session chasing a desync.
+        // guccibot_slope.log. Saved as debug_tick_logs; Settings >
+        // Diagnostics > Log frame increments: for a session chasing a desync.
         bool m_logFrameIncrements = false;
 
         bool m_lockDelta = true;

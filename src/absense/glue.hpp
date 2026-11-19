@@ -160,10 +160,11 @@ namespace absense {
     // turns it off).
     bool frozenShare();
     void setFrozenShare(bool on);
-    // GucciBot (2026-11-15, pf2 lane): the five-minute stuck rule counts the
-    // search's own thinking and the level time played, never more than the
-    // wall clock, instead of the wall clock alone (on by default: the test
-    // switch pf_stuck_work, this launch only, turns it off).
+    // GucciBot (2026-11-15, pf2 lane; 2026-11-17, pf3 lane): the stuck rule
+    // counts the search's own work - decisions begun without the best tick
+    // moving on, the same on any PC - instead of five minutes of wall clock
+    // (on by default: the test switch pf_stuck_work, this launch only, turns
+    // it off).
     bool stuckWork();
     void setStuckWork(bool on);
     // GucciBot (2026-11-15, pf2 lane): a dead end whose floor is the search's

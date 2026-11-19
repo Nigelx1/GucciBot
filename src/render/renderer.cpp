@@ -762,6 +762,8 @@ namespace gucci {
         m_time = 0.0;
         m_endTime = 0.0f;
         m_completionCaptured = false;
+        m_macroTailTime = 0.0;
+        m_macroTailDone = false;
         m_updateIndex = 0;
         // The encode thread's count, read by the Render card's HUD and by the
         // ring's room check (tryBeginFrame). It has to start each render at
@@ -1417,8 +1419,32 @@ namespace gucci {
         // video), but the level's clock starts after them.
         m_time = (++m_updateIndex - m_introTotal) * this->getDt();
 
-        if (pl->m_hasCompletedLevel &&
-            !GucciEngine::get()->replay.getCurrentQueuedInput().has_value()) {
+        // When the level is done. A macro that is playing back may hold this
+        // for a moment, as Silicate's renderer does: inputs it still has at or
+        // after the level-complete frame (often the last release) play into
+        // the video, click sounds included, before the time after the end
+        // starts. Only Play mode can hold it, and for at most
+        // kMacroTailWait. In Off nothing moves the macro's cursor, so a
+        // loaded macro held the stop forever: the end screen was rendered
+        // until Stop was pressed (test pass 2026-11-18, X1). A playing macro
+        // longer than the level held it until its last input.
+        bool levelEnded = pl->m_hasCompletedLevel;
+        if (levelEnded && !m_macroTailDone) {
+            auto* gb = GucciEngine::get();
+            bool const inputsLeft = gb->isPlaying() && gb->replay.getCurrentQueuedInput().has_value();
+            if (inputsLeft && m_macroTailTime < kMacroTailWait) {
+                m_macroTailTime += this->getDt();
+                levelEnded = false;
+            } else {
+                if (inputsLeft)
+                    geode::log::info("[GucciBot] Render: the macro still has inputs {:.1f} s after the "
+                                     "level end; the render doesn't wait for them",
+                                     m_macroTailTime);
+                m_macroTailDone = true;
+            }
+        }
+
+        if (levelEnded) {
             if (this->m_settings.m_afterEndTime <= 0.f) {
                 // 0 seconds after the end: the level-complete frame is the
                 // video's last. It is captured below (m_endTime stays 0, so

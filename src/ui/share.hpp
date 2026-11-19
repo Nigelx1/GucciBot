@@ -57,6 +57,7 @@ namespace gucci::ui::share {
         double gameMs = 0;   // of that, the game's own thread (the copying before the thread starts)
         // What the last picture shows, for a test to check against the game.
         std::string level, details, score;
+        std::string warning;  // the red mark, when the windows aren't legit (Card::warning)
         std::vector<std::string> bands;  // "name: count"
         std::vector<std::string> tight;  // "#n kind, p%, w frames, t ms"
     };

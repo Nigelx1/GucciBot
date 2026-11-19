@@ -2,6 +2,7 @@
 #include "core/geode_compat.hpp" // gucci::pathToString
 #include "core/GucciBot.hpp"
 #include "core/log_rotate.hpp"
+#include "hacks/safemode_2209.hpp"  // GB_SAFETY_2209: GD 2.2091's Ignore Damage (gdIgnoreDamage)
 #include "trailbuf/trailbuf.hpp"
 
 #include "cbf.hpp"
@@ -1646,6 +1647,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     // can't count goes as in a whole run). Typed ones are m_manualKept's.
     uint32_t const recountFrom = m_recountFrom;
     bool const olderP2Count = m_olderP2Count;
+    bool const gdIgnoreDamage = m_gdIgnoreDamage;
     std::vector<FrameWindowMark> recountOld;
     bool const recounting = !partial || (resume && recountFrom != UINT32_MAX);
     if (recounting) {
@@ -1665,8 +1667,8 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     // results are cleared for the run (mergeKept puts them back after it).
     m_resume = resume;
     m_resumeKeys = resume ? resumeKeysOf(m_results, recountFrom) : std::vector<uint64_t>{};
-    m_resumePrevMeasured = resume ? m_measured : 0;
     m_resumePrevDesynced = resume ? m_desynced : 0;
+    m_skippedKeys.clear();
     m_probeMask.clear();
     m_probeStartIndex = 0;
     m_stoppedByPlayer = false;
@@ -1687,6 +1689,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
         m_messages = std::move(keptMessages);
         m_recountFrom = recountFrom;
         m_olderP2Count = olderP2Count;
+        m_gdIgnoreDamage = gdIgnoreDamage;
         m_generation++;
         // GucciBot (2026-11-16): and the click maps collectSamples built, which
         // only finish() cleared, so a run refused after them ("No input in that
@@ -1699,6 +1702,12 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     this->clear();
     m_recountFrom = recountFrom;  // (clear() drops it; the run's end sets it)
     m_olderP2Count = olderP2Count;
+    // GucciBot (2026-11-17): every run keeps the earlier mark, since a run
+    // that stops short keeps the older windows it hadn't reached (a whole
+    // run's too: finish, runSnapshot). Only a whole run that counts every
+    // input again replaces it, with what it saw itself (finish).
+    m_gdIgnoreDamage = gdIgnoreDamage;
+    m_gdIgnoreDamageSeen = false;
 
     m_sweep = std::clamp(m_sweepRange->inner(), 1, MAX_SWEEP);
     m_maxWin = std::max(0, m_maxWindow->inner());
@@ -1815,6 +1824,10 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     m_resyncFailures = 0;
     m_resyncGaveUp = false;
     m_pathDiverged = false;
+    // GucciBot (2026-11-18): a run that stopped mid-leg (time cap, cancel,
+    // quit) left the trace's last frame behind, and the next run's first
+    // leg read the step back to frame 0 as a jump ("frame jumped 672 -> 0").
+    g_traceLastFrame = UINT32_MAX;
     m_baseTps = Bot::get()->updater().m_tps;
     m_resultsTps = m_baseTps;
     // GucciBot (2026-11-10): Ship Steering's run state. Its own start line,
@@ -4948,7 +4961,15 @@ void FrameWindowAnalyzer::abortClick(char const* why) {
     FWWARN("[fw][click {}] NOT MEASURED @ frame {}: {}", m_index + 1,
               m_recorded, why);
     m_skipped++;
+    this->noteSkipped();
     this->nextClick();
+}
+
+void FrameWindowAnalyzer::noteSkipped() {
+    if (m_index < m_samples.size()) {
+        auto const& s = m_samples[m_index];
+        m_skippedKeys.push_back(resumeKey(s.frame, s.player2, s.release));
+    }
 }
 
 bool FrameWindowAnalyzer::inProbeRange(size_t index) const {
@@ -4992,6 +5013,36 @@ void FrameWindowAnalyzer::buildResumeMask() {
     FWLOG("[fw][resume] continuing from click {}: {} of {} input(s) to measure, {} window(s) kept, {} counted "
           "again with their setup group",
           m_resumeNumber, count, m_samples.size(), m_keptResults.size(), regrouped);
+}
+
+bool FrameWindowAnalyzer::probeTimeLeft(double& seconds, bool& capped) const {
+    seconds = 0.0;
+    capped = false;
+    if (!m_running || m_stage != "probe" || m_index >= m_samples.size()) return false;
+    size_t done = 0, left = 0;
+    for (size_t i = m_probeStartIndex; i < m_samples.size(); i++) {
+        if (!this->inProbeRange(i)) continue;
+        if (i < m_index)
+            done++;
+        else
+            left++;
+    }
+    // Timed from the end of the stage's first input: that one carries the
+    // stage's own start (on KOCMOC it took 15 s where the next took 2 to 3,
+    // and a guess that counted it came out 3 to 5 times too long).
+    if (done < 2 || m_probeFirstDoneAt == Clock::time_point{}) return false;
+    auto const now = Clock::now();
+    double const spent = std::chrono::duration<double>(now - m_probeFirstDoneAt).count();
+    seconds = spent / static_cast<double>(done - 1) * static_cast<double>(left);
+    if (int const cap = SLSettings::get()->frameWindow.timeCapMinutes; cap > 0) {
+        double const toCap =
+            cap * 60.0 - std::chrono::duration<double>(now - m_runStart).count();
+        if (toCap < seconds) {
+            seconds = std::max(0.0, toCap);
+            capped = true;
+        }
+    }
+    return true;
 }
 
 size_t FrameWindowAnalyzer::probeTotal() const {
@@ -5056,9 +5107,30 @@ uint32_t FrameWindowAnalyzer::recountAfter(bool carried, uint32_t stopAt) const 
     return carried ? stopAt : UINT32_MAX;
 }
 
+void FrameWindowAnalyzer::keptCounts(std::vector<FrameWindowMark> const& fresh,
+                                     std::vector<FrameWindowMark> const& old,
+                                     std::vector<uint64_t> const& tried, int& measured,
+                                     int& skipped) {
+    measured = 0;
+    skipped = 0;
+    for (auto const& mk0 : old) {
+        bool const replaced = std::any_of(fresh.begin(), fresh.end(), [&](auto const& mk) {
+            return mk.frame == mk0.frame && mk.player2 == mk0.player2 && mk.release == mk0.release;
+        });
+        bool const triedHere =
+            std::find(tried.begin(), tried.end(), resumeKey(mk0.frame, mk0.player2, mk0.release)) != tried.end();
+        if (replaced || triedHere || (mk0.manual && !mk0.hadAuto)) continue;
+        if (mk0.desynced)
+            skipped++;
+        else
+            measured++;
+    }
+}
+
 void FrameWindowAnalyzer::runSnapshot(std::vector<FrameWindowMark>& marks,
                                       std::vector<FrameWindowMessage>& messages,
-                                      uint32_t& recountFrom) const {
+                                      uint32_t& recountFrom, int* keptMeasured,
+                                      int* keptSkipped) const {
     uint32_t const stopAt = this->stopFrame();
     marks = m_results;
     auto old = m_keptResults;
@@ -5068,6 +5140,12 @@ void FrameWindowAnalyzer::runSnapshot(std::vector<FrameWindowMark>& marks,
             old.push_back(mk);
             carried = true;
         }
+    if (keptMeasured && keptSkipped) {
+        if (m_partial || carried)
+            keptCounts(m_results, old, m_skippedKeys, *keptMeasured, *keptSkipped);
+        else
+            *keptMeasured = *keptSkipped = 0;
+    }
     mergeOld(marks, old);
     applyManual(marks, m_manualKept);
     messages = m_keptMessages;
@@ -5076,6 +5154,10 @@ void FrameWindowAnalyzer::runSnapshot(std::vector<FrameWindowMark>& marks,
 }
 
 void FrameWindowAnalyzer::nextClick() {
+    // GucciBot (2026-11-18): when the probe stage's first input was done
+    // (probeTimeLeft).
+    if (m_stage == "probe" && m_probeFirstDoneAt == Clock::time_point{})
+        m_probeFirstDoneAt = Clock::now();
     m_index++;
     while (m_index < m_samples.size() && !this->inProbeRange(m_index))
         m_index++;
@@ -5276,21 +5358,43 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     // counted again already: stopAt is UINT32_MAX there.)
     if (m_recounting && !m_captureNoclip && (m_stoppedShort ? m_stopAt == UINT32_MAX : ok))
         m_olderP2Count = false;
+    // GucciBot (2026-11-17): the Ignore Damage mark, only by a whole run that
+    // counted every input again: then no older window is left. (A Continue
+    // keeps the mark even when it finishes: the windows before it may be
+    // the marked run's.)
+    if (!m_partial && m_recounting && !m_captureNoclip &&
+        (m_stoppedShort ? m_stopAt == UINT32_MAX : ok))
+        m_gdIgnoreDamage = m_gdIgnoreDamageSeen;
+    m_gdIgnoreDamageSeen = false;
     m_recounting = false;
     m_lastKeptOthers =
         !m_captureNoclip && (m_stoppedShort || (m_partial && ok));
     bool const resumed = m_resume && m_partial;
+    // GucciBot (2026-11-18): the totals are the file's, not only this run's.
+    // A range run (finished, canceled or stopped by leaving the level) and a
+    // whole run stopped short keep the older windows of the inputs they didn't
+    // count, and saved "measured" as the run's own count beside them: a
+    // 400-window file came back saying 2 measured after a 2-input range was
+    // canceled (2026-11-18 test pass, S5). Those kept windows count again, as
+    // a Continue's do below. (An input the older run couldn't measure at all
+    // left no window, so it can't be counted back into "skipped".)
+    // (2026-11-18 review: a Continue too, from the windows it keeps, in place
+    // of the count from before it, which held the windows past where the run
+    // before it stopped, counted again here: 400 inputs came out 700.)
+    if ((m_partial || carried) && (!m_captureNoclip || resumed)) {
+        int keptMeasured = 0, keptSkipped = 0;
+        keptCounts(m_results, m_keptResults, m_skippedKeys, keptMeasured, keptSkipped);
+        m_measured += keptMeasured;
+        m_skipped += keptSkipped;
+    }
+    m_skippedKeys.clear();
     if (m_partial || carried) this->mergeKept();
     // The counts from before a Continue, back with their windows. (Its own
     // "not measured" stay its own: those from before were tried again.)
-    if (resumed) {
-        m_measured += m_resumePrevMeasured;
-        m_desynced += m_resumePrevDesynced;
-    }
+    if (resumed) m_desynced += m_resumePrevDesynced;
     m_resume = false;
     m_resumeKeys.clear();
     m_probeMask.clear();
-    m_resumePrevMeasured = 0;
     m_resumePrevDesynced = 0;
     m_probeStartIndex = 0;
     this->reapplyManual();
@@ -5397,6 +5501,17 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
     if (pl) this->updateTripLabel(pl);
     if (!m_running) return;
 
+#if GB_SAFETY_2209
+    // GucciBot (2026-11-17): GD 2.2091's own Ignore Damage, once a drawn
+    // frame while a run counts (gdIgnoreDamage). It stays on until it is
+    // turned off, so a frame's look sees it for the ticks in between too.
+    if (pl && !m_gdIgnoreDamageSeen && gucci::safemode::gdIgnoreDamageOn()) {
+        m_gdIgnoreDamageSeen = true;
+        m_gdIgnoreDamage = true;
+        log::warn("[GucciBot] Calculate: GD's Ignore Damage is on during this run; its windows aren't legit");
+    }
+#endif
+
     ScopeTimer timer{m_tickNanos};
 
     if (!pl) {
@@ -5422,7 +5537,8 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
         // GucciBot (2026-11-15): out of this run's inputs (a range or a
         // Continue measures only some), and Continue picks up from here.
         this->finish(fmt::format("Stopped at the {}-minute time cap with {} of {} inputs measured. Raise the "
-                                 "cap (Calculate page, Speed), or press Continue from where it stopped to "
+                                 "cap (Calculate page: Advanced, Show advanced settings, Speed), or press Continue from where it "
+                                 "stopped to "
                                  "measure the rest.",
                                  cap, m_measured, this->probeTotal()),
                      true);
@@ -5537,6 +5653,8 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     pf.removeAll();
                     pl->resetLevel();
                     bot->replaySystem().onReset(0);
+                    // Back at frame 0 without hardResetToStart: forget the trace too.
+                    g_traceLastFrame = UINT32_MAX;
 
                     while (m_index < m_samples.size() &&
                            !this->inProbeRange(m_index))
@@ -5549,6 +5667,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                         return;
                     }
                     m_probeStartIndex = m_index;
+                    m_probeFirstDoneAt = {};
                     if (m_resume)
                         m_status = fmt::format("Probing (continued from click {})", m_resumeNumber);
 
@@ -5641,6 +5760,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     FWWARN("[fw][click {}] NOT MEASURED @ frame {}: {}", m_index + 1, m_recorded,
                            "died before reaching the branch point");
                     m_skipped++;
+                    this->noteSkipped();
                     this->finish(
                         fmt::format("Measured {} of {} inputs. The macro "
                                     "cannot be replayed past frame {}.",
@@ -7697,6 +7817,9 @@ struct StoredResults {
     // key, or marks that have no "wide" key (2.0.0-beta.5 and older) with one
     // carrying the player-2 flag. Written only when set.
     bool olderP2Count = false;
+    // GucciBot (2026-11-17): FrameWindowAnalyzer::gdIgnoreDamage. Written
+    // only when set.
+    bool gdIgnoreDamage = false;
     std::vector<StoredMark> marks;
     std::vector<StoredMessage> messages;
 };
@@ -7806,6 +7929,7 @@ static std::string toJson(StoredResults const& r) {
     if (r.recountFrom != UINT32_MAX)
         root.set("recountFrom", (int64_t)r.recountFrom);
     if (r.olderP2Count) root.set("olderP2Count", true);
+    if (r.gdIgnoreDamage) root.set("gdIgnoreDamage", true);
     return root.dump();
 }
 
@@ -7851,6 +7975,7 @@ static bool fromJson(std::string const& text, StoredResults& out) {
         out.recountFrom = rf >= 0 && rf < (int64_t)UINT32_MAX ? (uint32_t)rf : UINT32_MAX;
     }
     out.olderP2Count = jbool(root, "olderP2Count", false);
+    out.gdIgnoreDamage = jbool(root, "gdIgnoreDamage", false);
 
     auto const marks = root["marks"];
     if (marks.isArray()) {
@@ -7942,11 +8067,15 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
         std::vector<FrameWindowMark> marks;
         std::vector<FrameWindowMessage> messages;
         uint32_t recountFrom = UINT32_MAX;
-        this->runSnapshot(marks, messages, recountFrom);
-        int const prevMeasured = m_resume ? m_resumePrevMeasured : 0;
+        int keptMeasured = 0, keptSkipped = 0;
+        this->runSnapshot(marks, messages, recountFrom, &keptMeasured, &keptSkipped);
+        // (The older windows this snapshot keeps, as finish() counts them,
+        // a Continue's too.)
+        int const prevMeasured = keptMeasured;
+        int const prevSkipped = keptSkipped;
         int const prevDesynced = m_resume ? m_resumePrevDesynced : 0;
-        return this->writeResults(path, marks, messages, recountFrom, m_measured + prevMeasured, m_skipped,
-                                  m_desynced + prevDesynced);
+        return this->writeResults(path, marks, messages, recountFrom, m_measured + prevMeasured,
+                                  m_skipped + prevSkipped, m_desynced + prevDesynced);
     }
     return this->writeResults(path, m_results, m_messages, m_recountFrom, m_measured, m_skipped, m_desynced);
 }
@@ -7963,6 +8092,7 @@ bool FrameWindowAnalyzer::writeResults(std::filesystem::path const& path,
     out.desynced = desynced;
     out.recountFrom = recountFrom;
     out.olderP2Count = m_olderP2Count;
+    out.gdIgnoreDamage = m_gdIgnoreDamage;
 
     if (auto* pl = PlayLayer::get(); pl && pl->m_level)
         out.level = pl->m_level->m_levelName;
@@ -8113,6 +8243,7 @@ bool FrameWindowAnalyzer::loadResults(std::filesystem::path const& path) {
     m_resultsTps = in.tps > 0.0 ? in.tps : 240.0;
     m_recountFrom = in.recountFrom;
     m_olderP2Count = in.olderP2Count;
+    m_gdIgnoreDamage = in.gdIgnoreDamage;
     m_generation++;
     this->resetDisplay();
     return true;
@@ -9702,21 +9833,56 @@ static void drawLegLine(cocos2d::CCDrawNode* node,
     }
 }
 
-// Found by ID each time, never kept: a level that closes takes them with it.
-static cocos2d::CCDrawNode* legTrailNode(PlayLayer* pl, char const* id, int z,
-                                         bool& created) {
+// GucciBot (2026-11-18): held, not found by ID each frame. In a level with a
+// shader GD moves children out of the object layer they were added to (on
+// KOCMOC a trail node was in another layer one frame later), so the old ID
+// search missed the pair it made the frame before and made a new one every
+// frame: about 2 draw nodes a drawn frame for the whole run, and the run's end
+// removed only the newest pair, so the rest stayed drawn in the level through
+// restarts and playback (2026-11-18 test pass, S6: 1,064 nodes after one range
+// run). `held` keeps its own reference; a node that's no longer under this
+// level (it closed, or another opened) is let go and a new one made.
+static bool underLayer(cocos2d::CCNode* node, cocos2d::CCNode* root) {
+    for (auto* n = node; n; n = n->getParent())
+        if (n == root) return true;
+    return false;
+}
+
+static void letGoLegNode(cocos2d::CCDrawNode*& held) {
+    if (!held) return;
+    held->removeFromParent();
+    held->release();
+    held = nullptr;
+}
+
+static cocos2d::CCDrawNode* legTrailNode(PlayLayer* pl, cocos2d::CCDrawNode*& held,
+                                         char const* id, int z, bool& created) {
     created = false;
-    if (auto* node = typeinfo_cast<cocos2d::CCDrawNode*>(
-            pl->m_objectLayer->getChildByID(id)))
-        return node;
+    if (held && underLayer(held, pl)) return held;
+    letGoLegNode(held);
     auto* node = cocos2d::CCDrawNode::create();
     if (!node) return nullptr;
     node->setID(id);
     node->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
     node->m_bUseArea = false;  // as the macro path has it (macropath.cpp)
     pl->m_objectLayer->addChild(node, z);
+    node->retain();
+    held = node;
     created = true;
     return node;
+}
+
+// Any node of ours left in the layers GD puts level things in (one made by
+// a build before the fix above, say), by ID: only their own children, which
+// are few next to the objects (those sit in batch nodes).
+static void sweepLegNodes(PlayLayer* pl) {
+    for (cocos2d::CCNode* layer : {static_cast<cocos2d::CCNode*>(pl->m_objectLayer),
+                                   static_cast<cocos2d::CCNode*>(pl->m_inShaderObjectLayer),
+                                   static_cast<cocos2d::CCNode*>(pl->m_aboveShaderObjectLayer)}) {
+        if (!layer) continue;
+        for (char const* id : {"framewindow-leg-trail"_spr, "framewindow-leg-capture"_spr})
+            while (auto* node = layer->getChildByID(id)) node->removeFromParent();
+    }
 }
 
 void FrameWindowAnalyzer::openTrailLeg() {
@@ -9841,14 +10007,12 @@ void FrameWindowAnalyzer::dropLegTrail() {
     m_trailDrawn = UINT32_MAX;
     m_trailCaptureFrom = 0;
     m_trailCaptureTo = 0;
+    // (Wherever GD has moved them: see legTrailNode.)
+    letGoLegNode(m_legTrailNode);
+    letGoLegNode(m_legCaptureNode);
     if (!m_trailShown) return;
     m_trailShown = false;
-    auto* pl = PlayLayer::get();
-    if (!pl || !pl->m_objectLayer) return;
-    if (auto* node = pl->m_objectLayer->getChildByID("framewindow-leg-trail"_spr))
-        node->removeFromParent();
-    if (auto* node = pl->m_objectLayer->getChildByID("framewindow-leg-capture"_spr))
-        node->removeFromParent();
+    if (auto* pl = PlayLayer::get()) sweepLegNodes(pl);
 }
 
 void FrameWindowAnalyzer::updateLegTrail(PlayLayer* pl) {
@@ -9862,9 +10026,9 @@ void FrameWindowAnalyzer::updateLegTrail(PlayLayer* pl) {
 
     bool created = false;
     auto* capture =
-        legTrailNode(pl, "framewindow-leg-capture"_spr, 1602, created);
+        legTrailNode(pl, m_legCaptureNode, "framewindow-leg-capture"_spr, 1602, created);
     if (created) m_trailCaptureFrom = m_trailCaptureTo = 0;
-    auto* legs = legTrailNode(pl, "framewindow-leg-trail"_spr, 1603, created);
+    auto* legs = legTrailNode(pl, m_legTrailNode, "framewindow-leg-trail"_spr, 1603, created);
     if (created) m_trailDrawn = UINT32_MAX;
     if (!capture || !legs) return;
     m_trailShown = true;

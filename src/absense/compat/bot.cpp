@@ -594,7 +594,8 @@ namespace {
 // GucciBot (2026-11-15, pf2 lane): on by default since 2026-11-16 (the cold
 // regression: the 7 passing levels' decisions identical with it on; on a busy
 // PC the wall-clock rule stopped GRIEF 5 minutes into a stall it gets past
-// with this on). See pathfinder.cpp, tick(): the stuck rule.
+// with this on). Since 2026-11-17 (pf3 lane) it counts decisions, not
+// thinking time. See pathfinder.cpp, kStuckDecisions and tick().
 bool g_stuckWork = true;
 }
 

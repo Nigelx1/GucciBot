@@ -119,6 +119,31 @@ namespace gucci::mcp {
             return pl;
         }
 
+        // GucciBot (2026-11-18): gucci_quit_level's leave, from the main-thread
+        // queue, but not while a level reset or the menu's frame (Calculate's
+        // tick) is under way: GD runs that queue from every scheduler update,
+        // a reset's checkpoint refresh included, and a leave from there
+        // crashed GD (Server::Busy). Asked again on the next run of the queue;
+        // given up after 10 seconds, so it can't wait forever.
+        void leaveLevelWhenFree(PlayLayer* pl, std::chrono::steady_clock::time_point asked) {
+            Loader::get()->queueInMainThread([pl, asked] {
+                if (PlayLayer::get() != pl)
+                    return;
+                if (Server::get()->busy()) {
+                    if (std::chrono::steady_clock::now() - asked < std::chrono::seconds(10)) {
+                        static int s_told = 0;
+                        if (s_told++ < 20)
+                            log::info("[GucciBot] gucci_quit_level: waited for a level reset or Calculate's tick to end");
+                        leaveLevelWhenFree(pl, asked);
+                    }
+                    else
+                        log::warn("[GucciBot] gucci_quit_level: the game stayed busy for 10 s; not leaving");
+                    return;
+                }
+                pl->onQuit();
+            });
+        }
+
         char const* modeName(GucciEngine::Mode m) {
             switch (m) {
                 case GucciEngine::Mode::Recording: return "record";
@@ -1783,6 +1808,9 @@ namespace gucci::mcp {
                         out["skipped"] = (int64_t)fw.skippedCount();
                         out["desynced"] = (int64_t)fw.desyncCount();
                         out["last_run_ok"] = fw.lastRunOk();
+                        // GucciBot (2026-11-17): GD 2.2091's Ignore Damage was on while
+                        // these windows were counted (FrameWindowAnalyzer::gdIgnoreDamage).
+                        out["gd_ignore_damage"] = fw.gdIgnoreDamage();
                         // GucciBot (2026-11-15): where a whole run over older windows stopped
                         // (-1: none), and what Continue would do.
                         out["recount_from"] =
@@ -3514,10 +3542,7 @@ namespace gucci::mcp {
             [](matjson::Value const&) {
                 auto* pl = requireLevel();
                 // After this call has answered: leaving tears the level down.
-                Loader::get()->queueInMainThread([pl] {
-                    if (PlayLayer::get() == pl)
-                        pl->onQuit();
-                });
+                leaveLevelWhenFree(pl, std::chrono::steady_clock::now());
                 auto out = obj();
                 out["leaving"] = true;
                 return out;
@@ -3636,6 +3661,7 @@ namespace gucci::mcp {
         registerShareTools(server);
         registerBandsTools(server);
         registerLayoutTools(server);
+        registerKeysTools(server);
     }
 
 } // namespace gucci::mcp

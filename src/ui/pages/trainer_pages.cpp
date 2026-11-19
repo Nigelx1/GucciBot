@@ -2133,6 +2133,9 @@ namespace gucci::ui::pages {
             ImGui::PushStyleColor(c, v);
             ++g_jmfPushed;
         });
+        // Its cards as see-through as every other page's under Settings >
+        // Look > Menu opacity (the push runs inside it; jmfLook's are solid).
+        look().pal.surface.w *= look().menuSeeThrough;
     }
 
     // JupiterBot: the same look on every window, written straight over the

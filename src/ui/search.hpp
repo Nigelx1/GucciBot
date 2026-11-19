@@ -146,7 +146,15 @@ namespace gucci::ui::search {
 
     // Ctrl is held and the menu that draws the box has the keyboard (last
     // frame): an F now goes to the box, not to a hotkey bound to F.
-    bool ctrlFIsMine();
+    // cocosCtrl is the game keyboard's Ctrl (ui::ctrlHeld). ImGui's Ctrl
+    // isn't used: imgui-cocos hands ImGui a key going down only while ImGui
+    // already wants the keyboard (a box being typed in), so with the menu
+    // merely open ImGui never sees Ctrl or F go down, and on Geode 6 its Ctrl
+    // sticks down after Ctrl is let go.
+    bool ctrlFIsMine(bool cocosCtrl);
+    // Ctrl+F from cocos's keyboard: the box takes the cursor at its next
+    // field(), when the menu has the keyboard and nothing is being typed in.
+    void focusBox();
 
     // Back (a phone's back button, or Escape as cocos sends it) while a menu
     // text box is being typed in: the box lets go instead of the game going
