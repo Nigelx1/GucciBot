@@ -56,7 +56,7 @@ namespace gucci::positions {
     // lane are drawn.
     std::vector<Entry> const& entries();
     // Whether the band should be drawn now (the switch, the borders shown, no
-    // Calculate run).
+    // Calculate run, player 1 alive and the level not ending).
     bool shouldDraw();
     // Everything dropped (the level going, the switch off).
     void clear();

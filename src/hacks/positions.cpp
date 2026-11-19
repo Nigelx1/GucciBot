@@ -453,7 +453,15 @@ namespace gucci::positions {
 
     bool shouldDraw() {
         auto* gb = GucciEngine::get();
-        return wanted(gb) && !gb->fwAnalyzing && !gb->analyzerOwnsRun() && !g().entries.empty();
+        if (!wanted(gb) || gb->fwAnalyzing || gb->analyzerOwnsRun() || g().entries.empty())
+            return false;
+        // Not through a death and its respawn delay, nor the level's end: the
+        // band is where you could go next, and there is no next. (The entries
+        // are dropped at the respawn, when the reset count moves.)
+        auto* pl = PlayLayer::get();
+        if (!pl || !pl->m_player1 || pl->m_player1->m_isDead || pl->m_playerDied || pl->m_levelEndAnimationStarted)
+            return false;
+        return true;
     }
 
     void clear() {
