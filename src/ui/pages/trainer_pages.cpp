@@ -185,7 +185,7 @@ namespace gucci::ui::pages {
         // player's own through the bottom (presses full height, releases
         // half), segments shade the background, and the centre line stays put
         // while everything scrolls past it.
-        void drawBar(Kind k) {
+        void drawBar(Kind k, bool forVideo = false) {
             auto s = tr::state(k);
             auto& ps = page(k);
             auto const& pal = look().pal;
@@ -203,11 +203,14 @@ namespace gucci::ui::pages {
             // Centered on the clock as it is drawn (in the level, the tick the
             // game is on now, not posSec from the start of the frame, which
             // was a frame behind), plus the Delay setting: the macro's clicks
-            // reach the center line that much early. Skimming below still
-            // moves posSec itself.
-            double const gameNow = ln::now(k);
+            // reach the center line that much sooner. Skimming below still
+            // moves posSec itself. Video Mode's bar stays on posSec with no
+            // Delay, as before: its video picks the frame it shows from
+            // posSec (trainers/videomode.cpp, clockOf), and has its own Sync.
+            double const gameNow = forVideo ? s.posSec : ln::now(k);
             double const tps = ln::view(k).tps;
-            double const center = gucci::lanerules::drawClock(gameNow, ln::settings().delayMs, tps);
+            float const delayMs = forVideo ? 0.f : ln::settings().delayMs;
+            double const center = gucci::lanerules::drawClock(gameNow, delayMs, tps);
             double const left = center - span * 0.5;
             double const right = center + span * 0.5;
             auto x = [&](double t) { return p0.x + (float)((t - left) * pxPerSec); };
@@ -286,7 +289,8 @@ namespace gucci::ui::pages {
             drawn.gameClock = gameNow;
             drawn.posSec = s.posSec;
             drawn.tps = tps;
-            drawn.delayMs = ln::settings().delayMs;
+            drawn.delayMs = delayMs;
+            drawn.video = forVideo;
             drawn.markX = p0.x + w * 0.5f;
             drawn.pxPerSec = (float)pxPerSec;
             drawn.n = 0;
@@ -855,7 +859,7 @@ namespace gucci::ui::pages {
                 float const ca = std::max(xa, inL), cb = std::min(xb, inR);
                 if (cb <= ca)
                     continue;
-                bool const held = v.holding == (int)i;
+                bool const held = v.holding == (int)i || v.holding2 == (int)i;
                 float const fade = r.missed ? 0.4f : 1.f;
                 float const fillA = (held ? 0.9f : slider ? 0.55f : isFree ? 0.25f : 0.45f) * fade;
                 float const edgeA = (held ? 1.f : slider ? 0.6f : isFree ? 0.25f : 0.45f) * fade;
@@ -1542,11 +1546,13 @@ namespace gucci::ui::pages {
                 // (trainers/lane.hpp, delayMs); judging never sees it.
                 auto& set = ln::settings();
                 if (kit::SliderRow("Delay",
-                                   laneStyle ? "If you keep pressing late, raise it: the notes arrive this much "
-                                               "early. Your verdicts still go by when the game got your press."
+                                   laneStyle ? "If you keep pressing late, raise it: the notes come this many ms "
+                                               "sooner (below 0, later). PERFECT, EARLY and LATE still go by when "
+                                               "the game got your press. Both trainers share it."
                                              : "If you keep pressing late, raise it: the clicks reach the center "
-                                               "line this much early. Your timing still goes by when the game got "
-                                               "your press.",
+                                               "line this many ms sooner (below 0, later). Your timing still goes "
+                                               "by when the game got your press. Both trainers share it, and "
+                                               "Video Mode's bar doesn't use it.",
                                    &set.delayMs, gucci::lanerules::kDelayMinMs, gucci::lanerules::kDelayMaxMs,
                                    "%.0f ms")) {
                     set.delayMs = gucci::lanerules::clampDelayMs(std::round(set.delayMs));
@@ -2261,7 +2267,7 @@ namespace gucci::ui::pages {
                                                  : "No clicks to show: load a macro on the Trainer page.",
                               Tone::Warn);
                 else
-                    drawBar(k);
+                    drawBar(k, true);
                 // While its level is open the bar follows the level (tick()
                 // holds it paused at the level's time): Pause did nothing and
                 // Restart only wiped your clicks, as on the Click Trainer card,

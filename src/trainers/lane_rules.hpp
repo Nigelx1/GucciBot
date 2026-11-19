@@ -173,4 +173,26 @@ namespace gucci::lanerules {
         return best;
     }
 
+    // Which counted window a macro click's press (or release) takes. The
+    // windows file keys a window by frame, press or release, and player, not
+    // by button. `ownClicks` / `otherClicks`: how many of the macro's clicks,
+    // of this player and of the other one, press (or release) on that frame;
+    // `ownWindow` / `otherWindow`: whether a window is counted there under
+    // each player. Its own player's window first. The other player's only
+    // when that player has no click of its own there (a 1-player level's
+    // dual fixes count under the other flag); in a 2-player level it belongs
+    // to that player's click. Two clicks of one player on one frame (a jump
+    // and a Left or Right) take none: the file doesn't say whose it is.
+    enum class WindowPick : uint8_t { None, Own, Other };
+
+    inline WindowPick pickWindow(int ownClicks, int otherClicks, bool ownWindow, bool otherWindow) {
+        if (ownClicks != 1)
+            return WindowPick::None;
+        if (ownWindow)
+            return WindowPick::Own;
+        if (otherWindow && otherClicks == 0)
+            return WindowPick::Other;
+        return WindowPick::None;
+    }
+
 } // namespace gucci::lanerules

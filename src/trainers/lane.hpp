@@ -105,7 +105,8 @@ namespace gucci::trainers::lane {
         std::vector<Result> const* results = nullptr;
         double maxHoldSec = 0.0;
         int counted = 0;    // notes with a counted press window
-        int holding = -1;   // the note held now, or -1
+        int holding = -1;   // the note held now, or -1 (player 1's)
+        int holding2 = -1;  // player 2's, in a 2-player level
         Flash flash;
         Tally tally;
         double tps = 240.0; // the lane's tick rate now
@@ -134,7 +135,9 @@ namespace gucci::trainers::lane {
     double drawNow(Kind k);
 
     // ---- fed by trainers/trainer_core
-    void onInput(Kind k, bool down, double atSec, double tps);
+    // `player2`: the player the press moves (a 2-player level's player 2;
+    // false everywhere else), so each player's release closes its own hold.
+    void onInput(Kind k, bool down, double atSec, double tps, bool player2 = false);
     void rewind(Kind k, double fromSec);
     void clear(Kind k);
     // Once a frame from the drawing: notes the clock passed unanswered.
@@ -183,6 +186,7 @@ namespace gucci::trainers::lane {
         // the start-of-frame value (a tick the game took in that frame).
         uint64_t draws = 0;
         uint64_t fresh = 0;
+        bool video = false;      // Classic: drawn by Video Mode's bar (posSec, no Delay)
     };
     Drawn& drawn(Kind k, Style st);
 

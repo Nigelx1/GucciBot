@@ -92,7 +92,8 @@ namespace gucci::trainers {
 
     // A real jump press/release that reached GD (GJBaseGameLayer::handleButton,
     // button 1, not the bot's). Counts for a trainer whose level is open.
-    void onLevelInput(bool down);
+    // `player2`: the press moves player 2 (a 2-player level only).
+    void onLevelInput(bool down, bool player2 = false);
     // Space, up or W from the keyboard dispatcher. Counts for a trainer whose
     // page is open with its bar running and no level of its own open (the
     // level path above takes those).

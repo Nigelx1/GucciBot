@@ -168,6 +168,22 @@ int main() {
         }
     }
 
+    // Which counted window a click takes (pickWindow).
+    {
+        // A 1-player level: its own window, or the dual fixes' one under the other flag.
+        CHECK(pickWindow(1, 0, true, false) == WindowPick::Own);
+        CHECK(pickWindow(1, 0, false, true) == WindowPick::Other);
+        CHECK(pickWindow(1, 0, true, true) == WindowPick::Own);
+        CHECK(pickWindow(1, 0, false, false) == WindowPick::None);
+        // A 2-player level, both press on the frame: never the other player's window.
+        CHECK(pickWindow(1, 1, false, true) == WindowPick::None);
+        CHECK(pickWindow(1, 1, true, true) == WindowPick::Own);
+        // A jump and a Left/Right of one player on one frame: the file doesn't say whose.
+        CHECK(pickWindow(2, 0, true, false) == WindowPick::None);
+        CHECK(pickWindow(2, 0, false, true) == WindowPick::None);
+        CHECK(pickWindow(0, 0, true, true) == WindowPick::None);
+    }
+
     std::printf("lane tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

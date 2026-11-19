@@ -4,6 +4,7 @@
 #include "hacks/legit.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/fw_file.hpp"
+#include "trainers/lane_rules.hpp"
 #include "ui/ui.hpp"
 #include <fmt/format.h>
 #include "core/bot_switch.hpp"
@@ -898,7 +899,8 @@ namespace gucci {
     // yellower as it gets more lenient), so the macro's windows file, when
     // Calculate has counted one, is read with its clicks. A window belongs to
     // the press (or release) on its frame, of its player; one counted under
-    // the other player's flag (a 1-player level's dual fixes) still counts.
+    // the other player's flag (a 1-player level's dual fixes) still counts,
+    // unless that player has a click of its own there (lanerules::pickWindow).
     static void attachTrainerWindows(const fs::path& macroPath, GucciEngine::TrainerMacroData& out) {
         static uint64_t s_generation = 0;
         out.generation = ++s_generation;
@@ -925,11 +927,27 @@ namespace gucci {
                 continue;
             byKey.emplace(keyOf(w.frame, w.release, w.player2), &w);
         }
+        // How many of the macro's clicks press (or release) on each key: a
+        // window is taken only by the one click it can belong to
+        // (lanerules::pickWindow; the file has no button).
+        std::unordered_map<uint64_t, int> clicksAt;
+        for (auto const& c : out.clicks) {
+            ++clicksAt[keyOf(c.pressFrame, false, c.player2)];
+            ++clicksAt[keyOf(c.releaseFrame, true, c.player2)];
+        }
+        auto count = [&](uint64_t key) {
+            auto const it = clicksAt.find(key);
+            return it == clicksAt.end() ? 0 : it->second;
+        };
         auto find = [&](uint32_t frame, bool release, bool p2) -> gucci::fwfile::Window const* {
-            if (auto it = byKey.find(keyOf(frame, release, p2)); it != byKey.end())
-                return it->second;
-            if (auto it = byKey.find(keyOf(frame, release, !p2)); it != byKey.end())
-                return it->second;
+            uint64_t const own = keyOf(frame, release, p2), other = keyOf(frame, release, !p2);
+            auto const ownIt = byKey.find(own), otherIt = byKey.find(other);
+            switch (gucci::lanerules::pickWindow(count(own), count(other), ownIt != byKey.end(),
+                                                 otherIt != byKey.end())) {
+                case gucci::lanerules::WindowPick::Own: return ownIt->second;
+                case gucci::lanerules::WindowPick::Other: return otherIt->second;
+                case gucci::lanerules::WindowPick::None: break;
+            }
             return nullptr;
         };
         auto take = [&](gucci::fwfile::Window const* w, float& window, int& low, int& high, bool& isFree,

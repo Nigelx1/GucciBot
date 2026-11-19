@@ -125,13 +125,13 @@ namespace gucci::trainers {
             sc.hasLastReading = false;
         }
 
-        void record(Kind k, bool down, double atSec, double tps) {
+        void record(Kind k, bool down, double atSec, double tps, bool player2 = false) {
             auto s = state(k);
             (down ? s.myPresses : s.myReleases).push_back(atSec);
             if (!s.macro.clickIntervalsSec.empty())
                 GucciEngine::get()->scoreRealClick(s.macro.clickIntervalsSec, s.score, atSec, down, tps);
             // The lane judges it too, against the note it answers (trainers/lane.hpp).
-            lane::onInput(k, down, atSec, tps);
+            lane::onInput(k, down, atSec, tps, player2);
         }
 
         // ---- segment text
@@ -532,14 +532,14 @@ namespace gucci::trainers {
 
     // ------------------------------------------------------------ input
 
-    void onLevelInput(bool down) {
+    void onLevelInput(bool down, bool player2) {
         auto* gb = GucciEngine::get();
         if (gb->isPlaying() || levelBusy())
             return;
         double const t = levelTimeSec();
         for (Kind k : {Kind::Jupiter, Kind::Any})
             if (followsLevel(k))
-                record(k, down, t, gameTps());
+                record(k, down, t, gameTps(), player2);
     }
 
     void onKeyInput(bool down, double timestamp) {

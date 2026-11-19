@@ -37,7 +37,9 @@ namespace gucci::trainers::lane {
             std::vector<Result> results;
             double maxHoldSec = 0.0;
             int counted = 0;
-            int holding = -1;
+            // The note each player holds (player 1, player 2), or -1: in a
+            // 2-player level one player's release never closes the other's.
+            std::array<int, 2> holding{-1, -1};
             size_t missScan = 0;
             Flash flash;
             Tally tally;
@@ -78,7 +80,7 @@ namespace gucci::trainers::lane {
         void resetResults(Lane& l) {
             l.answered.assign(l.notes.size(), 0);
             l.results.assign(l.notes.size(), Result{});
-            l.holding = -1;
+            l.holding = {-1, -1};
             l.missScan = 0;
             l.tally = {};
             l.recent.clear();
@@ -254,7 +256,8 @@ namespace gucci::trainers::lane {
         v.results = &l.results;
         v.maxHoldSec = l.maxHoldSec;
         v.counted = l.counted;
-        v.holding = l.holding;
+        v.holding = l.holding[0];
+        v.holding2 = l.holding[1];
         v.flash = l.flash;
         v.tally = l.tally;
         v.tps = laneTps(k);
@@ -262,15 +265,16 @@ namespace gucci::trainers::lane {
         return v;
     }
 
-    void onInput(Kind k, bool down, double atSec, double tps) {
+    void onInput(Kind k, bool down, double atSec, double tps, bool player2) {
         auto& l = built(k);
         if (l.notes.empty())
             return;
+        int& holding = l.holding[player2 ? 1 : 0];
         if (down) {
             int const i = match(l.pressTimes, l.answered, atSec, kReachSec);
             if (i < 0) {
                 // A press near no note: the marker pulses, nothing is judged.
-                l.holding = -1;
+                holding = -1;
                 flash(l, "", Verdict::Missed, Tier::Unknown, false);
                 return;
             }
@@ -284,11 +288,11 @@ namespace gucci::trainers::lane {
             count(l, j.verdict);
             remember(l, j.delta, j.verdict);
             flash(l, label(j), j.verdict, n.pressTier, false);
-            l.holding = i;
+            holding = i;
             return;
         }
-        int const i = l.holding;
-        l.holding = -1;
+        int const i = holding;
+        holding = -1;
         if (i < 0 || (size_t)i >= l.notes.size())
             return;
         auto const& n = l.notes[(size_t)i];
@@ -340,7 +344,7 @@ namespace gucci::trainers::lane {
         auto const first = std::lower_bound(l.pressTimes.begin(), l.pressTimes.end(), cut);
         // Notes before the cut that passed while you were dead stay as they were.
         l.missScan = std::min(l.missScan, (size_t)(first - l.pressTimes.begin()));
-        l.holding = -1;
+        l.holding = {-1, -1};
         l.tally = {};
         l.flash = {};
         l.recent.clear();

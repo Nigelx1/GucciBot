@@ -87,6 +87,7 @@ namespace gucci::mcp {
             field("drawn", "boolean", "where the last draw of each style put the marker or center line and the "
                                       "macro's clicks (screen pixels), and its clocks");
             field("drawn_reset", "boolean", "start the draw counters (draws, fresh) over");
+            field("video_mode", "boolean", "the Trainer's Video Mode on or off (this launch; kind trainer only)");
             auto s = matjson::Value::object();
             s["type"] = "object";
             s["properties"] = props;
@@ -108,7 +109,8 @@ namespace gucci::mcp {
                                     a.contains("paused") || a.contains("press") || a.contains("style") ||
                                     a.contains("lead_ticks") || a.contains("size") || a.contains("in_level") ||
                                     a.contains("place") || a.contains("width") ||
-                                    a.contains("flash_age") || a.contains("delay_ms") || a.contains("drawn_reset");
+                                    a.contains("flash_age") || a.contains("delay_ms") || a.contains("drawn_reset") ||
+                                    a.contains("video_mode");
                 if (writes && !gucci::safemode::testLaunch())
                     throw ToolError("test launches only (tools/assist.py launch)");
                 tr::ensureLoaded();
@@ -141,6 +143,11 @@ namespace gucci::mcp {
                         ln::drawn(kind, st).draws = 0;
                         ln::drawn(kind, st).fresh = 0;
                     }
+                if (a.contains("video_mode")) {
+                    if (kind != tr::Kind::Any)
+                        throw ToolError("video_mode: the Trainer's only (kind trainer)");
+                    GucciEngine::get()->trainerVideoModeEnabled = flag(a, "video_mode", false);
+                }
                 if (a.contains("seek"))
                     tr::seek(kind, num(a, "seek", 0.0));
                 if (a.contains("paused"))
@@ -209,6 +216,7 @@ namespace gucci::mcp {
                         e["px_per_sec"] = (double)d.pxPerSec;
                         e["draws"] = (int64_t)d.draws;
                         e["fresh"] = (int64_t)d.fresh;
+                        e["video"] = d.video;
                         auto arr = matjson::Value::array();
                         for (int i = 0; i < d.n; ++i) {
                             auto n = matjson::Value::object();
@@ -228,6 +236,7 @@ namespace gucci::mcp {
                 out["notes_with_window"] = (int64_t)v.counted;
                 out["windows_in_file"] = (int64_t)s.macro.windowsCounted;
                 out["holding"] = (int64_t)v.holding;
+                out["holding2"] = (int64_t)v.holding2;
                 auto tally = matjson::Value::object();
                 tally["perfect"] = (int64_t)v.tally.perfect;
                 tally["inside"] = (int64_t)v.tally.inside;
