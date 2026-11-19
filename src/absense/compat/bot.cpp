@@ -146,7 +146,7 @@ namespace {
     // GucciBot (2026-11-19, dlfix lane): a stuck run's retry that could not
     // start says why the run stopped, and why it could not start over, as the
     // stop it stands in for would have (the dialog, and the status line).
-    void retryFailed(const std::string& whyNot) {
+    void retryFailed(std::string whyNot) {  // a copy: callers pass s_pendingNote or the stats message, both rewritten here
         s_pendingNote = fmt::format("{} - it tried to start over with new random ideas, but: {}", s_pending.why, whyNot);
         if (auto const saved = Bot::get()->pathfinder().keepRunBest(); !saved.empty())
             s_pendingNote += " - furthest path saved as " + saved;
