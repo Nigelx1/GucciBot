@@ -608,7 +608,10 @@ bool AbsensePathfinder::start() {
     m_forkBest = 0;
     m_fromBeginning = fromBeginning;
     m_attempt = attempt;
-    if (attempt == 0) m_runStartedAt = m_startedAt;  // a retry keeps its first try's start (retryStuck)
+    if (attempt == 0) {  // a retry keeps its first try's start and furthest (retryStuck)
+        m_runStartedAt = m_startedAt;
+        m_runBest = RunBest{};
+    }
     m_stats.message = "Searching";
 
     absense::gpu::Client::get().setEnabled(SLSettings::get()->pathfinder.gpu);
@@ -863,18 +866,55 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         bot->trajectory().resetExactFlagStats();  // and the log of the objects' flags goes: the run's starts are gone
     }
 
+    // GucciBot (2026-11-19, dlfix lane): the last stop of a run that started
+    // over (retryStuck) keeps the furthest of all its tries, so the file it
+    // saves and the percent it shows are the run's best, not only this try's.
+    const bool adopted = !done && !m_retryStopping && m_attempt > 0 && !leavingLevel && PlayLayer::get() &&
+                         adoptRunBest();
     if (done) {
         m_phase = Phase::Done;
         if (SLSettings::get()->pathfinder.saveWhenDone) saveResult();
+    } else if (m_retryStopping) {
+        // Starting over (retryStuck): its furthest is kept for the run's last stop.
     } else if (!leavingLevel && PlayLayer::get() && m_stats.bestTick > m_stats.startTick &&
-               m_bestActions.size() > bot->replaySystem().m_actionAtom.length()) {
+               (adopted || m_bestActions.size() > bot->replaySystem().m_actionAtom.length())) {
         // Stopped after going back: the furthest path is not the live replay
         // any more, so it goes to its own file.
         saveFurthest();
     }
 }
 
-void AbsensePathfinder::saveFurthest() {
+// GucciBot (2026-11-19, dlfix lane): an earlier try's furthest (retryStuck
+// kept it) becomes this stop's, when it got further than this try did.
+bool AbsensePathfinder::adoptRunBest() {
+    if (m_runBest.actions.empty() || m_runBest.tick <= m_stats.bestTick) return false;
+    log("the furthest of the run's tries was try %d's (tick %llu, %.2f%%), not this one's (tick %llu): it is the "
+        "furthest path kept",
+        m_runBest.attempt + 1, (unsigned long long)m_runBest.tick, m_runBest.progress * 100.0,
+        (unsigned long long)m_stats.bestTick);
+    m_bestActions = m_runBest.actions;
+    m_stats.bestTick = m_runBest.tick;
+    m_stats.bestX = m_runBest.x;
+    m_stats.bestProgress = m_runBest.progress;
+    m_runBest = RunBest{};  // kept once
+    return true;
+}
+
+// GucciBot (2026-11-19, dlfix lane): a stuck run whose retry never started
+// (absense::servicePendingStart, stopPathfinder): the furthest of its tries
+// goes to its own file, as the stop it stood in for would have saved it.
+std::string AbsensePathfinder::keepRunBest() {
+    if (!PlayLayer::get() || isRunning()) return {};
+    const uint64_t own = m_stats.bestTick;
+    m_stats.bestTick = 0;  // whatever this try's stats say, the kept one is the run's furthest
+    if (!adoptRunBest()) {
+        m_stats.bestTick = own;
+        return {};
+    }
+    return saveFurthest();
+}
+
+std::string AbsensePathfinder::saveFurthest() {
     auto* bot = Bot::get();
     auto& rs = bot->replaySystem();
     std::string name;
@@ -907,6 +947,7 @@ void AbsensePathfinder::saveFurthest() {
     rs.m_actionAtom.m_actions = std::move(live);
     m_stats.message += " - furthest path saved as " + name;
     log("furthest path (tick %llu) saved as %s", (unsigned long long)m_stats.bestTick, name.c_str());
+    return name;
 }
 
 void AbsensePathfinder::onQuit() {
@@ -5639,13 +5680,28 @@ bool AbsensePathfinder::retryStuck(const std::string& why) {
     const bool wasPaused = m_savedPaused;  // how the game goes back when the run is over
     pauseLive();
     cancelAhead();
+    m_retryStopping = true;
     stop(why);
+    m_retryStopping = false;
+    // This try's furthest path, if it is the run's furthest so far: the
+    // run's last stop saves it (stop()). The live replay is the furthest
+    // when nothing went back past it (stop()'s own test).
+    if (m_stats.bestTick > m_runBest.tick && m_stats.bestTick > m_stats.startTick) {
+        auto const& live = Bot::get()->replaySystem().m_actionAtom.m_actions;
+        m_runBest.attempt = m_attempt;
+        m_runBest.tick = m_stats.bestTick;
+        m_runBest.x = m_stats.bestX;
+        m_runBest.progress = m_stats.bestProgress;
+        m_runBest.actions = m_bestActions.size() > live.size() ? m_bestActions : live;
+    }
     // Held where it is until the restart takes it (stop() let it go as it was).
     Bot::get()->updater().setPaused(true);
     if (absense::requestRetry(next, wasPaused, why)) return true;
     Bot::get()->updater().setPaused(wasPaused);
     log("stuck: retry %d could not be queued (%s); stopping", next, absense::status().message.c_str());
-    absense::modal::info({.title = "AbsensePathfinder stopped", .message = why});
+    const std::string saved = keepRunBest();
+    absense::modal::info({.title = "AbsensePathfinder stopped",
+                          .message = saved.empty() ? why : why + " - furthest path saved as " + saved});
     return true;  // stopped already
 }
 

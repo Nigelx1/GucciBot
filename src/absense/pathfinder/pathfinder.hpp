@@ -219,6 +219,9 @@ public:
         m_nextFromBeginning = fromBeginning;
         m_nextAttempt = attempt;
     }
+    // dlfix lane: a stuck run whose retry never started saves the furthest of
+    // its tries (retryStuck keeps it); the file's name, or "" for none.
+    std::string keepRunBest();
     // Time the updater spent putting an earlier state back (statistics).
     void noteRestoreTime(double seconds) { m_stats.secondsRestore += seconds; }
     // Lets go of all but the newest `keep` kept states (the memory guard);
@@ -573,7 +576,8 @@ public:
     void noteProgress();
     void rememberBest();
     void saveResult();
-    void saveFurthest();
+    std::string saveFurthest();  // the file's name
+    bool adoptRunBest();         // dlfix lane: an earlier try's furthest, when further (retryStuck)
 
     bool levelReady() const;
     uint64_t currentTick() const;
@@ -1002,6 +1006,17 @@ public:
     bool m_fromBeginning = false;
     int m_attempt = 0;
     std::chrono::steady_clock::time_point m_runStartedAt{};
+    // ... and the furthest path of the run's tries that stopped to start over:
+    // those stops save no "<name> furthest" file (m_retryStopping); the run's
+    // last stop saves the furthest of all its tries, once.
+    bool m_retryStopping = false;
+    struct RunBest {
+        int attempt = 0;
+        uint64_t tick = 0;
+        float x = 0.0f;
+        float progress = 0.0f;
+        std::vector<slc::Action> actions;
+    } m_runBest;
     // Frame pacing: a slice takes what is left of a frame at the target
     // frame rate. When the last frame came late the game's own share is
     // taken from it (the time between slices minus the slice) and the next

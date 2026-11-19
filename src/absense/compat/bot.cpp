@@ -148,6 +148,8 @@ namespace {
     // stop it stands in for would have (the dialog, and the status line).
     void retryFailed(const std::string& whyNot) {
         s_pendingNote = fmt::format("{} - it tried to start over with new random ideas, but: {}", s_pending.why, whyNot);
+        if (auto const saved = Bot::get()->pathfinder().keepRunBest(); !saved.empty())
+            s_pendingNote += " - furthest path saved as " + saved;
         geode::log::info("[AbsPF] stuck: retry {} could not start ({}); stopped: {}", s_pending.attempt, whyNot,
                          s_pending.why);
         absense::modal::info({.title = "AbsensePathfinder stopped", .message = s_pendingNote});
@@ -272,8 +274,11 @@ void absense::stopPathfinder() {
         // GucciBot (2026-11-19, dlfix lane): a stuck run's retry, stopped
         // before it started: the run that stopped held the game paused for
         // it (retryStuck), so it goes back as the run found it.
-        if (s_pending.attempt > 0)
+        if (s_pending.attempt > 0) {
             gucci::GucciEngine::get()->updater.setPaused(s_pending.wasPaused);
+            if (auto const saved = Bot::get()->pathfinder().keepRunBest(); !saved.empty())
+                s_pendingNote += " - furthest path saved as " + saved;
+        }
     }
     auto& pf = Bot::get()->pathfinder();
     if (pf.isRunning())
