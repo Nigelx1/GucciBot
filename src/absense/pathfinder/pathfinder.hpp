@@ -985,6 +985,7 @@ public:
     // escalate() is making that jump now.
     bool m_lrWidenUsed = false;
     bool m_lrWidenJump = false;
+    bool m_lrWidenPending = false;  // ... set while no repair was active: the next one (beginRepair) jumps
     // Frame pacing: a slice takes what is left of a frame at the target
     // frame rate. When the last frame came late the game's own share is
     // taken from it (the time between slices minus the slice) and the next

@@ -607,6 +607,7 @@ bool AbsensePathfinder::start() {
     restartStuckCount();
     m_forkBest = 0;
     m_lrWidenUsed = false;  // dlfix lane, pf_widen_seconds (test only)
+    m_lrWidenPending = false;
     m_stats.message = "Searching";
 
     absense::gpu::Client::get().setEnabled(SLSettings::get()->pathfinder.gpu);
@@ -1186,25 +1187,33 @@ void AbsensePathfinder::tick() {
             why = fmt::format("stuck at x {:.0f} (tick {}) for 60 minutes", m_stats.bestX, m_stats.bestTick);
         }
         // GucciBot (2026-11-19, dlfix lane; the TEST-ONLY knob pf_widen_seconds):
-        // once a run, where the stuck rule would stop it during a walk back,
-        // the spot jumps to the knob's reach (its floor that far before it)
-        // and the walk goes on with a new count. Off (0, the default), never.
-        if (!why.empty() && absense::widenSeconds() > kMaxWidenSeconds && !m_lrWidenUsed && m_repair.active) {
+        // once a run, where the stuck rule would stop it at a spot being
+        // repaired (or just resumed past), the spot jumps to the knob's reach
+        // (its floor that far before it) and the walk goes on with a new
+        // count. Off (0, the default), never.
+        const uint64_t lrSpot = m_repair.active ? m_repair.deathTick : m_lastResume.valid ? m_lastResume.deathTick : 0;
+        if (!why.empty() && absense::widenSeconds() > kMaxWidenSeconds && !m_lrWidenUsed && lrSpot != 0) {
             if (!settled || (m_phase != Phase::Deciding && m_phase != Phase::Committing)) {
                 why.clear();  // mid-rewind or mid-probe: look again next tick
             } else {
                 m_lrWidenUsed = true;
                 const double tpsW = std::max(1.0, Bot::get()->updater().getTps());
-                Trap* t = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tpsW / 240.0)));
+                Trap* t = trapAt(lrSpot, (uint64_t)std::lround(32.0 * std::max(1.0, tpsW / 240.0)));
                 const int want = (int)std::ceil(maxWidenSeconds() - kMaxRepairSeconds);
                 if (t && t->level < want - 1) t->level = want - 1;  // escalate adds one
                 log("last resort (test, pf_widen_seconds): %s; the walk back reaches %.0f s before the spot at tick %llu "
-                    "instead of stopping",
-                    why.c_str(), maxWidenSeconds(), (unsigned long long)m_repair.deathTick);
+                    "instead of stopping (%s)",
+                    why.c_str(), maxWidenSeconds(), (unsigned long long)lrSpot,
+                    m_repair.active ? "now" : "at the next dead end there");
                 restartStuckCount();
-                m_lrWidenJump = true;
-                escalate("the stuck rule's last resort");
-                m_lrWidenJump = false;
+                if (m_repair.active) {
+                    m_lrWidenJump = true;
+                    escalate("the stuck rule's last resort");
+                    m_lrWidenJump = false;
+                } else {
+                    if (t) t->level = want;  // no escalate to add it
+                    m_lrWidenPending = true;  // beginRepair puts the floor there
+                }
                 return;
             }
         }
@@ -6455,6 +6464,20 @@ void AbsensePathfinder::beginRepair() {
         const uint64_t earliest = obstacle > reach ? obstacle - reach : m_stats.startTick;
         if (m_repair.floor < earliest) m_repair.floor = std::max(earliest, m_stats.startTick);
     }
+    // GucciBot (2026-11-19, dlfix lane; pf_widen_seconds, test only): the
+    // stuck rule's last resort, set while no repair was active, puts this
+    // repair's floor at the knob's whole reach, and skips the retry below.
+    bool lrJumped = false;
+    if (m_lrWidenPending) {
+        m_lrWidenPending = false;
+        lrJumped = true;
+        const uint64_t reachW = (uint64_t)std::lround(maxWidenSeconds() * tps);
+        const uint64_t farW = obstacle > reachW ? obstacle - reachW : m_stats.startTick;
+        m_repair.floor = std::max(farW, m_stats.startTick);
+        log("last resort (test, pf_widen_seconds): this repair may look back as far as tick %llu (%.0f s before the "
+            "spot at %llu)",
+            (unsigned long long)m_repair.floor, maxWidenSeconds(), (unsigned long long)obstacle);
+    }
     m_repair.failed = m_history;
     m_repair.failed2 = m_history2;
     m_repair.failedPair = m_historyPair;
@@ -6466,7 +6489,7 @@ void AbsensePathfinder::beginRepair() {
     // the simulation approved of: the game disagrees with the simulation
     // here, so another idea from that same stop is worth more than a stop
     // further back (the failed one is remembered there and skipped).
-    if (m_lastResume.valid && m_lastResume.tick + (uint64_t)std::lround(kMinRetryDistance * scale) <= tick &&
+    if (!lrJumped && m_lastResume.valid && m_lastResume.tick + (uint64_t)std::lround(kMinRetryDistance * scale) <= tick &&
         tick <= m_lastResume.tick + (uint64_t)std::lround(240.0 * scale) &&  // a resume a second or more back is not "the same stop" any more
         trapAt(m_lastResume.deathTick, slack) == trap && m_lastResume.retries < kRetriesPerStop) {
         m_repair.retries = m_lastResume.retries + 1;
