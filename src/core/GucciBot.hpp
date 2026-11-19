@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-19-a (Trainer lane: in a 2-player level a press answers only its own player's notes, not the nearest note of either player)"
+    "2026-11-19-b (Calculate log: a steered input's plain band line prints the band in whole frames after a sub-tick pass, not frames mixed with slots)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

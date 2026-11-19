@@ -4828,8 +4828,13 @@ void FrameWindowAnalyzer::finishClick() {
     // stays as scripts read it).
     if (mk.steered) {
         m_steerTot.wider++;
-        FWLOG("[fw][click {}] steered={} (ship steering saved {} shift(s)), plain band {}..{}", m_index + 1,
-              mk.steerSaved, mk.steerSaved, this->plainLow(), this->plainHigh());
+        // The mark's own plain band (2026-11-19): after a sub-tick pass
+        // m_low/m_high are in slots while m_plainLow/High are whole frames,
+        // so plainLow()/plainHigh() mixed the two in this line. In slots only
+        // for a merged steered sub-tick mark (mk.cbf).
+        FWLOG("[fw][click {}] steered={} (ship steering saved {} shift(s)), plain band {}..{}{}", m_index + 1,
+              mk.steerSaved, mk.steerSaved, mk.havePlain ? mk.plainLow : this->plainLow(),
+              mk.havePlain ? mk.plainHigh : this->plainHigh(), mk.cbf ? " slots" : "");
     }
 
     if (mk.window <= 0) m_noclipNextAdvance = true;
