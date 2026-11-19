@@ -83,6 +83,10 @@ namespace gucci::mcp {
             field("flash_age", "number", "make the last verdict this many seconds old (its pop, pulse, fade)");
             field("flash_hold", "boolean", "with flash_age: hold it at that age until a flash_age call without it");
             field("notes", "boolean", "list the notes in view with their tiers and results");
+            field("delay_ms", "number", "the Delay setting, both styles (this launch): the drawing runs this far ahead");
+            field("drawn", "boolean", "where the last draw of each style put the marker or center line and the "
+                                      "macro's clicks (screen pixels), and its clocks");
+            field("drawn_reset", "boolean", "start the draw counters (draws, fresh) over");
             auto s = matjson::Value::object();
             s["type"] = "object";
             s["properties"] = props;
@@ -104,7 +108,7 @@ namespace gucci::mcp {
                                     a.contains("paused") || a.contains("press") || a.contains("style") ||
                                     a.contains("lead_ticks") || a.contains("size") || a.contains("in_level") ||
                                     a.contains("place") || a.contains("width") ||
-                                    a.contains("flash_age");
+                                    a.contains("flash_age") || a.contains("delay_ms") || a.contains("drawn_reset");
                 if (writes && !gucci::safemode::testLaunch())
                     throw ToolError("test launches only (tools/assist.py launch)");
                 tr::ensureLoaded();
@@ -130,6 +134,13 @@ namespace gucci::mcp {
                                                              : ln::Place::Auto;
                 if (a.contains("width"))
                     set.levelWidth = std::clamp((float)num(a, "width", set.levelWidth), 0.3f, 1.f);
+                if (a.contains("delay_ms"))
+                    set.delayMs = lanerules::clampDelayMs(num(a, "delay_ms", set.delayMs));
+                if (flag(a, "drawn_reset", false))
+                    for (auto st : {ln::Style::Lane, ln::Style::Classic}) {
+                        ln::drawn(kind, st).draws = 0;
+                        ln::drawn(kind, st).fresh = 0;
+                    }
                 if (a.contains("seek"))
                     tr::seek(kind, num(a, "seek", 0.0));
                 if (a.contains("paused"))
@@ -172,6 +183,45 @@ namespace gucci::mcp {
                     out["place"] = where;
                 }
                 out["lead_ticks"] = (int64_t)set.leadTicks;
+                {
+                    // The Classic bar's own reading (its "Your timing" card).
+                    auto c = matjson::Value::object();
+                    c["has_last"] = s.score.hasLastReading;
+                    c["last_delta_frames"] = (int64_t)s.score.lastDeltaFrames;
+                    c["perfect"] = (int64_t)s.score.perfect;
+                    c["ok"] = (int64_t)s.score.ok;
+                    c["miss"] = (int64_t)s.score.miss;
+                    out["classic_score"] = c;
+                }
+                out["delay_ms"] = (double)set.delayMs;
+                out["draw_now_sec"] = ln::drawNow(kind);
+                if (flag(a, "drawn", false)) {
+                    auto both = matjson::Value::object();
+                    for (auto st : {ln::Style::Lane, ln::Style::Classic}) {
+                        auto const& d = ln::drawn(kind, st);
+                        auto e = matjson::Value::object();
+                        e["clock"] = d.clock;
+                        e["game_clock"] = d.gameClock;
+                        e["pos_sec"] = d.posSec;
+                        e["tps"] = d.tps;
+                        e["delay_ms"] = (double)d.delayMs;
+                        e["mark_x"] = (double)d.markX;
+                        e["px_per_sec"] = (double)d.pxPerSec;
+                        e["draws"] = (int64_t)d.draws;
+                        e["fresh"] = (int64_t)d.fresh;
+                        auto arr = matjson::Value::array();
+                        for (int i = 0; i < d.n; ++i) {
+                            auto n = matjson::Value::object();
+                            n["i"] = (int64_t)d.idx[i];
+                            n["press_x"] = (double)d.pressX[i];
+                            n["release_x"] = (double)d.releaseX[i];
+                            arr.push(n);
+                        }
+                        e["notes"] = arr;
+                        both[st == ln::Style::Lane ? "lane" : "classic"] = e;
+                    }
+                    out["drawn"] = both;
+                }
                 out["tps"] = v.tps;
                 out["macro"] = GucciEngine::get()->trainerMacroName;
                 out["notes_total"] = (int64_t)v.notes->size();

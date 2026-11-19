@@ -105,6 +105,41 @@ namespace gucci::lanerules {
         return (int)std::lround((atSec - targetSec) * tps);
     }
 
+    // ---- the Delay setting (both styles)
+    //
+    // The drawing runs Delay ms ahead of the game so the notes arrive that
+    // much early, for a screen or setup that lags. The lane's clock is the
+    // level's ticks over its tick rate, so D ms are D x tps / 1000 ticks
+    // (fractional: the drawing moves smoothly, it never snaps to a tick),
+    // which is D / 1000 s on that clock at any tick rate. Judging takes no
+    // delay: a press is judged by the tick the game took it on (judge,
+    // ticksOff), whatever the drawing shows.
+    constexpr float kDelayMinMs = -100.f;
+    constexpr float kDelayMaxMs = 200.f;
+
+    inline float clampDelayMs(double ms) {
+        if (!(ms == ms))  // NaN from a damaged save
+            return 0.f;
+        return (float)std::clamp(ms, (double)kDelayMinMs, (double)kDelayMaxMs);
+    }
+
+    // The delay in ticks at `tps`, not rounded.
+    inline double delayTicks(double ms, double tps) {
+        return ms * (tps > 0.0 ? tps : 240.0) / 1000.0;
+    }
+
+    // The clock the drawing uses: the game's clock `nowSec` plus the delay.
+    inline double drawClock(double nowSec, double ms, double tps) {
+        double const rate = tps > 0.0 ? tps : 240.0;
+        return nowSec + delayTicks(ms, rate) / rate;
+    }
+
+    // Where a moment `t` sits on a lane scrolling at pxPerSec, its marker at
+    // markX, drawn at `drawSec` (drawClock).
+    inline double xAt(double t, double drawSec, double markX, double pxPerSec) {
+        return markX + (t - drawSec) * pxPerSec;
+    }
+
     // The note a press at `t` answers: the nearest one in `times` (sorted)
     // not answered yet and within `reach` seconds. -1: none (a stray press,
     // which the lane leaves unjudged).

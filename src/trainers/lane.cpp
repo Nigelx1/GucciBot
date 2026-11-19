@@ -193,6 +193,8 @@ namespace gucci::trainers::lane {
                 default: g_settings.place = Place::Auto; break;
             }
             g_settings.judgments = mod->getSavedValue<bool>("trainer_lane_judgments", d.judgments);
+            g_settings.delayMs =
+                clampDelayMs(mod->getSavedValue<double>("trainer_lane_delay_ms", (double)d.delayMs));
         }
         return g_settings;
     }
@@ -207,6 +209,7 @@ namespace gucci::trainers::lane {
         mod->setSavedValue<double>("trainer_lane_width", s.levelWidth);
         mod->setSavedValue<int64_t>("trainer_lane_where", (int64_t)s.place);
         mod->setSavedValue<bool>("trainer_lane_judgments", s.judgments);
+        mod->setSavedValue<double>("trainer_lane_delay_ms", (double)clampDelayMs(s.delayMs));
     }
 
     // ------------------------------------------------------------ the clock
@@ -229,6 +232,15 @@ namespace gucci::trainers::lane {
         double lo = 0.0, hi = 0.0;
         barBounds(k, lo, hi);
         return std::clamp(t, 0.0, std::max(hi, s.posSec));
+    }
+
+    double drawNow(Kind k) {
+        return drawClock(now(k), settings().delayMs, laneTps(k));
+    }
+
+    Drawn& drawn(Kind k, Style st) {
+        static Drawn s_drawn[2][2];
+        return s_drawn[(size_t)idx(k)][st == Style::Lane ? 0 : 1];
     }
 
     // ------------------------------------------------------------ the notes

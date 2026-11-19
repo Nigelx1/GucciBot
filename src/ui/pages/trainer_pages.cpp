@@ -202,9 +202,12 @@ namespace gucci::ui::pages {
             double const pxPerSec = w / span;
             // Centered on the clock as it is drawn (in the level, the tick the
             // game is on now, not posSec from the start of the frame, which
-            // was a frame behind), as the lane is. Skimming below still moves
-            // posSec itself.
-            double const center = ln::now(k);
+            // was a frame behind), plus the Delay setting: the macro's clicks
+            // reach the center line that much early. Skimming below still
+            // moves posSec itself.
+            double const gameNow = ln::now(k);
+            double const tps = ln::view(k).tps;
+            double const center = gucci::lanerules::drawClock(gameNow, ln::settings().delayMs, tps);
             double const left = center - span * 0.5;
             double const right = center + span * 0.5;
             auto x = [&](double t) { return p0.x + (float)((t - left) * pxPerSec); };
@@ -277,10 +280,29 @@ namespace gucci::ui::pages {
             auto const& iv = s.macro.clickIntervalsSec;
             auto const& answered = s.score.answeredPress;
             bool const haveAnswers = answered.size() == iv.size();
+            // For Assistant Access (gucci_trainer_lane): where this draw put things.
+            auto& drawn = ln::drawn(k, ln::Style::Classic);
+            drawn.clock = center;
+            drawn.gameClock = gameNow;
+            drawn.posSec = s.posSec;
+            drawn.tps = tps;
+            drawn.delayMs = ln::settings().delayMs;
+            drawn.markX = p0.x + w * 0.5f;
+            drawn.pxPerSec = (float)pxPerSec;
+            drawn.n = 0;
+            ++drawn.draws;
+            if (gameNow > s.posSec + 0.5 / std::max(1.0, tps))
+                ++drawn.fresh;
             for (size_t i = 0; i < iv.size(); ++i) {
                 double const a = iv[i].first, b = iv[i].second;
                 if (b < left || a > right)
                     continue;
+                if (drawn.n < ln::Drawn::kMax) {
+                    drawn.idx[drawn.n] = (int)i;
+                    drawn.pressX[drawn.n] = x(a);
+                    drawn.releaseX[drawn.n] = x(b);
+                    ++drawn.n;
+                }
                 float const xa = x(a), xb = std::max(x(b), x(a) + 2.f);
                 dl->AddRectFilled(ImVec2(xa, laneTop), ImVec2(xb, laneMid - 4.f),
                                   solid ? u32(pal.accent) : u32(pal.accent, 0.45f), 3.f);
@@ -694,8 +716,13 @@ namespace gucci::ui::pages {
             auto const v = ln::view(k);
             // The clock as of now, not the start of the frame: in the level,
             // the tick the game is on as this is drawn.
-            double const now = ln::now(k);
-            ln::advance(k, now);
+            double const gameNow = ln::now(k);
+            ln::advance(k, gameNow);
+            // Everything below is placed on the drawing's clock: the game's
+            // plus the Delay setting, so notes reach the marker that much
+            // early (a fraction of a tick moves them smoothly). Misses and
+            // verdicts stay on the game's (ln::advance above, ln::onInput).
+            double const now = gucci::lanerules::drawClock(gameNow, set.delayMs, v.tps);
             double const realNow = ln::steadyNow();
             auto const& notes = *v.notes;
             auto const& results = *v.results;
@@ -747,6 +774,26 @@ namespace gucci::ui::pages {
             size_t to = from;
             while (to < notes.size() && notes[to].pressSec <= rightT)
                 ++to;
+            {
+                // For Assistant Access (gucci_trainer_lane): where this draw put things.
+                auto& d = ln::drawn(k, ln::Style::Lane);
+                d.clock = now;
+                d.gameClock = gameNow;
+                d.posSec = tr::state(k).posSec;
+                d.tps = v.tps;
+                d.delayMs = set.delayMs;
+                d.markX = hitX;
+                d.pxPerSec = (float)pxPerSec;
+                d.n = 0;
+                for (size_t i = from; i < to && d.n < ln::Drawn::kMax; ++i, ++d.n) {
+                    d.idx[d.n] = (int)i;
+                    d.pressX[d.n] = x(notes[i].pressSec);
+                    d.releaseX[d.n] = x(notes[i].releaseSec);
+                }
+                ++d.draws;
+                if (gameNow > d.posSec + 0.5 / std::max(1.0, v.tps))
+                    ++d.fresh;
+            }
 
             int const fadeVtx = dl->VtxBuffer.Size;  // bars and notes, kept inside and faded below
             float const capHw = capWidth(h) * 0.5f;
@@ -1489,6 +1536,20 @@ namespace gucci::ui::pages {
                                               "into a hit marker, sized by their window.",
                                      &style, styles, 2)) {
                     ln::settings().style = style == 1 ? ln::Style::Lane : ln::Style::Classic;
+                    ln::saveSettings();
+                }
+                // Both styles: the drawing runs this far ahead of the game
+                // (trainers/lane.hpp, delayMs); judging never sees it.
+                auto& set = ln::settings();
+                if (kit::SliderRow("Delay",
+                                   laneStyle ? "If you keep pressing late, raise it: the notes arrive this much "
+                                               "early. Your verdicts still go by when the game got your press."
+                                             : "If you keep pressing late, raise it: the clicks reach the center "
+                                               "line this much early. Your timing still goes by when the game got "
+                                               "your press.",
+                                   &set.delayMs, gucci::lanerules::kDelayMinMs, gucci::lanerules::kDelayMaxMs,
+                                   "%.0f ms")) {
+                    set.delayMs = gucci::lanerules::clampDelayMs(std::round(set.delayMs));
                     ln::saveSettings();
                 }
             }

@@ -1,9 +1,11 @@
 // Offline tests for the Trainer lane's rules (src/trainers/lane_rules.hpp):
 // a note's tier from its window, the early/late allowance from Calculate's
-// edges, the judgment and its words, and which note a press answers.
+// edges, the judgment and its words, which note a press answers, and the
+// Delay setting (the drawing runs ahead; the judging doesn't move).
 
 #include "trainers/lane_rules.hpp"
 
+#include <cmath>
 #include <cstdio>
 
 using namespace gucci::lanerules;
@@ -102,6 +104,68 @@ int main() {
         std::vector<double> empty;
         std::vector<uint8_t> none;
         CHECK(match(empty, none, 1.0, 0.2) == -1);
+    }
+
+    // The Delay setting: ms to ticks at the lane's rate, never rounded.
+    {
+        auto near = [](double a, double b) { return std::fabs(a - b) < 1e-9; };
+        CHECK(near(delayTicks(100.0, 240.0), 24.0));
+        CHECK(near(delayTicks(100.0, 120.0), 12.0));
+        CHECK(near(delayTicks(-100.0, 240.0), -24.0));
+        CHECK(near(delayTicks(200.0, 360.0), 72.0));
+        CHECK(near(delayTicks(1.0, 240.0), 0.24));  // a fraction of a tick stays a fraction
+        CHECK(near(delayTicks(0.0, 240.0), 0.0));
+        CHECK(near(delayTicks(100.0, 0.0), 24.0));  // no rate yet: 240
+        // The drawing's clock is D ms of level time ahead, at any tick rate.
+        for (double tps : {30.0, 60.0, 120.0, 240.0, 360.0, 1000.0})
+            for (double ms : {-100.0, -7.5, 0.0, 1.0, 16.7, 100.0, 200.0})
+                CHECK(near(drawClock(12.345, ms, tps) - 12.345, ms / 1000.0));
+        // Every note moves by the same D ms of scroll, and 1 ms (0.24 tick at
+        // 240) moves it a little, not a whole tick or nothing.
+        double const px = 1200.0 / (300.0 / 240.0);  // 1200 px of lane for a 300-tick lead
+        for (double note : {10.0, 10.5, 11.2}) {
+            double const x0 = xAt(note, drawClock(10.0, 0.0, 240.0), 100.0, px);
+            double const x100 = xAt(note, drawClock(10.0, 100.0, 240.0), 100.0, px);
+            CHECK(std::fabs((x0 - x100) - 0.1 * px) < 1e-6);
+            double const x1 = xAt(note, drawClock(10.0, 1.0, 240.0), 100.0, px);
+            CHECK(x0 - x1 > 0.0 && x0 - x1 < px / 240.0);
+        }
+        // A note at its own time is on the marker at Delay 0, and Delay D
+        // puts it there D ms of level time sooner.
+        CHECK(std::fabs(xAt(10.0, drawClock(10.0, 0.0, 240.0), 100.0, px) - 100.0) < 1e-6);
+        CHECK(std::fabs(xAt(10.0, drawClock(10.0 - 0.1, 100.0, 240.0), 100.0, px) - 100.0) < 1e-6);
+        // The setting's range, and a damaged save.
+        CHECK(clampDelayMs(-500.0) == kDelayMinMs && clampDelayMs(500.0) == kDelayMaxMs);
+        CHECK(clampDelayMs(37.0) == 37.f);
+        CHECK(clampDelayMs(std::nan("")) == 0.f);
+    }
+
+    // Verdicts go by the tick the game took the press on: judge() and
+    // ticksOff() take no delay at all. This checks what the setting is for: a
+    // player whose screen shows the game lagMs late presses when a note looks
+    // on the marker, and the game takes the press on the next tick. Delay =
+    // lag lands it on the note's tick; Delay 0 with that lag lands it late;
+    // one press on one tick gets one verdict whatever the drawing did.
+    {
+        double const tps = 240.0;
+        Allow const a = allowance(3.f, -1, 1, false, false);
+        auto pressTick = [&](double noteSec, double delayMs, double lagMs) {
+            // The note looks on the marker when drawClock(now) == noteSec, so
+            // at game time noteSec - delay, seen lagMs later.
+            double const seen = noteSec - delayMs / 1000.0 + lagMs / 1000.0;
+            return std::ceil(seen * tps - 1e-6) / tps;  // the tick the game takes it on
+        };
+        for (double note : {1.0, 2.5, 7.0 + 3.0 / 240.0}) {
+            CHECK(judge(ticksOff(pressTick(note, 0.0, 0.0), note, tps), a, 4).verdict == Verdict::Perfect);
+            CHECK(judge(ticksOff(pressTick(note, 100.0, 100.0), note, tps), a, 4).verdict == Verdict::Perfect);
+            Judgment const late = judge(ticksOff(pressTick(note, 0.0, 100.0), note, tps), a, 4);
+            CHECK(late.verdict == Verdict::Outside && late.delta == 24 && label(late) == "LATE 24f");
+            Judgment const early = judge(ticksOff(pressTick(note, 100.0, 0.0), note, tps), a, 4);
+            CHECK(early.verdict == Verdict::Outside && early.delta == -24);
+            double const at = note + 1.0 / tps;
+            Judgment const j = judge(ticksOff(at, note, tps), a, 4);
+            CHECK(j.verdict == Verdict::Inside && j.delta == 1);
+        }
     }
 
     std::printf("lane tests: %d passed, %d failed\n", g_pass, g_fail);

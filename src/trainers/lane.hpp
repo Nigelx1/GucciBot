@@ -45,6 +45,13 @@ namespace gucci::trainers::lane {
         float levelWidth = 0.68f;  // of the screen's width, in the level
         Place place = Place::Auto;  // in the level
         bool judgments = true;     // the PERFECT / EARLY 1f words
+        // Both styles (Nigel, 2026-11-18: "we need a delay slider"): the
+        // drawing runs this many milliseconds ahead of the game, so the notes
+        // (or the Classic bar's clicks) reach the hit marker or the center
+        // line that much early, to make up for a screen that lags. Judging
+        // never sees it: every verdict goes by the tick the game took the
+        // press on. lanerules::kDelayMinMs..kDelayMaxMs.
+        float delayMs = 0.f;
     };
     Settings& settings();
     void saveSettings();
@@ -122,6 +129,9 @@ namespace gucci::trainers::lane {
     double now(Kind k);
     // The bar's clock at an earlier steady-clock moment (a key's own time).
     double at(Kind k, double steadySec);
+    // The clock the drawing uses, both styles: now(k) plus the Delay
+    // setting, at the lane's tick rate (lanerules::drawClock).
+    double drawNow(Kind k);
 
     // ---- fed by trainers/trainer_core
     void onInput(Kind k, bool down, double atSec, double tps);
@@ -151,6 +161,30 @@ namespace gucci::trainers::lane {
         bool bottomFits = false; // the bottom band fits wholly under the ground line
     };
     Placement& placement(Kind k);
+
+    // What the last draw of each style put where (Assistant Access reads it,
+    // to measure the Delay setting and the clock in a test game). Style::Lane:
+    // the hit marker's x and the notes'; Style::Classic: the center line's x
+    // and the macro's clicks'. In screen pixels.
+    struct Drawn {
+        double clock = 0.0;      // the clock it was drawn at (the game's plus the delay)
+        double gameClock = 0.0;  // now(k) as it was drawn
+        double posSec = 0.0;     // the bar's start-of-frame clock then (tick(), at drawScene's start)
+        double tps = 0.0;
+        float delayMs = 0.f;
+        float markX = 0.f;       // the hit marker's center (Lane) or the center line (Classic)
+        float pxPerSec = 0.f;
+        static constexpr int kMax = 12;
+        int n = 0;
+        int idx[kMax] = {};
+        float pressX[kMax] = {};
+        float releaseX[kMax] = {};
+        // Draws since the last reset, and how many of them drew a clock past
+        // the start-of-frame value (a tick the game took in that frame).
+        uint64_t draws = 0;
+        uint64_t fresh = 0;
+    };
+    Drawn& drawn(Kind k, Style st);
 
     // Drawn over the trainer's level this frame (safe mode counts it).
     void markShownInLevel(Kind k);
