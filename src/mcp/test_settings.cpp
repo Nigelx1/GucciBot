@@ -14,6 +14,7 @@
 #include "hacks/autoclicker.hpp"
 #include "hacks/hitborders.hpp"
 #include "hacks/legit.hpp"
+#include "hacks/positions.hpp"
 #include "hacks/safemode.hpp"
 #include "hacks/safemode_2209.hpp"  // GB_SAFETY_2209
 #include "mcp/mcp_server.hpp"
@@ -172,7 +173,7 @@ namespace gucci::testset {
             static constexpr std::string_view kSwitches[] = {
                 "hack_force_platformer", "hack_no_mirror",   "ind_enabled",         "hack_hitboxes",
                 "hack_hitborders",       "show_macro_path",  "autoclicker_enabled", "ci_enabled",
-                "trainer_any_ghost",     "trainer_any_best_ghost",
+                "trainer_any_ghost",     "trainer_any_best_ghost", "hitborder_positions",
             };
             for (auto k : kSwitches)
                 if (name == k)
@@ -222,6 +223,27 @@ namespace gucci::testset {
                 v.push_back(engineBool("hitborder_hide_used", [hb]() -> bool& { return hb()->hideUsed; }));
                 v.push_back(engineBool("hitborder_point", [hb]() -> bool& { return hb()->point; }));
                 v.push_back(engineBool("hitborder_path", [hb]() -> bool& { return hb()->path; }));
+                // Possible positions (hacks/positions.hpp), and its tunables for
+                // tests (not saved): the time budget a frame, the look-ahead,
+                // and the real path kept for the accuracy check (gucci_positions).
+                v.push_back(engineBool("hitborder_positions", [hb]() -> bool& { return hb()->positions; }));
+                v.push_back({"positions_budget_ms", "number", Store::Memory,
+                             [] { return matjson::Value(static_cast<double>(positions::budgetMs())); },
+                             [](matjson::Value const& val, bool) {
+                                 positions::budgetMs() =
+                                     static_cast<float>(wantNumber("positions_budget_ms", val, 0.1, 50.0));
+                             }});
+                v.push_back({"positions_lookahead_s", "number", Store::Memory,
+                             [] { return matjson::Value(static_cast<double>(positions::lookaheadSec())); },
+                             [](matjson::Value const& val, bool) {
+                                 positions::lookaheadSec() =
+                                     static_cast<float>(wantNumber("positions_lookahead_s", val, 0.1, 10.0));
+                             }});
+                v.push_back({"positions_record_real", "bool", Store::Memory,
+                             [] { return matjson::Value(positions::recordReal()); },
+                             [](matjson::Value const& val, bool) {
+                                 positions::recordReal() = wantBool("positions_record_real", val);
+                             }});
                 v.push_back(engineBool("hitborder_darken", [hb]() -> bool& { return hb()->darken; }));
                 v.push_back(engineFloat("hitborder_darkness", 0.0, 1.0, [hb]() -> float& { return hb()->darkness; }));
                 v.push_back(engineFloat("hitborder_line_width", 0.25, 6.0, [hb]() -> float& { return hb()->lineWidth; }));

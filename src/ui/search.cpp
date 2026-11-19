@@ -202,6 +202,7 @@ namespace gucci::ui::search {
                 {"Noclip", "no clip"},
                 {"Show hitboxes", "hitbox"},
                 {"Hitborders", "hitbox borders"},
+                {"Possible positions", "possible positions projections nan gd margin of error"},
             };
             static const std::string kNone;
             auto const it = kAliases.find(label);

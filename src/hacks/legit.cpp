@@ -111,6 +111,7 @@ namespace gucci::legit {
                 v.push_back(field<bool>(B(gb->pathPreview), false));
                 v.push_back(field<bool>(B(gb->survivalIndicator), false));
                 v.push_back(field<bool>(B(gb->showMacroPath), false));
+                v.push_back(field<bool>(B(HitborderOverlay::get()->settings.positions), false));
                 v.push_back(field<bool>(B(gb->practiceRangeEnabled), false));
                 for (Kind k : {Kind::Jupiter, Kind::Any}) {
                     auto s = trainers::state(k);

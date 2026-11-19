@@ -35,8 +35,10 @@ namespace gucci {
     public:
         static HitborderOverlay* get();
 
-        // The colors: the three kinds of region and the player's marks.
-        enum Part : int { Lethal, Touch, Special, Marks, PartCount };
+        // The colors: the three kinds of region, the player's marks and the
+        // possible positions (hacks/positions.hpp; last, so the saved keys of
+        // the others keep their meaning).
+        enum Part : int { Lethal, Touch, Special, Marks, Positions, PartCount };
 
         struct Settings {
             bool show = false;      // hack_hitborders
@@ -55,6 +57,10 @@ namespace gucci {
             bool path = true;       // the player's own path, one point a tick
             int pathTicks = 240;
             bool clicks = true;     // a dot where the player pressed, a ring where it let go
+            // hitborder_positions: the band of where player 1's center could be
+            // while a macro plays, from the copies (hacks/positions.hpp). Off
+            // by default; a cheat while on (it shows the way).
+            bool positions = false;
             float lineWidth = 2.f;  // screen points, at any zoom; the path is half as thick
             float fill = 0.5f;      // inside of each region, 0..1 of its color's alpha
             bool darken = true;     // a black layer over the level, under the borders, while they show
@@ -89,6 +95,9 @@ namespace gucci {
         void onButton(PlayerObject* player, bool pressed);        // a jump press or release
         void paint(GJBaseGameLayer* layer);                       // once per drawn frame
         bool drawMerged();                                        // the borders' one-pass outline
+        // Whether the possible positions' draw nodes have been made (they are
+        // only once something is drawn), for gucci_positions.
+        bool positionsNodesMade() const;
         bool attachedTo(GJBaseGameLayer* layer) const;
         // The merged pass's texture and framebuffer, freed while the GL
         // context is still there (the app going to the background); the next
