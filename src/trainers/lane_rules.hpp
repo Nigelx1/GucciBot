@@ -141,9 +141,10 @@ namespace gucci::lanerules {
     }
 
     // The note a press at `t` answers: the nearest one in `times` (sorted)
-    // not answered yet and within `reach` seconds. -1: none (a stray press,
-    // which the lane leaves unjudged).
-    inline int match(std::vector<double> const& times, std::vector<uint8_t> const& answered, double t, double reach) {
+    // that `open(i)` allows and within `reach` seconds. -1: none (a stray
+    // press, which the lane leaves unjudged).
+    template <class Open>
+    inline int matchIf(std::vector<double> const& times, double t, double reach, Open&& open) {
         auto const it = std::lower_bound(times.begin(), times.end(), t);
         int const n = (int)times.size();
         int best = -1;
@@ -152,7 +153,7 @@ namespace gucci::lanerules {
             double const d = times[(size_t)i] - t;
             if (d > bestD)
                 break;
-            if (!answered[(size_t)i]) {
+            if (open((size_t)i)) {
                 best = i;
                 bestD = d;
                 break;
@@ -162,7 +163,7 @@ namespace gucci::lanerules {
             double const d = t - times[(size_t)i];
             if (d > bestD)
                 break;
-            if (!answered[(size_t)i]) {
+            if (open((size_t)i)) {
                 if (d < bestD || best < 0) {
                     best = i;
                     bestD = d;
@@ -171,6 +172,23 @@ namespace gucci::lanerules {
             }
         }
         return best;
+    }
+
+    // Any note not answered yet.
+    inline int match(std::vector<double> const& times, std::vector<uint8_t> const& answered, double t, double reach) {
+        return matchIf(times, t, reach, [&](size_t i) { return !answered[i]; });
+    }
+
+    // In a 2-player level a press answers only its own player's notes:
+    // those whose player flag (`flag2[i]`) is `want2`, the flag of the
+    // player that pressed. Elsewhere any note: in a 1-player level a click
+    // moves player 1, whatever flag its notes carry.
+    inline int matchPlayer(std::vector<double> const& times, std::vector<uint8_t> const& answered,
+                           std::vector<uint8_t> const& flag2, bool twoPlayer, bool want2, double t,
+                           double reach) {
+        if (!twoPlayer || flag2.size() != times.size())
+            return match(times, answered, t, reach);
+        return matchIf(times, t, reach, [&](size_t i) { return !answered[i] && (flag2[i] != 0) == want2; });
     }
 
     // Which counted window a macro click's press (or release) takes. The

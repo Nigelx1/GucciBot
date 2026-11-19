@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-p (Trainer: Juice's osu!taiko-style lane as a Style option next to the Classic bar, and a Delay slider)"
+    "2026-11-19-a (Trainer lane: in a 2-player level a press answers only its own player's notes, not the nearest note of either player)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

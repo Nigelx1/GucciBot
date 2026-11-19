@@ -33,6 +33,10 @@ namespace gucci::trainers::lane {
             size_t built = SIZE_MAX;  // the macro's click count it was built for
             std::vector<Note> notes;
             std::vector<double> pressTimes;
+            // Each note's stored player flag (its click's player2), in
+            // pressTimes' order: a 2-player level matches a press only to
+            // its own player's notes.
+            std::vector<uint8_t> flag2;
             std::vector<uint8_t> answered;
             std::vector<Result> results;
             double maxHoldSec = 0.0;
@@ -95,6 +99,7 @@ namespace gucci::trainers::lane {
             l.built = m.clickIntervalsSec.size();
             l.notes.clear();
             l.pressTimes.clear();
+            l.flag2.clear();
             l.maxHoldSec = 0.0;
             l.counted = 0;
             l.flash = {};
@@ -133,6 +138,7 @@ namespace gucci::trainers::lane {
                     n.tail = releaseFree ? Note::Tail::FreeHold : Note::Tail::Hold;
                 l.maxHoldSec = std::max(l.maxHoldSec, hold);
                 l.pressTimes.push_back(n.pressSec);
+                l.flag2.push_back(n.player2 ? 1 : 0);
                 l.notes.push_back(n);
             }
             resetResults(l);
@@ -271,7 +277,20 @@ namespace gucci::trainers::lane {
             return;
         int& holding = l.holding[player2 ? 1 : 0];
         if (down) {
-            int const i = match(l.pressTimes, l.answered, atSec, kReachSec);
+            // GucciBot (2026-11-19): in a 2-player level a press answers only
+            // the notes of the player it moves (the lasttests run found each
+            // player scored on the other's note). `player2` is the player the
+            // click moved (handleButton's mover2). A note's flag names its
+            // player outside platformer; in a 2-player platformer with Flip
+            // 2-Player Controls on it names the other one (flagMovesPlayer2),
+            // so the flag wanted is flipped there. In a 1-player level, and
+            // away from the level, any note.
+            auto* pl = followsLevel(k) ? PlayLayer::get() : nullptr;
+            bool const twoPlayer = pl && pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+            bool const wantFlag2 =
+                twoPlayer && (player2 != GucciEngine::get()->replay.flagMovesPlayer2(pl, false));
+            int const i =
+                matchPlayer(l.pressTimes, l.answered, l.flag2, twoPlayer, wantFlag2, atSec, kReachSec);
             if (i < 0) {
                 // A press near no note: the marker pulses, nothing is judged.
                 holding = -1;

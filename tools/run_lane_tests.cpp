@@ -106,6 +106,36 @@ int main() {
         CHECK(match(empty, none, 1.0, 0.2) == -1);
     }
 
+    // Matching by player (matchPlayer), the lasttests cross pass at 240 TPS:
+    // notes P1 @1300, P2 @1300, P1 @1700, P2 @1712.
+    {
+        double const tps = 240.0;
+        std::vector<double> t{1300 / tps, 1300 / tps, 1700 / tps, 1712 / tps};
+        std::vector<uint8_t> f2{0, 1, 0, 1};
+        std::vector<uint8_t> ans(4, 0);
+        // A 2-player level: P2 pressing first at 1298 takes P2's note, and P1 on time still gets its own.
+        CHECK(matchPlayer(t, ans, f2, true, true, 1298 / tps, 0.15) == 1);
+        ans[1] = 1;
+        CHECK(matchPlayer(t, ans, f2, true, false, 1300 / tps, 0.15) == 0);
+        ans[0] = 1;
+        // P2 9 ticks early for 1712 takes its own note, not P1's at 1700; P1 5 late takes 1700.
+        CHECK(matchPlayer(t, ans, f2, true, true, 1703 / tps, 0.15) == 3);
+        ans[3] = 1;
+        CHECK(matchPlayer(t, ans, f2, true, false, 1705 / tps, 0.15) == 2);
+        ans[2] = 1;
+        // Nothing of its own left within reach: a stray, never the other player's.
+        std::vector<uint8_t> ans2{1, 0, 1, 0};
+        CHECK(matchPlayer(t, ans2, f2, true, false, 1300 / tps, 0.15) == -1);
+        // A 1-player level (or no level): any note, as match does, whatever the flags.
+        std::vector<uint8_t> clean(4, 0);
+        CHECK(matchPlayer(t, clean, f2, false, false, 1712 / tps, 0.15) == 3);
+        CHECK(matchPlayer(t, clean, f2, false, false, 1300 / tps, 0.15) == match(t, clean, 1300 / tps, 0.15));
+        CHECK(matchPlayer(t, clean, f2, false, false, 1701 / tps, 0.15) == 2);
+        // Flags that don't line up with the notes: fall back to any note.
+        std::vector<uint8_t> shortFlags{1};
+        CHECK(matchPlayer(t, clean, shortFlags, true, true, 1700 / tps, 0.15) == 2);
+    }
+
     // The Delay setting: ms to ticks at the lane's rate, never rounded.
     {
         auto near = [](double a, double b) { return std::fabs(a - b) < 1e-9; };
