@@ -56,6 +56,7 @@ namespace gucci::positions {
             uint64_t copyTicks = 0;
             uint64_t busy = 0;          // the copies said no (another feature had them)
             uint64_t framesWorked = 0;  // frames in which at least one run went
+            uint64_t framesActive = 0;  // drawn frames in which the band was being worked out
             double msTotal = 0.0;       // over the frames worked
             double msMax = 0.0;
             uint64_t overBudget = 0;
@@ -96,6 +97,13 @@ namespace gucci::positions {
             unsigned budgetFrame = ~0u;
             double spentMs = 0.0;  // in this drawn frame
             int runsThisFrame = 0;
+            // One run can't be split across frames, and one takes longer than
+            // the budget (a copy tick is a few microseconds, a run hundreds of
+            // ticks), so the budget is kept on average: each drawn frame adds
+            // its budget to this, a run goes only once this covers what it's
+            // expected to cost, and what it really cost comes off.
+            double credit = 0.0;
+            double waitingFor = 0.0;  // the estimate of the run held back
         };
 
         State& g() {
@@ -271,6 +279,10 @@ namespace gucci::positions {
                 if (s.spentMs > std::clamp(static_cast<double>(s.budgetMs), 0.1, 50.0))
                     s.counters.overBudget++;
             }
+            double const budget = std::clamp(static_cast<double>(s.budgetMs), 0.1, 50.0);
+            s.counters.framesActive++;
+            // Never more saved up than two frames' worth, or the run waiting.
+            s.credit = std::min(s.credit + budget, std::max(2.0 * budget, s.waitingFor));
             s.budgetFrame = frame;
             s.spentMs = 0.0;
             s.runsThisFrame = 0;
@@ -362,7 +374,6 @@ namespace gucci::positions {
             // The runs, one at a time, nearest input first, under the budget.
             closeFrame(s);
             auto const t0 = Clock::now();
-            double const budget = std::clamp(static_cast<double>(s.budgetMs), 0.1, 50.0);
             int runs = 0;
             for (auto& e : s.entries) {
                 if (e.done)
@@ -372,15 +383,16 @@ namespace gucci::positions {
                         e.nextShift = e.shifts.size();
                         break;
                     }
-                    double const spent =
-                        s.spentMs + std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
                     double const estimate = s.msPerTick * static_cast<double>(e.horizon > now ? e.horizon - now : 0);
-                    // The frame's first run always goes (or nothing would ever
-                    // move on); the next only if it fits.
-                    if ((runs > 0 || s.runsThisFrame > 0) && spent + estimate > budget)
+                    if (estimate > s.credit) {
+                        s.waitingFor = estimate;
                         goto out;
+                    }
+                    auto const r0 = Clock::now();
                     if (!step(s, e, pl, now))
                         goto out;
+                    s.credit -= std::chrono::duration<double, std::milli>(Clock::now() - r0).count();
+                    s.waitingFor = 0.0;
                     runs++;
                 }
                 finish(s, e);
@@ -490,6 +502,10 @@ namespace gucci::positions {
         c["ms_max"] = s.counters.msMax;
         c["ms_total"] = s.counters.msTotal;
         c["frames_over_budget"] = static_cast<int64_t>(s.counters.overBudget);
+        c["frames_active"] = static_cast<int64_t>(s.counters.framesActive);
+        c["ms_per_active_frame"] =
+            s.counters.framesActive ? s.counters.msTotal / static_cast<double>(s.counters.framesActive) : 0.0;
+        c["credit_ms"] = s.credit;
         c["ms_per_copy_tick"] = s.msPerTick;
         c["entries_made"] = static_cast<int64_t>(s.counters.entriesMade);
         c["lanes_made"] = static_cast<int64_t>(s.counters.lanesMade);
