@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-o (Calculate: no more FWDISP lines in the Geode log, and no false frame-jumped warning after a run that stopped mid-leg)"
+    "2026-11-18-p (Trainer: Juice's osu!taiko-style lane as a Style option next to the Classic bar, and a Delay slider)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
