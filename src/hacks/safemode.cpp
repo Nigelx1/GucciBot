@@ -232,6 +232,12 @@ namespace gucci::safemode {
             return true;
         if (gb->showMacroPath && !gb->replay.m_pathSamples.empty())
             return true;
+        // Hitborders' possible positions: where the macro's timings can take
+        // you, drawn ahead of you (NaN GD's idea; hacks/positions.hpp). Only
+        // drawn with the borders shown, which is a cheat already; counted on
+        // its own all the same. No file is read for this.
+        if (HitborderOverlay::get()->settings.positions && HitborderOverlay::get()->settings.show)
+            return true;
         if (gb->practiceRangeEnabled && !gb->replay.m_actionAtom.m_actions.empty())
             return true;
         using trainers::Kind;

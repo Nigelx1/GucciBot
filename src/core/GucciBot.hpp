@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-19-b (Calculate log: a steered input's plain band line prints the band in whole frames after a sub-tick pass, not frames mixed with slots)"
+    "2026-11-19-c (Possible positions: NaN GD's yellow band of where a macro's player could be, off by default)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

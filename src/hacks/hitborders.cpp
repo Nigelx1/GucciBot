@@ -29,12 +29,14 @@
 #include "hacks/hitborders.hpp"
 #include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 #include "hacks/legit.hpp"
+#include "hacks/positions.hpp"
 
 #include "absense/compat/bot.hpp"
 #include "absense/judge.hpp"
 #include "absense/trajectory/trajectory.hpp"
 #include "core/GucciBot.hpp"
 #include "tools/hitborder_geom.hpp"
+#include "tools/positions_core.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/AppDelegate.hpp>
@@ -44,6 +46,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <deque>
@@ -58,7 +61,8 @@ namespace gucci {
 
         namespace hb = hitborder;
 
-        constexpr const char* kPartKeys[HitborderOverlay::PartCount] = {"lethal", "touch", "special", "marks"};
+        constexpr const char* kPartKeys[HitborderOverlay::PartCount] = {"lethal", "touch", "special", "marks",
+                                                                         "positions"};
 
         // Modifiers Show Hitboxes draws whether or not they are touch
         // triggered (the speed portals among them): the same list.
@@ -170,6 +174,15 @@ namespace gucci {
             CCDrawNode* plain = nullptr;      // each region with its own outline
             CCDrawNode* second = nullptr;     // player 2's outlines
             CCDrawNode* marksDraw = nullptr;  // the path, the clicks, the point
+            // The possible positions (hacks/positions.hpp), under the path and
+            // over the borders: made the first time there is something to draw,
+            // so none exist while the switch is off. posMerged has blending off
+            // and goes through the texture as the borders do; posPlain is the
+            // fallback, alpha blended.
+            CCDrawNode* posMerged = nullptr;
+            CCDrawNode* posPlain = nullptr;
+            bool havePositions = false;  // drawn this frame
+            bool positionsMerged = false;  // ... through posMerged
             unsigned builtFrame = ~0u;
             bool haveRegions = false;
             bool useMerged = false;
@@ -185,6 +198,8 @@ namespace gucci {
             static State s;
             return s;
         }
+
+        bool drawMergedNode(CCDrawNode* node);
 
         bool heldBy(GJBaseGameLayer* layer, CCNode* node) {
             return layer && node && node->getParent() == layer->m_objectLayer;
@@ -261,6 +276,15 @@ namespace gucci {
                 return;
             kmGLPushMatrix();
             transform();
+            // The possible positions first, as their own layer over the
+            // borders, then the path on top.
+            if (s.havePositions) {
+                bool drawn = false;
+                if (s.positionsMerged)
+                    drawn = drawMergedNode(s.posMerged);
+                if (!drawn && !s.positionsMerged && s.posPlain)
+                    s.posPlain->draw();
+            }
             s.marksDraw->draw();
             kmGLPopMatrix();
         }
@@ -679,6 +703,99 @@ namespace gucci {
             return !absense::judge::active();
         }
 
+        // ---------------------------------------------------------------- the possible positions
+
+        // The band of every input worked out so far (hacks/positions.hpp),
+        // into its own node: NaN GD's look, one outline around the union and
+        // one coat of fill. With the merged pass, every lane's two edges (and
+        // its ends) go in first in the outline color, then every lane's fill
+        // between them, blending off: the fills paint over the outlines inside
+        // any band, so only the union's edge is left, and where a band pinches
+        // to nothing its two edges are one line. Without it, alpha blended:
+        // each lane's fill, then its own outline.
+        void paintPositions(State& s, HitborderOverlay::Settings const& set, float width, float scale,
+                            hb::Rect const& cull) {
+            auto const t0 = std::chrono::steady_clock::now();
+            bool const merged = s.useMerged;
+            CCDrawNode*& node = merged ? s.posMerged : s.posPlain;
+            if (!node) {
+                node = CCDrawNode::create();
+                if (!node)
+                    return;
+                node->m_bUseArea = false;  // the band spans the screen
+                node->setBlendFunc(merged ? ccBlendFunc{GL_ONE, GL_ZERO}
+                                          : ccBlendFunc{GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
+                node->retain();
+            }
+            node->clear();
+
+            // The lanes on screen, thinned to two screen points (each kept
+            // sample holds the ones it skipped, so it never narrows).
+            float const minStep = 2.f / scale;
+            std::vector<std::vector<positions::Sample>> lanes;
+            for (auto const& e : positions::entries()) {
+                if (!e.done || e.lane.empty())
+                    continue;
+                auto const& lane = e.lane;
+                if (lane.x1 < cull.x0 || lane.x0 > cull.x1 || lane.y1 < cull.y0 || lane.y0 > cull.y1)
+                    continue;
+                auto const range = positions::visibleRange(lane.samples, static_cast<float>(cull.x0),
+                                                           static_cast<float>(cull.x1));
+                if (range.first >= range.second)
+                    continue;
+                lanes.push_back(positions::thin(lane.samples, range.first, range.second, minStep));
+            }
+            if (lanes.empty())
+                return;
+
+            ccColor4F const line = lineColour(set, HitborderOverlay::Positions);
+            ccColor4F const fill = fillColour(set, HitborderOverlay::Positions);
+            ccColor4F const clear{0.f, 0.f, 0.f, 0.f};
+            // Each edge is a line `width` thick on each side of it: the half
+            // inside is painted over by the fill, so the outline that shows is
+            // as thick as the borders' own.
+            float const radius = width;
+            int segments = 0;
+            int quads = 0;
+            auto outline = [&](std::vector<positions::Sample> const& v) {
+                for (size_t k = 0; k + 1 < v.size(); ++k) {
+                    node->drawSegment({v[k].x, v[k].yMax}, {v[k + 1].x, v[k + 1].yMax}, radius, line);
+                    node->drawSegment({v[k].x, v[k].yMin}, {v[k + 1].x, v[k + 1].yMin}, radius, line);
+                    segments += 2;
+                }
+                // The ends, flat, as NaN GD's are.
+                node->drawSegment({v.front().x, v.front().yMin}, {v.front().x, v.front().yMax}, radius, line);
+                node->drawSegment({v.back().x, v.back().yMin}, {v.back().x, v.back().yMax}, radius, line);
+                segments += 2;
+            };
+            auto filling = [&](std::vector<positions::Sample> const& v) {
+                // cocos grows a borderless polygon by half a unit (see the top
+                // of this file): the merged pass insets by that, in y only, so
+                // neighboring trapezoids still meet.
+                for (auto const& q : positions::fillQuads(v, merged ? 0.5f : 0.f, 1.f / scale)) {
+                    CCPoint pts[4] = {{q.a.x, q.a.y}, {q.b.x, q.b.y}, {q.c.x, q.c.y}, {q.d.x, q.d.y}};
+                    node->drawPolygon(pts, 4, fill, 0.f, clear, BorderAlignment::Outside);
+                    quads++;
+                }
+            };
+            if (merged) {
+                for (auto const& v : lanes)
+                    outline(v);
+                for (auto const& v : lanes)
+                    filling(v);
+            } else {
+                for (auto const& v : lanes) {
+                    filling(v);
+                    outline(v);
+                }
+            }
+            s.havePositions = true;
+            s.positionsMerged = merged;
+            positions::noteDrawn(
+                quads, segments,
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+        }
+
     } // namespace
 
     // ---------------------------------------------------------------- settings
@@ -704,6 +821,8 @@ namespace gucci {
         set(Touch, 20.f / 255.f, 20.f / 255.f, 1.f);
         set(Special, 0.f, 1.f, 0.f);
         set(Marks, 1.f, 1.f, 0.f);
+        // Yellow, as NaN GD's possible positions are.
+        set(Positions, 1.f, 1.f, 0.f);
         return st;
     }
 
@@ -713,6 +832,7 @@ namespace gucci {
         case Touch: return "Touching";
         case Special: return "Orbs, pads and portals";
         case Marks: return "Your dot, path and clicks";
+        case Positions: return "Possible positions";
         default: return "?";
         }
     }
@@ -736,6 +856,7 @@ namespace gucci {
         settings.point = flag("hitborder_point", def.point);
         settings.path = flag("hitborder_path", def.path);
         settings.clicks = flag("hitborder_clicks", def.clicks);
+        settings.positions = flag("hitborder_positions", def.positions);
         settings.pathTicks = static_cast<int>(std::clamp<int64_t>(
             mod->getSavedValue<int64_t>("hitborder_path_len", def.pathTicks), kMinPathTicks, kMaxPathTicks));
         settings.lineWidth = static_cast<float>(
@@ -768,6 +889,7 @@ namespace gucci {
         mod->setSavedValue<bool>("hitborder_point", settings.point);
         mod->setSavedValue<bool>("hitborder_path", settings.path);
         mod->setSavedValue<bool>("hitborder_clicks", settings.clicks);
+        mod->setSavedValue<bool>("hitborder_positions", legit::kept(settings.positions));  // as Show hitborders
         mod->setSavedValue<int64_t>("hitborder_path_len", settings.pathTicks);
         mod->setSavedValue<double>("hitborder_line_width", settings.lineWidth);
         mod->setSavedValue<double>("hitborder_fill", settings.fill);
@@ -847,7 +969,7 @@ namespace gucci {
             s.marks->release();
             s.marks = nullptr;
         }
-        for (CCDrawNode** node : {&s.merged, &s.plain, &s.second, &s.marksDraw}) {
+        for (CCDrawNode** node : {&s.merged, &s.plain, &s.second, &s.marksDraw, &s.posMerged, &s.posPlain}) {
             if (*node) {
                 (*node)->release();
                 *node = nullptr;
@@ -857,8 +979,15 @@ namespace gucci {
             f.release();
         s.fboFailed = false;
         s.haveRegions = false;
+        s.havePositions = false;
         s.builtFrame = ~0u;
         clearPath();
+        positions::clear();
+    }
+
+    bool HitborderOverlay::positionsNodesMade() const {
+        auto const& s = st();
+        return s.posMerged || s.posPlain;
     }
 
     void HitborderOverlay::clearPath() {
@@ -933,6 +1062,7 @@ namespace gucci {
             return;  // the borders node and the marks node share one rebuild a frame
         s.builtFrame = frame;
         s.haveRegions = false;
+        s.havePositions = false;
         s.darkAlpha = 0.f;
         if (!s.merged || !s.plain || !s.second || !s.marksDraw)
             return;
@@ -1046,6 +1176,10 @@ namespace gucci {
         s.haveRegions = true;
         s.darkAlpha = settings.darken ? std::clamp(settings.darkness, 0.f, 1.f) : 0.f;
 
+        // ---- the possible positions (hacks/positions.hpp)
+        if (settings.positions && settings.show && positions::shouldDraw())
+            paintPositions(s, settings, width, scale, cull);
+
         // ---- the player's marks
         ccColor4F const mark = lineColour(settings, Marks);
         if (settings.path) {
@@ -1092,8 +1226,18 @@ namespace gucci {
     }
 
     bool HitborderOverlay::drawMerged() {
+        return drawMergedNode(st().merged);
+    }
+
+    namespace {
+
+    // The merged pass: `node` (blending off) into a texture the size of the
+    // viewport, and the texture over the level once. The borders' node, and
+    // the possible positions' after it in the same frame (the same texture,
+    // cleared again: GL runs the two in order).
+    bool drawMergedNode(CCDrawNode* node) {
         auto& s = st();
-        if (!s.merged)
+        if (!node)
             return false;
         GLint vp[4] = {0, 0, 0, 0};
         glGetIntegerv(GL_VIEWPORT, vp);
@@ -1136,7 +1280,7 @@ namespace gucci {
             glDisable(GL_SCISSOR_TEST);
         glClearColor(0.f, 0.f, 0.f, 0.f);
         glClear(GL_COLOR_BUFFER_BIT);
-        s.merged->draw();
+        node->draw();
         glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(oldFbo));
         glViewport(vp[0], vp[1], vp[2], vp[3]);
         if (scissor)
@@ -1170,6 +1314,8 @@ namespace gucci {
         kmGLPopMatrix();
         return true;
     }
+
+    } // namespace
 
     // ---------------------------------------------------------------- the audit
 

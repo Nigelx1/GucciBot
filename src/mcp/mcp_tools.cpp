@@ -33,6 +33,7 @@
 #include "core/GucciBot.hpp"
 #include "hacks/hitborder_probe.hpp"
 #include "hacks/hitborders.hpp"
+#include "hacks/positions.hpp"
 #include "hacks/safemode.hpp"
 #include "hacks/legit.hpp"
 #include "core/mcp_only.hpp"
@@ -2389,6 +2390,29 @@ namespace gucci::mcp {
                 out["notes"] = notes;
                 out["shown"] = overlay->settings.show;
                 return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_positions",
+            "Hitborders' Possible positions (NaN GD's idea): the band of where player 1's center could be "
+            "while a macro plays, worked out from the copies of the player (an estimate, not the real game). "
+            "Returns the switch, whether hitborders are shown and a macro plays, `reason` (why it is or isn't "
+            "working now), whether its draw nodes exist, the counters (runs, copy ticks, frames worked, ms per "
+            "frame avg/max, frames over the budget, ms per copy tick, lanes made, frames drawn) and one entry "
+            "per input worked out this attempt: its frame, press or release, the window used (Calculate's mark "
+            "or the default -4..+4), the shifts, how many ran, counted, died and were skipped, whether the "
+            "macro itself died in the copies (no band then), and its lane (start/end frame, runs, max width, "
+            "bounds). samples=true adds each lane's samples as [frame, x, yMin, yMax] and the real path kept "
+            "while gucci_test_set positions_record_real is on, as [frame, resets, x, y]; from/to keep only "
+            "those frames. Reads only.",
+            schemaOf({{"samples", "boolean", "include each lane's samples and the real path (default false)"},
+                      {"from", "integer", "with samples: only frames from this one (default: no bound)"},
+                      {"to", "integer", "with samples: only frames up to this one (default: no bound)"}}),
+            [](matjson::Value const& a) {
+                auto const from = static_cast<uint32_t>(std::clamp<int64_t>(argInt(a, "from", 0), 0, 0x7fffffff));
+                auto const to = static_cast<uint32_t>(std::clamp<int64_t>(argInt(a, "to", 0), 0, 0x7fffffff));
+                return gucci::positions::describe(argBool(a, "samples", false), from, to);
             },
         });
 

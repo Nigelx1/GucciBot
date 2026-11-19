@@ -24,8 +24,8 @@ namespace gucci::ui::pages {
 
         kit::BeginCard("Hitborders",
                        "Every hitbox grown by the size of yours, so you can think of yourself as a point. The gaps "
-                       "you see are the room your center really has. Hitborders were NaN GD's idea; he isn't "
-                       "involved.");
+                       "you see are the room your center really has. Hitborders and their possible-positions band "
+                       "were NaN GD's ideas; he isn't involved.");
 
         {
             kit::LegitGate gate;  // shown while you play: a cheat (Show on death isn't)
@@ -64,6 +64,20 @@ namespace gucci::ui::pages {
         changed |= kit::SwitchRow("Player 2",
                                   "In dual, player 2's own borders as outlines, where they differ from player 1's",
                                   &set.player2);
+        {
+            kit::LegitGate gate;  // it shows the way: a cheat while it's on
+            changed |= kit::SwitchRow(
+                "Possible positions",
+                "While a macro plays, a yellow band ahead of you: where your center could go if one click at a "
+                "time landed anywhere in its frame window (Calculate's window when the macro has one, otherwise 4 "
+                "frames either way), with every other click kept where it is, so two clicks off at once can take "
+                "you outside it. It's widest where a click's timing moves you the most and pinches where the "
+                "timings land you in the same spot again. It's an estimate: hidden copies of your player "
+                "run each timing, not the real game, and moving objects are only approximated (more so off "
+                "Windows). Player 1 only, and not in platformer yet. It shows the way, so it counts as a cheat "
+                "while it's on. Possible positions were NaN GD's idea too; he isn't involved",
+                &set.positions);
+        }
 
         kit::Section("You");
         changed |= kit::SwitchRow("Show yourself as a dot",
