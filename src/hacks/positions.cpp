@@ -84,7 +84,7 @@ namespace gucci::positions {
             std::vector<Entry> entries;
             Counters counters;
             double msPerTick = 0.0;         // a run's cost, measured
-            std::string reason = "off";
+            const char* reason = "off";  // a literal: setting it costs nothing
             float budgetMs = 1.5f;
             float lookaheadSec = 1.5f;
             bool recordReal = false;
@@ -291,14 +291,25 @@ namespace gucci::positions {
         void afterFrame() {
             auto& s = g();
             auto* gb = GucciEngine::get();
-            auto* pl = PlayLayer::get();
+            // Off (and no test recording the real path): three bools and out.
+            // This runs on every scheduler update, Calculate's and the tick
+            // loop's included.
+            bool const want = wanted(gb);
+            if (!want && !s.recordReal && !s.realWasOn) {
+                if (s.haveKey || !s.entries.empty())
+                    clear();
+                s.reason = "off";
+                return;
+            }
             if (gb->updater.m_onlyRefresh || gb->updater.m_predicting)
                 return;
-            if (pl && pl->m_player1 && !::Bot::get()->trajectory().isFakePlayer(pl->m_player1))
+            auto* pl = PlayLayer::get();
+            if ((s.recordReal || s.realWasOn) && pl && pl->m_player1 &&
+                !::Bot::get()->trajectory().isFakePlayer(pl->m_player1))
                 recordRealTick(s, gb, pl);
 
-            if (!wanted(gb)) {
-                if (!s.entries.empty() || s.haveKey)
+            if (!want) {
+                if (s.haveKey || !s.entries.empty())
                     clear();
                 s.reason = "off";
                 return;
@@ -483,7 +494,7 @@ namespace gucci::positions {
         out["switch"] = hb.positions;
         out["hitborders_shown"] = hb.show;
         out["playing"] = gb->isPlaying();
-        out["reason"] = s.reason;
+        out["reason"] = std::string(s.reason);
         out["draw_nodes"] = HitborderOverlay::get()->positionsNodesMade();
         out["drawing"] = shouldDraw();
         out["frame"] = static_cast<int64_t>(gb->updater.getFrame());
