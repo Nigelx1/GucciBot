@@ -875,7 +875,7 @@ public:
     void giveUp(const std::string& reason);
     // The stuck rule's last resort (dlfix lane, 2026-11-19): true when the run
     // was stopped to start over (see the definition), false to give up as before.
-    bool retryStuck(const std::string& why);
+    bool retryStuck(std::string& why);  // may add a note to why, on a give-up
     uint64_t m_backtrackTarget = 0;
     uint64_t m_restepTo = 0;       // after a restore to a stored frame, step the history up to here
     uint64_t backDistance(int probe) const;

@@ -5660,7 +5660,7 @@ void AbsensePathfinder::giveUp(const std::string& reason) {
 // the level, or ends on the start rule (escalate) never does, and the first
 // try's seed is untouched (the salt is 0), so such a run plays exactly as it
 // did before this existed.
-bool AbsensePathfinder::retryStuck(const std::string& why) {
+bool AbsensePathfinder::retryStuck(std::string& why) {
     const double used = secondsSince(m_runStartedAt);
     const char* no = nullptr;
     if (!m_fromBeginning)
@@ -5671,6 +5671,10 @@ bool AbsensePathfinder::retryStuck(const std::string& why) {
         no = "the run has used its 60 minutes";
     if (no) {
         log("stuck: no retry: %s (try %d, %.0f s used)", no, m_attempt + 1, used);
+        // The Start button only starts from the beginning with its switch on
+        // (off unless the player turned it on): the stop says what it missed.
+        if (!m_fromBeginning && used < kStuckWallSeconds)
+            why += " (with \"Start from the beginning\" on, it would have started over with new random ideas)";
         return false;
     }
     const int next = m_attempt + 1;
