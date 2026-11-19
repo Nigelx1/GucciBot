@@ -186,6 +186,9 @@ void absense::servicePendingStart() {
             s_pendingNote = pl->m_hasCompletedLevel
                                 ? "The level is already complete (turn on \"start from the beginning\")."
                                 : "The level did not get going within ten seconds; the start was given up.";
+            // GucciBot (2026-11-19, dlfix lane): a stuck run's retry held the
+            // game paused (retryStuck); given up, it goes back as it was.
+            if (s_pending.attempt > 0) upd.setPaused(s_pending.wasPaused);
         } else if (upd.m_paused) {
             upd.stepOnce();
         }
@@ -246,6 +249,11 @@ void absense::stopPathfinder() {
     if (s_pending.active) {
         s_pending.active = false;
         s_pendingNote = "stopped";
+        // GucciBot (2026-11-19, dlfix lane): a stuck run's retry, stopped
+        // before it started: the run that stopped held the game paused for
+        // it (retryStuck), so it goes back as the run found it.
+        if (s_pending.attempt > 0)
+            gucci::GucciEngine::get()->updater.setPaused(s_pending.wasPaused);
     }
     auto& pf = Bot::get()->pathfinder();
     if (pf.isRunning())
