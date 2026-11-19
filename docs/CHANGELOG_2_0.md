@@ -257,6 +257,10 @@ One download covers Windows, macOS, iOS and Android (32 and 64-bit). Windows is 
 - **Not in the preview yet:** the Pathfinder (and its AI engine), tick rates under 162 TPS, TPS changes inside a macro, High TPS precision, and macOS, Android and iOS on 2.2091. They're planned for 2.0.1. Geode 6 itself is still an alpha.
 - *Checked in a signed-out test copy of GD 2.2091, on main levels only. Not tested by players yet.*
 
+### Possible positions (branch lane-posband, for 2.0.1 unless Nigel moves it into 2.0)
+
+- **Possible positions** (Hitborders card, off by default): while a macro plays, a yellow band ahead of you, everywhere your center could be if each click landed anywhere in its frame window (Calculate's window when the macro has one, otherwise 4 ticks either way), with the clicks after it kept where they are. It stays wide through later clicks and pinches where the timings meet again on a surface, the look of NaN GD's videos. It's an estimate from hidden copies of the player, not the real game, and moving objects are only approximated (more so off Windows). Player 1 only, not in platformer yet. It counts as a cheat while it's on, and Legit only turns it off. Possible positions were NaN GD's idea; he isn't involved.
+
 ### Credits
 
 The credits on this page, the README, about.md and the in-game Credits page match: **Nigelx1, Claude, Juice, anticroom, dihmaster500, DashBlaze, Isaiah, Absent, Bogdaner09, GWDdoS, ToastexGD, C0nscious and Gucci Mane.** Claude wrote essentially the whole codebase, these notes included. Nigelx1 created GucciBot, owns it and makes every call. Since beta.5, a few people asked to come off the credits, and they have. The whole frame-window trend started with NaN GD, and the L* precision number GucciBot puts on a macro comes from his formula. Hitborders were NaN GD's idea too; he isn't involved.
