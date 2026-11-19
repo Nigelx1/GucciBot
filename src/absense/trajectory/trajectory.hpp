@@ -130,6 +130,13 @@ struct TraceSample {
     bool mini = false;
     float speed = 0.0f;
     int fired = 0;
+    // GucciBot (2026-11-19, orbs lane): the copy is on an orb it has not fired
+    // after this tick's collision pass (m_touchingRings is not empty), so a
+    // press on the next tick would fire it (see iterate: the set holds the orbs
+    // of the last two passes; a fired one leaves it). Read only, for the
+    // Pathfinder's backup plan (AbsensePathfinder::evaluateOrbs); always false
+    // in the real game's trace.
+    bool onRing = false;
 };
 
 // GucciBot (2026-11-15, the Pathfinder's "Show the search"): a fixed-size
