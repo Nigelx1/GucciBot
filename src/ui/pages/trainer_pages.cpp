@@ -15,6 +15,7 @@
 
 #include "core/GucciBot.hpp"
 #include "trainers/trainer_core.hpp"
+#include "trainers/lane.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/utils/async.hpp>
@@ -41,6 +42,7 @@ namespace gucci::ui::pages {
         namespace fs = std::filesystem;
         namespace gfile = geode::utils::file;
         namespace tr = gucci::trainers;
+        namespace ln = gucci::trainers::lane;
         using tr::Kind;
 
         constexpr float kBarH = 92.f;
@@ -183,7 +185,7 @@ namespace gucci::ui::pages {
         // player's own through the bottom (presses full height, releases
         // half), segments shade the background, and the centre line stays put
         // while everything scrolls past it.
-        void drawBar(Kind k) {
+        void drawBar(Kind k, bool forVideo = false) {
             auto s = tr::state(k);
             auto& ps = page(k);
             auto const& pal = look().pal;
@@ -198,8 +200,19 @@ namespace gucci::ui::pages {
 
             double const span = std::max(0.5, (double)s.barWindowSec);
             double const pxPerSec = w / span;
-            double const left = s.posSec - span * 0.5;
-            double const right = s.posSec + span * 0.5;
+            // Centered on the clock as it is drawn (in the level, the tick the
+            // game is on now, not posSec from the start of the frame, which
+            // was a frame behind), plus the Delay setting: the macro's clicks
+            // reach the center line that much sooner. Skimming below still
+            // moves posSec itself. Video Mode's bar stays on posSec with no
+            // Delay, as before: its video picks the frame it shows from
+            // posSec (trainers/videomode.cpp, clockOf), and has its own Sync.
+            double const gameNow = forVideo ? s.posSec : ln::now(k);
+            double const tps = ln::view(k).tps;
+            float const delayMs = forVideo ? 0.f : ln::settings().delayMs;
+            double const center = gucci::lanerules::drawClock(gameNow, delayMs, tps);
+            double const left = center - span * 0.5;
+            double const right = center + span * 0.5;
             auto x = [&](double t) { return p0.x + (float)((t - left) * pxPerSec); };
 
             // Skimming: the clock follows the mouse while the bar is held.
@@ -270,10 +283,30 @@ namespace gucci::ui::pages {
             auto const& iv = s.macro.clickIntervalsSec;
             auto const& answered = s.score.answeredPress;
             bool const haveAnswers = answered.size() == iv.size();
+            // For Assistant Access (gucci_trainer_lane): where this draw put things.
+            auto& drawn = ln::drawn(k, ln::Style::Classic);
+            drawn.clock = center;
+            drawn.gameClock = gameNow;
+            drawn.posSec = s.posSec;
+            drawn.tps = tps;
+            drawn.delayMs = delayMs;
+            drawn.video = forVideo;
+            drawn.markX = p0.x + w * 0.5f;
+            drawn.pxPerSec = (float)pxPerSec;
+            drawn.n = 0;
+            ++drawn.draws;
+            if (gameNow > s.posSec + 0.5 / std::max(1.0, tps))
+                ++drawn.fresh;
             for (size_t i = 0; i < iv.size(); ++i) {
                 double const a = iv[i].first, b = iv[i].second;
                 if (b < left || a > right)
                     continue;
+                if (drawn.n < ln::Drawn::kMax) {
+                    drawn.idx[drawn.n] = (int)i;
+                    drawn.pressX[drawn.n] = x(a);
+                    drawn.releaseX[drawn.n] = x(b);
+                    ++drawn.n;
+                }
                 float const xa = x(a), xb = std::max(x(b), x(a) + 2.f);
                 dl->AddRectFilled(ImVec2(xa, laneTop), ImVec2(xb, laneMid - 4.f),
                                   solid ? u32(pal.accent) : u32(pal.accent, 0.45f), 3.f);
@@ -308,7 +341,1097 @@ namespace gucci::ui::pages {
             dl->AddText(ImVec2(p0.x + 6.f, laneMid + 2.f), u32(pal.muted, 0.8f), "you");
         }
 
+        // ------------------------------------------------------------ the lane
+        //
+        // Juice's design (2026-11-17, "basically like osu!taiko"): the macro's
+        // clicks scroll right to left into a fixed hit marker, an empty white
+        // circle near the left end of a bold box. A note's look is its window
+        // as Calculate counted it, bigger = more lenient: a small solid red
+        // note for 1 frame, a red center in an orange ring for 2, in a big
+        // yellow one for 3, in a green one past that (or when any timing
+        // lived); a note with no counted window is plain light grey. Every
+        // circle has a dark outline, so it reads on the lane. A hold whose
+        // release is timed is a slider: a thick rounded bar from the press to
+        // the release, a window mark at each end (the release end's center a
+        // ring: let go there). Each press is judged as it lands: a big
+        // PERFECT / EARLY 1f / LATE 2f / MISS pops up on the marker and fades,
+        // and the marker pulses a ring in the verdict's color.
+        //
+        // Sizes are fractions of the lane's height, and the lane's height is
+        // a fraction of the screen's (12% at size 1x), so it looks the same at
+        // 720p, 1080p and 1440p. trainers/lane.* has the rules; this draws
+        // them.
+
+        using LTier = gucci::lanerules::Tier;
+        using LVerdict = gucci::lanerules::Verdict;
+
+        // The notes, as Juice drew them.
+        ImVec4 const kNoteRed{0.929f, 0.165f, 0.188f, 1.f};    // #ED2A30
+        ImVec4 const kNoteOrange{1.f, 0.522f, 0.106f, 1.f};    // #FF851B
+        ImVec4 const kNoteYellow{1.f, 0.894f, 0.106f, 1.f};    // #FFE41B
+        ImVec4 const kNoteWide{0.341f, 0.831f, 0.341f, 1.f};   // #57D457
+        ImVec4 const kNotePlain{0.835f, 0.851f, 0.882f, 1.f};  // #D5D9E1
+        ImVec4 const kNoteP2{1.f, 0.388f, 0.788f, 1.f};        // #FF63C9, player 2's edge
+        // The verdicts.
+        ImVec4 const kWordPerfect{1.f, 0.792f, 0.157f, 1.f};  // gold #FFCA28
+        ImVec4 const kWordEarly{0.424f, 0.753f, 1.f, 1.f};    // light blue #6CC0FF
+        ImVec4 const kWordLate{1.f, 0.380f, 0.208f, 1.f};     // orange-red #FF6135
+        ImVec4 const kWordMiss{0.651f, 0.667f, 0.702f, 1.f};  // grey #A6AAB3
+        // The hold bars: idle see-through grey; held, solid gold with a
+        // light gold edge (the PERFECT and pulse color, not a muddy mix).
+        ImVec4 const kBarIdle{0.588f, 0.612f, 0.675f, 1.f};   // rgb(150,156,172)
+        ImVec4 const kBarHeld{1.f, 0.702f, 0.f, 1.f};         // #FFB300
+        ImVec4 const kBarHeldEdge{1.f, 0.878f, 0.510f, 1.f};  // #FFE082
+
+        // The lane's height: 12% of the screen's at 1x (about 130 px at 1080p).
+        constexpr float kLaneOfScreen = 0.12f;
+        // The hit marker's center on the card, this many lane heights from
+        // the left edge. Over the level the marker sits right of the
+        // verdict's room inside the box (levelHitAt).
+        constexpr float kHitAt = 1.0f;
+        // The verdict's font, as a share of the lane's height, and Roboto
+        // Bold's capital height per font pixel (1456 / (2146 + 555) units:
+        // ImGui sizes a font by ascent + descent, not the em). Capitals come
+        // to 0.68 x 0.539 = 37% of the lane's height.
+        constexpr float kVerdictOfLane = 0.68f;
+        constexpr float kCapHeight = 0.539f;
+        // A slider's "RELEASE" line under the word: half the word's size.
+        constexpr float kTagOfVerdict = 0.5f;
+        // How much bigger the verdict starts as it pops in.
+        constexpr float kPop = 1.08f;
+        // Over the level the verdict sits inside the box, just left of the
+        // hit marker, its right edge this far from the marker's ring; on the
+        // card, under the lane this far.
+        constexpr float kVerdictSideGap = 12.f;
+        constexpr float kVerdictGap = 4.f;
+        // The box's fill over the level, and while the player is near it.
+        constexpr int kFillLevel = 165;
+        constexpr int kFillBottomOverPlay = 217;  // 85%
+        constexpr int kFillNearPlayer = 90;
+        constexpr int kFillCard = 235;
+        // While a player is inside the lane's band: the box's fill, border
+        // and the verdict's pill fade to 30%, the bars, flash and marker to
+        // 70%, and the notes, release caps and the verdict's word not at all.
+        // Each note sits on its own dark outline disc, so it hides the player
+        // either way: fading its color would only darken it (round 5 measured
+        // a 3-frame ring at 70% as RGB 183,164,25, mustard, not yellow).
+        constexpr float kInBandAlpha = 0.3f;
+        constexpr float kInBandContentAlpha = 0.7f;
+
+        // The verdict's color, by its word: PERFECT gold, EARLY blue, LATE
+        // orange-red, MISS grey. A press near no note (no word) is grey.
+        ImVec4 wordColor(std::string const& text) {
+            if (text.empty())
+                return kWordMiss;
+            switch (text[0]) {
+                case 'P': return kWordPerfect;
+                case 'E': return kWordEarly;
+                case 'L': return kWordLate;
+                default: return kWordMiss;
+            }
+        }
+
+        struct NoteSizes {
+            float red;     // a 1-frame note's radius (40% of the lane's height across)
+            float center;  // the red center inside a ring
+            float two;     // 58% across
+            float three;   // 76% across (and 4+)
+            float plain;   // a note with no counted window
+            float marker;  // the hit marker (70% across)
+            float edge;    // the dark outline's width
+        };
+        NoteSizes noteSizes(float h) {
+            return {h * 0.20f, h * 0.17f, h * 0.29f, h * 0.38f, h * 0.24f, h * 0.35f, std::max(2.f, h * 0.024f)};
+        }
+
+        float outerRadius(LTier tier, NoteSizes const& z) {
+            switch (tier) {
+                case LTier::Unknown: return z.plain;
+                case LTier::One: return z.red;
+                case LTier::Two: return z.two;
+                case LTier::Three: return z.three;
+                case LTier::Wide: return z.three;
+            }
+            return z.red;
+        }
+
+        ImVec4 tierColor(LTier tier) {
+            switch (tier) {
+                case LTier::Unknown: return kNotePlain;
+                case LTier::One: return kNoteRed;
+                case LTier::Two: return kNoteOrange;
+                case LTier::Three: return kNoteYellow;
+                case LTier::Wide: return kNoteWide;
+            }
+            return kNoteRed;
+        }
+
+        ImU32 darkEdge(float fade) {
+            return IM_COL32(6, 7, 11, (int)(235 * fade));
+        }
+
+        // A press: a filled circle (red center in its window's ring), the
+        // dark outline outside its edge.
+        void drawHead(ImDrawList* dl, ImVec2 c, LTier tier, NoteSizes const& z, bool p2, float fade,
+                      float radius = 0.f) {
+            if (fade <= 0.01f)
+                return;
+            float const ew = z.edge;
+            float const r = radius > 0.f ? radius : outerRadius(tier, z);
+            dl->AddCircleFilled(c, r + ew, darkEdge(fade));
+            dl->AddCircleFilled(c, r, u32(tierColor(tier), fade));
+            if (tier != LTier::Unknown && tier != LTier::One) {
+                float const cr = std::min(z.center, r * 0.6f);
+                dl->AddCircleFilled(c, cr + ew * 0.8f, darkEdge(fade));
+                dl->AddCircleFilled(c, cr, u32(kNoteRed, fade));
+            }
+            if (p2)
+                dl->AddCircle(c, r + ew * 1.9f, u32(kNoteP2, fade), 0, ew * 1.5f);
+        }
+
+        // A release (a slider's end): a rounded upright cap in its window's
+        // color with a white core, drawn at the release's own time. No press
+        // has this shape, so a ring around a red center always means a press
+        // tier and a cap always means "let go here". Its height grows with
+        // the window, as a press's size does: 1 frame 54% of the lane (so it
+        // stands out of the 40% slider bar), 2 frames 66%, 3+ 78%. It is 16%
+        // of the lane wide (20 px at 1080p) with a 2 px light line down its
+        // middle, so its color reads at a glance (round 5's 11 px cap with a
+        // 3 px white core read as a white pin). Under a press it runs the
+        // box's full height, through the border, so 12 px of it shows above
+        // and below even a 3-frame press (the caps pass in drawLaneBox).
+        float capWidth(float h) {
+            return std::max(10.f, std::round(h * 0.16f));
+        }
+        float capHalf(LTier tier, float h) {
+            switch (tier) {
+                case LTier::One: return h * 0.27f;
+                case LTier::Two: return h * 0.33f;
+                case LTier::Three:
+                case LTier::Wide: return h * 0.39f;
+                case LTier::Unknown: break;
+            }
+            return h * 0.30f;
+        }
+        // `tall`: the cap runs the box's full height (half = h / 2, its ends
+        // square but for a small rounding, meeting the box's outer dark
+        // line), for a cap a press is drawn over.
+        void drawReleaseCap(ImDrawList* dl, ImVec2 c, LTier tier, float half, NoteSizes const& z, float h, bool p2,
+                            float fade, bool tall = false) {
+            if (fade <= 0.01f)
+                return;
+            float const ew = std::max(2.f, z.edge * 0.8f);
+            float const hw = capWidth(h) * 0.5f;
+            float const oe = tall ? 0.f : ew;  // the dark line above and below (the box's own, when tall)
+            float const rnd = tall ? 3.f : hw;
+            dl->AddRectFilled(ImVec2(c.x - hw - ew, c.y - half - oe), ImVec2(c.x + hw + ew, c.y + half + oe),
+                              darkEdge(fade), tall ? rnd : hw + ew);
+            ImVec4 const col = tierColor(tier);
+            dl->AddRectFilled(ImVec2(c.x - hw, c.y - half), ImVec2(c.x + hw, c.y + half), u32(col, fade), rnd);
+            // A 2 px light line down the middle (the tier's color toward
+            // white), so a cap reads as a cap and 9 px of color shows on each
+            // side of it at 1080p.
+            float const cw = 1.f;
+            float const ch = (tall ? capHalf(tier, h) : half) * 0.62f;
+            ImVec4 const hi(col.x + (1.f - col.x) * 0.65f, col.y + (1.f - col.y) * 0.65f,
+                            col.z + (1.f - col.z) * 0.65f, 1.f);
+            dl->AddRectFilled(ImVec2(c.x - cw, c.y - ch), ImVec2(c.x + cw, c.y + ch), u32(hi, 0.92f * fade), cw);
+            if (p2)
+                dl->AddRect(ImVec2(c.x - hw - ew * 2.f, c.y - half - oe * 2.f),
+                            ImVec2(c.x + hw + ew * 2.f, c.y + half + oe * 2.f), u32(kNoteP2, fade),
+                            tall ? rnd : hw + ew * 2.f, 0, ew);
+        }
+
+        // A word drawn big with a dark outline, its top-left at `at`.
+        void outlinedText(ImDrawList* dl, ImFont* font, float px, ImVec2 at, ImVec4 col, float alpha,
+                          char const* text) {
+            float const o = std::max(1.5f, px * 0.045f);
+            ImU32 const dark = IM_COL32(0, 0, 0, (int)(235 * alpha));
+            static constexpr float kDirs[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1},
+                                                  {0.71f, 0.71f}, {-0.71f, 0.71f}, {0.71f, -0.71f}, {-0.71f, -0.71f}};
+            for (auto const& d : kDirs)
+                dl->AddText(font, px, ImVec2(at.x + d[0] * o, at.y + d[1] * o), dark, text);
+            dl->AddText(font, px, at, u32(col, alpha), text);
+        }
+
+        ImFont* wordFont(float px) {
+            ImFont* f = look().bigFont(px);
+            return f ? f : look().font(Font::Strong);
+        }
+
+        // The verdict's pill: its padding, and its height for a lane h tall
+        // with or without the RELEASE line (the card keeps that much room
+        // under its lane).
+        float verdictPad(float h) {
+            return std::max(6.f, std::round(h * 0.07f));
+        }
+        float verdictBlockHeight(float px, bool release) {
+            float const cap = px * kCapHeight;
+            return release ? cap * (1.f + 0.28f + kTagOfVerdict) : cap;
+        }
+        // The widest word the verdict often shows, as a share of its font
+        // size ("EARLY 3f" in Roboto Bold is 3.2 font pixels per pixel).
+        constexpr float kWideWord = 3.2f;
+        float verdictRoom(float h) {
+            return kWideWord * h * kVerdictOfLane + 2.f * verdictPad(h);
+        }
+        float laneBorder(float h) {
+            return std::max(2.f, h * 0.02f);
+        }
+        float markerStroke(float h) {
+            return std::max(3.f, h * 0.025f);
+        }
+        // Over the level, with Judgments on, the hit marker sits right of
+        // the verdict's room inside the box (the word at the hit circle, as
+        // osu!taiko's judgments are, and never over a note coming in); with
+        // them off, a lane height from the left as on the card. The room is
+        // at most 35% of the box, so a narrow lane keeps room to scroll (the
+        // word shrinks to fit).
+        float levelHitAt(float w, float h, bool judgments) {
+            if (!judgments)
+                return h * kHitAt;
+            float const room = std::min(kPop * verdictRoom(h), w * 0.35f);  // room for the pop too
+            return std::round(laneBorder(h) + 4.f + room + kVerdictSideGap + markerStroke(h) + h * 0.35f);
+        }
+
+        // Where the verdict goes: over the level, inside the box left of the
+        // hit marker, its right edge `rightX`, centered on the lane's middle
+        // `midY`; on the card, centered under the marker at `hitX`, its top
+        // at `topY`.
+        struct VerdictSpot {
+            bool side = true;
+            float rightX = 0.f, midY = 0.f;  // side
+            float hitX = 0.f, topY = 0.f;    // under
+            float minX = 0.f, maxX = 0.f;    // keep the pill between these
+            ImU32 pill = 0;                  // its fill at full alpha
+        };
+
+        // The verdict, big, on a pill: the word, and a slider's release says
+        // so on a line under it at half size. It pops in and fades over 0.6 s.
+        // Returns the first vertex of the word (the pill's come before it).
+        int drawVerdict(ImDrawList* dl, char const* text, bool release, ImVec4 col, float age, float h,
+                        VerdictSpot const& at) {
+            float const pop = age < 0.07f ? kPop - (kPop - 1.f) * (age / 0.07f) : 1.f;
+            float const alpha = age < 0.35f ? 1.f : std::max(0.f, 1.f - (age - 0.35f) / 0.25f);
+            float px = h * kVerdictOfLane;
+            float const pad0 = verdictPad(h);
+            // Fit the room (a long word like EARLY 12f shrinks a little).
+            {
+                ImFont* f = wordFont(px);
+                float const tw = f->CalcTextSizeA(px, FLT_MAX, 0.f, text).x;
+                float const room = (at.maxX - at.minX) / kPop - 2.f * pad0;  // popped, it still fits
+                if (tw > room && tw > 0.f)
+                    px *= std::max(0.5f, room / tw);
+            }
+            px = std::round(px * pop);
+            ImFont* font = wordFont(px);
+            float const asc = font->Ascent * (px / font->FontSize);  // the baseline, under the text's top
+            float const cap = px * kCapHeight;
+            ImVec2 const ts = font->CalcTextSizeA(px, FLT_MAX, 0.f, text);
+            float const pad = pad0 * pop;
+            float tagPx = 0.f, tagW = 0.f;
+            ImFont* tagFont = nullptr;
+            if (release) {
+                tagPx = std::round(px * kTagOfVerdict);
+                tagFont = wordFont(tagPx);
+                tagW = tagFont->CalcTextSizeA(tagPx, FLT_MAX, 0.f, "RELEASE").x;
+            }
+            float const pillW = std::max(ts.x, tagW) + 2.f * pad;
+            float const pillH = verdictBlockHeight(px, release) + 2.f * pad;
+            float x0, y0;
+            if (at.side) {
+                x0 = at.rightX - pillW;
+                y0 = at.midY - pillH * 0.5f;
+            } else {
+                x0 = at.hitX - pillW * 0.5f;
+                y0 = at.topY;
+            }
+            x0 = std::clamp(x0, at.minX, std::max(at.minX, at.maxX - pillW));
+            ImU32 const pill = (at.pill & ~IM_COL32_A_MASK) |
+                               ((ImU32)(((at.pill >> IM_COL32_A_SHIFT) & 0xFF) * alpha) << IM_COL32_A_SHIFT);
+            dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + pillW, y0 + pillH), pill, std::min(pillH * 0.5f, 22.f));
+            int const text0 = dl->VtxBuffer.Size;
+            float const cx = x0 + pillW * 0.5f;
+            float const base = y0 + pad + cap;  // where the word's capitals stand
+            outlinedText(dl, font, px, ImVec2(std::round(cx - ts.x * 0.5f), std::round(base - asc)), col, alpha, text);
+            if (tagFont) {
+                float const tasc = tagFont->Ascent * (tagPx / tagFont->FontSize);
+                float const tbase = base + cap * 0.28f + tagPx * kCapHeight;
+                outlinedText(dl, tagFont, tagPx, ImVec2(std::round(cx - tagW * 0.5f), std::round(tbase - tasc)),
+                             ImVec4(1.f, 1.f, 1.f, 0.92f), alpha, "RELEASE");
+            }
+            return text0;
+        }
+
+        // How fast a lane w wide scrolls, its marker hitAt from the left:
+        // the lead fills it from the marker to its right edge.
+        double lanePxPerSec(float w, float hitAt, double tps) {
+            double const leadSec = std::max(4, ln::settings().leadTicks) / (tps > 0.0 ? tps : 240.0);
+            return std::max(1.0, (double)(w - hitAt - 4.f) / leadSec);
+        }
+
+        // The lane over the level: 12% of the screen's height at 1x, so it
+        // looks the same at any size; its width a share of the screen's,
+        // centered (the verdict is inside it). Its top: under GD's progress
+        // bar (Top) or over the ground (Bottom).
+        struct LaneGeom {
+            float x = 0.f, w = 0.f, h = 0.f;
+            float topY = 0.f, bottomY = 0.f;
+            float hitAt = 0.f;  // the marker's center, from the box's left
+        };
+        LaneGeom levelGeom() {
+            ImGuiIO const& io = ImGui::GetIO();
+            auto const& set = ln::settings();
+            LaneGeom g;
+            g.h = std::round(std::max(40.f, io.DisplaySize.y * kLaneOfScreen * set.size));
+            g.w = std::clamp(io.DisplaySize.x * set.levelWidth, std::min(g.h * 5.f, io.DisplaySize.x - 16.f),
+                             std::max(260.f, io.DisplaySize.x - 16.f));
+            g.x = std::round(std::max(8.f, (io.DisplaySize.x - g.w) * 0.5f));
+            g.w = std::max(g.h * 4.f, std::min(g.w, io.DisplaySize.x - 16.f));
+            g.hitAt = levelHitAt(g.w, g.h, set.judgments);
+            g.topY = std::round(io.DisplaySize.y * 0.075f);
+            g.bottomY = std::round(io.DisplaySize.y * 0.975f - g.h);
+            return g;
+        }
+        // The level's scroll speed. The card scrolls at it too, so a note is
+        // as many pixels ahead on the card as over the level.
+        double levelPxPerSec(double tps) {
+            auto const g = levelGeom();
+            return lanePxPerSec(g.w, g.hitAt, tps);
+        }
+
+        // Which vertices drawLaneBox drew for what, so the overlay can fade
+        // the box (fill, border, the verdict's pill) and its content (marker,
+        // bars, caps, notes, the verdict's word) apart.
+        struct LaneVtx {
+            int content0 = 0;  // from the box's fill to here: the box (fill and border)
+            int solid0 = 0;    // bars, flash, marker, then (from here) caps and presses
+            int pill0 = 0;     // the verdict's pill (the box's)
+            int text0 = 0;     // the verdict's word (content)
+            int end = 0;
+        };
+
+        // The lane in the rectangle p0..p0+size, scrolling at pxPerSec, its
+        // hit marker hitAt from the left, its fill `fill` (alpha), the
+        // verdict where `spot` says (its x and y filled in here).
+        LaneVtx drawLaneBox(Kind k, ImDrawList* dl, ImVec2 p0, ImVec2 size, float hitAt, double pxPerSec, int fill,
+                            VerdictSpot spot) {
+            auto const& set = ln::settings();
+            auto const v = ln::view(k);
+            // The clock as of now, not the start of the frame: in the level,
+            // the tick the game is on as this is drawn.
+            double const gameNow = ln::now(k);
+            ln::advance(k, gameNow);
+            // Everything below is placed on the drawing's clock: the game's
+            // plus the Delay setting, so notes reach the marker that much
+            // early (a fraction of a tick moves them smoothly). Misses and
+            // verdicts stay on the game's (ln::advance above, ln::onInput).
+            double const now = gucci::lanerules::drawClock(gameNow, set.delayMs, v.tps);
+            double const realNow = ln::steadyNow();
+            auto const& notes = *v.notes;
+            auto const& results = *v.results;
+            LaneVtx out;
+
+            float const w = size.x, h = size.y;
+            ImVec2 const p1(p0.x + w, p0.y + h);
+            NoteSizes const z = noteSizes(h);
+            float const cy = p0.y + h * 0.5f;
+            float const hitX = p0.x + hitAt;
+            ImVec2 const hc(hitX, cy);
+            float const border = laneBorder(h);
+            float const round = std::min(h * 0.14f, 16.f);
+            // Nothing is drawn across the border: every note, cap and bar
+            // vertex is kept inside the box's inner edge (3 px inside the
+            // border), and they fade out together over the last 5% of the
+            // lane, to nothing at that edge (one pass over their vertices,
+            // below); notes fade at the left end too.
+            float const inL = p0.x + border + 3.f, inR = p1.x - border - 3.f;
+            float const inT = p0.y + border + 1.f, inB = p1.y - border - 1.f;
+            float const fadeIn = std::max(10.f, w * 0.05f);
+            float const fadeFrom = inR - fadeIn;
+            auto leftFade = [&](float cx, float r) { return std::clamp(((cx - r) - inL) / (fadeIn * 0.5f), 0.f, 1.f); };
+            auto x = [&](double t) { return hitX + (float)((t - now) * pxPerSec); };
+
+            // The box: dark and see-through, the same on every theme, a
+            // darker band down its middle for the notes' track.
+            dl->AddRectFilled(p0, p1, IM_COL32(8, 9, 14, fill), round);
+            dl->AddRectFilled(ImVec2(inL, cy - h * 0.40f), ImVec2(inR, cy + h * 0.40f),
+                              IM_COL32(0, 0, 0, fill * 70 / kFillLevel));
+            // The border: light, with a dark line outside it so it shows over
+            // a white level too. Drawn before the content: everything else is
+            // kept inside the inner edge, except a cap under a press, which
+            // runs through the border (over it, under the press).
+            dl->AddRect(ImVec2(p0.x - 1.f, p0.y - 1.f), ImVec2(p1.x + 1.f, p1.y + 1.f), IM_COL32(0, 0, 0, 190),
+                        round + 1.f, 0, 2.f);
+            dl->AddRect(ImVec2(p0.x + border * 0.5f, p0.y + border * 0.5f),
+                        ImVec2(p1.x - border * 0.5f, p1.y - border * 0.5f), IM_COL32(255, 255, 255, 230), round, 0,
+                        border);
+            out.content0 = dl->VtxBuffer.Size;
+
+            // The notes in view: from the earliest whose hold can still reach
+            // the left edge to just past the right one.
+            double const leftT = now - (hitX - p0.x + z.three) / pxPerSec;
+            double const rightT = now + (p1.x - hitX + z.three) / pxPerSec;
+            auto const first = std::lower_bound(notes.begin(), notes.end(), leftT - v.maxHoldSec,
+                                                [](ln::Note const& n, double t) { return n.pressSec < t; });
+            size_t const from = (size_t)(first - notes.begin());
+            size_t to = from;
+            while (to < notes.size() && notes[to].pressSec <= rightT)
+                ++to;
+            {
+                // For Assistant Access (gucci_trainer_lane): where this draw put things.
+                auto& d = ln::drawn(k, ln::Style::Lane);
+                d.clock = now;
+                d.gameClock = gameNow;
+                d.posSec = tr::state(k).posSec;
+                d.tps = v.tps;
+                d.delayMs = set.delayMs;
+                d.markX = hitX;
+                d.pxPerSec = (float)pxPerSec;
+                d.n = 0;
+                for (size_t i = from; i < to && d.n < ln::Drawn::kMax; ++i, ++d.n) {
+                    d.idx[d.n] = (int)i;
+                    d.pressX[d.n] = x(notes[i].pressSec);
+                    d.releaseX[d.n] = x(notes[i].releaseSec);
+                }
+                ++d.draws;
+                if (gameNow > d.posSec + 0.5 / std::max(1.0, v.tps))
+                    ++d.fresh;
+            }
+
+            int const fadeVtx = dl->VtxBuffer.Size;  // bars and notes, kept inside and faded below
+            float const capHw = capWidth(h) * 0.5f;
+            float const mt = markerStroke(h);
+
+            // 1. The hold bars, each from its press to its release at their
+            // own times (a slider's bar ends square at its cap). Each is split
+            // where the right end's fade starts, so the fade has a vertex to
+            // start from, and its edge is drawn as lines and caps (no seam
+            // across it there).
+            auto barSpan = [&](float a, float b, float half, ImU32 body, ImU32 edge, float edgeW, bool roundL,
+                               bool roundR) {
+                ImDrawFlags corners = (roundL ? ImDrawFlags_RoundCornersLeft : 0) |
+                                      (roundR ? ImDrawFlags_RoundCornersRight : 0);
+                if (corners == 0)
+                    corners = ImDrawFlags_RoundCornersNone;
+                float const rnd = std::min(half, std::max(0.f, (b - a) * (roundL && roundR ? 0.5f : 1.f)));
+                dl->AddRectFilled(ImVec2(a, cy - half), ImVec2(b, cy + half), body, rnd, corners);
+                float const la = roundL ? a + rnd : a, lb = roundR ? b - rnd : b;
+                if (lb > la) {
+                    dl->AddLine(ImVec2(la, cy - half), ImVec2(lb, cy - half), edge, edgeW);
+                    dl->AddLine(ImVec2(la, cy + half), ImVec2(lb, cy + half), edge, edgeW);
+                }
+                if (roundL && rnd >= half - 0.5f) {
+                    dl->PathArcTo(ImVec2(a + half, cy), half, 1.5707963f, 4.7123890f);
+                    dl->PathStroke(edge, 0, edgeW);
+                }
+                if (roundR && rnd >= half - 0.5f) {
+                    dl->PathArcTo(ImVec2(b - half, cy), half, -1.5707963f, 1.5707963f);
+                    dl->PathStroke(edge, 0, edgeW);
+                }
+            };
+            for (size_t i = from; i < to; ++i) {
+                auto const& n = notes[i];
+                if (n.tail == ln::Note::Tail::None || n.releaseSec < leftT)
+                    continue;
+                auto const& r = results[i];
+                bool const slider = n.tail == ln::Note::Tail::Slider;
+                bool const isFree = n.tail == ln::Note::Tail::FreeHold;
+                // A slider (its release timed) is thick (40% of the lane); a
+                // plain hold thinner (17%); a hold whose release doesn't
+                // matter thin and faint. Solid gold while you hold it.
+                float const half = std::round(h * (slider ? 0.20f : isFree ? 0.05f : 0.085f));
+                float xa = x(n.pressSec);
+                float const xb = x(n.releaseSec);
+                // The part still to hold, once pressed, starts at the hit
+                // marker's ring (its corners on the ring's outside), not at
+                // its center: no rounded head inside the marker to show
+                // through the hit flash as a brighter half-moon (round 5).
+                float const ringOut = z.marker + mt * 0.5f;
+                float const startAt = hitX + std::sqrt(std::max(0.f, ringOut * ringOut - half * half));
+                bool cut = false;
+                if (r.pressed && xa < startAt) {
+                    xa = startAt;
+                    cut = true;
+                }
+                if (r.released || xb <= xa)
+                    continue;
+                float const ca = std::max(xa, inL), cb = std::min(xb, inR);
+                if (cb <= ca)
+                    continue;
+                bool const held = v.holding == (int)i || v.holding2 == (int)i;
+                float const fade = r.missed ? 0.4f : 1.f;
+                float const fillA = (held ? 0.9f : slider ? 0.55f : isFree ? 0.25f : 0.45f) * fade;
+                float const edgeA = (held ? 1.f : slider ? 0.6f : isFree ? 0.25f : 0.45f) * fade;
+                ImU32 const body = u32(held ? kBarHeld : kBarIdle, fillA);
+                ImU32 const edge = u32(held ? kBarHeldEdge : ImVec4(1.f, 1.f, 1.f, 1.f), edgeA);
+                float const ew = slider || held ? 2.f : 1.5f;
+                bool const rl = ca == xa && !cut, rr = cb == xb && !slider;
+                if (cb <= fadeFrom || ca >= fadeFrom) {
+                    barSpan(ca, cb, half, body, edge, ew, rl, rr);
+                } else {
+                    barSpan(ca, fadeFrom, half, body, edge, ew, rl, false);
+                    barSpan(fadeFrom, cb, half, body, edge, ew, false, rr);
+                }
+            }
+
+            // The flash and the pulse: for the first 0.1 s the marker's
+            // inside filled with the verdict's color (fading out by 0.2 s;
+            // round 5's 58% and 72% both read dull),
+            // and a thick ring in that color out from the marker (1.0x) to
+            // 1.25x over 0.2 s, inside the border. Over the bars, under the
+            // marker's white ring (kept on top through the flash) and under
+            // every release and press: the next note stays whole on top.
+            float const age = (float)(realNow - v.flash.atReal);
+            ImVec4 const vcol = wordColor(v.flash.text);
+            if (age >= 0.f && age < 0.2f) {
+                float const t = age / 0.2f;
+                float const ease = 1.f - (1.f - t) * (1.f - t);
+                float const th = std::max(6.f, std::round(h * 0.048f));
+                float const maxR = h * 0.5f - border - th * 0.5f - 1.5f;  // its dark ring's outside, inside the border
+                float const rr = std::min(z.marker * (1.f + 0.25f * ease), maxR);
+                // Solid for the first 0.1 s (round 5's 72% read dull and
+                // two-tone, PERFECT RGB 196,158,41), then gone by 0.2 s.
+                float const lit = age < 0.1f ? 1.f : 1.f - (age - 0.1f) / 0.1f;
+                dl->AddCircleFilled(hc, z.marker, u32(vcol, lit));
+                dl->AddCircle(hc, rr, IM_COL32(0, 0, 0, (int)(170 * (1.f - t))), 0, th + 3.f);
+                dl->AddCircle(hc, rr, u32(vcol, 1.f - t * t), 0, th);
+            }
+
+            // The hit marker: an empty white ring with a dark line either
+            // side, over the bars and the flash, under the notes (as in
+            // taiko, a note sits in it).
+            dl->AddCircle(hc, z.marker, IM_COL32(0, 0, 0, 170), 0, mt + 2.f);
+            dl->AddCircle(hc, z.marker, IM_COL32(255, 255, 255, 245), 0, mt);
+
+            out.solid0 = dl->VtxBuffer.Size;
+
+            // 2. Slider ends: a cap at the release's own time, under every
+            // press (a press nearby draws whole on top of it). A cap whose
+            // middle a press covers runs the box's full height, through the
+            // border, so 12 px of it (at 1080p) shows above and below even a
+            // 3-frame press (round 5's cap stood only 7 px out of one: "the
+            // slider looks like it simply ends at the next note"). One a press
+            // only grazes stands 12 px (9.6% of the lane) out of it.
+            float const capMax = h * 0.5f - border - 2.f;
+            float const peek = std::max(8.f, std::round(h * 0.096f));
+            float const tallL = p0.x + round + capHw + 2.f, tallR = p1.x - round - capHw - 2.f;  // clear of the corners
+            // The tall caps' vertices, kept inside the box's outer edge (not
+            // its inner one) below. A fixed array: no allocation per frame.
+            std::array<std::pair<int, int>, 16> tallVtx{};
+            int nTall = 0;
+            for (size_t i = from; i < to; ++i) {
+                auto const& n = notes[i];
+                auto const& r = results[i];
+                if (n.tail != ln::Note::Tail::Slider || r.released)
+                    continue;
+                float const xb = x(n.releaseSec);
+                if (xb + capHw < inL || xb - capHw > inR)
+                    continue;
+                float half = capHalf(n.releaseTier, h);
+                bool tall = false;
+                for (size_t j = from; j < to; ++j) {
+                    if (results[j].pressed)
+                        continue;
+                    float const pr = outerRadius(notes[j].pressTier, z) + z.edge;
+                    float const dx = std::fabs(x(notes[j].pressSec) - xb);
+                    if (dx < pr)
+                        tall = true;
+                    else if (dx < pr + capHw)
+                        half = std::max(half, std::sqrt(std::max(0.f, pr * pr - (dx - capHw) * (dx - capHw))) + peek);
+                }
+                tall = tall && xb >= tallL && xb <= tallR && nTall < (int)tallVtx.size();
+                half = tall ? h * 0.5f : std::min(half, capMax);
+                float const fade = (r.missed ? 0.32f : 1.f) * leftFade(xb, capHw);
+                int const v0 = dl->VtxBuffer.Size;
+                drawReleaseCap(dl, ImVec2(xb, cy), n.releaseTier, half, z, h, n.player2, fade, tall);
+                if (tall)
+                    tallVtx[nTall++] = {v0, dl->VtxBuffer.Size};
+            }
+
+            // 3. Presses, latest first so the next to hit is on top, each at
+            // its tier's full size; a hit one is gone, as in taiko.
+            for (size_t j = to; j-- > from;) {
+                auto const& n = notes[j];
+                auto const& r = results[j];
+                if (r.pressed)
+                    continue;
+                float const xa = x(n.pressSec);
+                float const rr = outerRadius(n.pressTier, z);
+                if (xa + rr < inL || xa - rr > inR)
+                    continue;
+                float const fade = (r.missed ? 0.32f : 1.f) * leftFade(xa, rr);
+                drawHead(dl, ImVec2(xa, cy), n.pressTier, z, n.player2, fade);
+            }
+
+            // Keep everything above inside the box, and fade it at the right
+            // end (a note on a bar fades with it, not over it). The alpha is
+            // from each vertex's own spot, then the spot is pulled in to the
+            // inner edge: a big triangle that crossed the edge would
+            // otherwise smear color past the border (round 3's leak).
+            int ti = 0;
+            for (int vi = fadeVtx; vi < dl->VtxBuffer.Size; ++vi) {
+                ImDrawVert& vx = dl->VtxBuffer.Data[vi];
+                if (vx.pos.x > fadeFrom) {
+                    float const f = std::clamp((inR - vx.pos.x) / fadeIn, 0.f, 1.f);
+                    ImU32 const a = (ImU32)(((vx.col >> IM_COL32_A_SHIFT) & 0xFF) * f);
+                    vx.col = (vx.col & ~IM_COL32_A_MASK) | (a << IM_COL32_A_SHIFT);
+                }
+                while (ti < nTall && vi >= tallVtx[ti].second)
+                    ++ti;
+                bool const inTall = ti < nTall && vi >= tallVtx[ti].first;
+                vx.pos.x = std::clamp(vx.pos.x, inL, inR);
+                vx.pos.y = inTall ? std::clamp(vx.pos.y, p0.y, p1.y) : std::clamp(vx.pos.y, inT, inB);
+            }
+            out.pill0 = out.text0 = dl->VtxBuffer.Size;
+
+            if (set.judgments && !v.flash.text.empty() && age >= 0.f && age < 0.6f) {
+                if (spot.side) {
+                    spot.rightX = hitX - z.marker - mt - kVerdictSideGap;
+                    spot.midY = cy;
+                    spot.minX = p0.x + border + 4.f;
+                    spot.maxX = spot.rightX;
+                } else {
+                    spot.hitX = hitX;
+                    spot.topY = p1.y + kVerdictGap;
+                    spot.minX = p0.x;
+                    spot.maxX = p1.x;
+                }
+                out.text0 = drawVerdict(dl, v.flash.text.c_str(), v.flash.release, vcol, age, h, spot);
+            }
+            out.end = dl->VtxBuffer.Size;
+            return out;
+        }
+
+        // The lane's height on the card: as over the level, but no more than
+        // 16% of the card's width, so it keeps about the level's proportions
+        // and a few notes' room shows between the marker and the next note.
+        float cardLaneHeight(float w) {
+            return std::round(std::clamp(levelGeom().h, 48.f, std::max(48.f, w * 0.16f)));
+        }
+
+        // The lane on the Click Trainer card: drag it to skim, as the bar.
+        void drawLane(Kind k) {
+            auto s = tr::state(k);
+            auto& ps = page(k);
+            bool const following = tr::followsLevel(k);
+            float const w = kit::Avail();
+            float const h = cardLaneHeight(w);
+            double const pxPerSec = levelPxPerSec(ln::view(k).tps);
+            ImVec2 const p0 = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton("##lane", ImVec2(w, h));
+            bool const hovered = ImGui::IsItemHovered();
+            bool const active = ImGui::IsItemActive();
+            if (active && !following) {
+                if (!ps.dragging) {
+                    ps.dragging = true;
+                    ps.resumeAfterDrag = !s.paused;
+                    tr::setPaused(k, true);
+                }
+                float const dx = ImGui::GetIO().MouseDelta.x;
+                if (dx != 0.f)
+                    tr::seek(k, s.posSec - dx / pxPerSec);
+            } else if (ps.dragging) {
+                ps.dragging = false;
+                if (ps.resumeAfterDrag)
+                    tr::setPaused(k, false);
+            }
+            if (hovered && following)
+                ImGui::SetTooltip("The lane follows the level while it's open.");
+            else if (hovered && !active)
+                ImGui::SetTooltip("Drag to skim.");
+            // The verdict under the lane, on the theme's raised surface.
+            VerdictSpot spot;
+            spot.side = false;
+            spot.pill = u32(look().pal.raised, 0.97f);
+            drawLaneBox(k, ImGui::GetWindowDrawList(), p0, ImVec2(w, h), h * kHitAt, pxPerSec, kFillCard, spot);
+            // Room under the lane for the verdict, a RELEASE line and its pop.
+            ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + h));
+            float const px = h * kVerdictOfLane * kPop;
+            ImGui::Dummy(ImVec2(w, kVerdictGap + verdictBlockHeight(px, true) + 2.f * verdictPad(h) * kPop + 4.f));
+        }
+
+        // What the colors and sizes mean, under the lane: at the card's body
+        // size, in its text color, with swatches drawn as a lane 56 px tall
+        // would (a 1-frame note 22 px across, a 3-frame one 43).
+        void laneLegend(Kind k) {
+            auto const& pal = look().pal;
+            auto const v = ln::view(k);
+            float const sh = 56.f;
+            NoteSizes const z = noteSizes(sh);
+            auto* dl = ImGui::GetWindowDrawList();
+            enum class Swatch { Press, Cap, Slider, Hold };
+            struct Item {
+                Swatch kind;
+                LTier tier;
+                const char* words;
+            };
+            Item const items[] = {{Swatch::Press, LTier::One, "1 frame"},
+                                  {Swatch::Press, LTier::Two, "2 frames"},
+                                  {Swatch::Press, LTier::Three, "3 frames"},
+                                  {Swatch::Press, LTier::Wide, "4+ or any"},
+                                  {Swatch::Press, LTier::Unknown, "not counted"},
+                                  {Swatch::Cap, LTier::Two, "let go here (a slider's end, its window's color)"},
+                                  {Swatch::Slider, LTier::Two, "thick bar: a slider, the release is judged"},
+                                  {Swatch::Hold, LTier::Unknown, "thin bar: a hold, the release isn't judged"}};
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            float const startX = p.x;
+            float const right = p.x + kit::Avail();
+            float const lineH = std::max(z.three * 2.f + z.edge * 2.f + 4.f, ImGui::GetTextLineHeight());
+            float const barLen = 44.f;
+            float y = p.y;
+            for (auto const& it : items) {
+                float halfW = 0.f;  // the swatch's half width
+                switch (it.kind) {
+                    case Swatch::Press: halfW = outerRadius(it.tier, z) + z.edge; break;
+                    case Swatch::Cap: halfW = capWidth(sh) * 0.5f + 3.f; break;
+                    case Swatch::Slider:
+                    case Swatch::Hold: halfW = barLen * 0.5f; break;
+                }
+                ImVec2 const ts = ImGui::CalcTextSize(it.words);
+                float const itemW = halfW * 2.f + 8.f + ts.x;
+                if (p.x > startX && p.x + itemW > right) {  // wrap on a narrow card
+                    p.x = startX;
+                    y += lineH + 4.f;
+                }
+                ImVec2 const c(p.x + halfW + 2.f, y + lineH * 0.5f);
+                switch (it.kind) {
+                    case Swatch::Press: drawHead(dl, c, it.tier, z, false, 1.f); break;
+                    case Swatch::Cap:
+                        drawReleaseCap(dl, c, it.tier, capHalf(it.tier, sh), z, sh, false, 1.f);
+                        break;
+                    case Swatch::Slider:
+                    case Swatch::Hold: {
+                        bool const slider = it.kind == Swatch::Slider;
+                        float const half = std::round(sh * (slider ? 0.20f : 0.085f));
+                        ImVec2 const a(c.x - halfW, c.y - half), b(c.x + halfW, c.y + half);
+                        dl->AddRectFilled(ImVec2(a.x - 1.f, a.y - 1.f), ImVec2(b.x + 1.f, b.y + 1.f),
+                                          IM_COL32(6, 7, 11, 235), half + 1.f);
+                        dl->AddRectFilled(a, b, u32(kBarIdle, slider ? 0.85f : 0.7f), half);
+                        if (slider)
+                            drawReleaseCap(dl, ImVec2(b.x - capWidth(sh) * 0.5f, c.y), it.tier,
+                                           capHalf(it.tier, sh), z, sh, false, 1.f);
+                        break;
+                    }
+                }
+                dl->AddText(ImVec2(c.x + halfW + 7.f, c.y - ts.y * 0.5f), u32(pal.ink), it.words);
+                p.x = c.x + halfW + 7.f + ts.x + 18.f;
+            }
+            ImGui::Dummy(ImVec2(std::max(1.f, right - startX), y + lineH - p.y));
+            if (v.notes && !v.notes->empty() && v.counted == 0)
+                kit::Hint("No windows are counted for this macro yet, so its notes are plain grey and a press is "
+                          "judged by the OK range below. Count them on the Calculate page, then press Reload at the "
+                          "top.");
+        }
+
+        // The players on screen, as boxes in ImGui's pixels (about each
+        // one's size: a ship is wider), their gamemodes as bits, and GD's
+        // floor and ceiling lines on screen (ImGui's y, down; -1 when that
+        // line isn't shown).
+        struct PlayersOnScreen {
+            int n = 0;
+            ImVec2 lo[2], hi[2];
+            int modes = 0;
+            float floorY = -1.f;  // the top of the ground
+            float ceilY = -1.f;   // the bottom of the ceiling (ship, UFO, wave, ball, spider, swing parts)
+            float floorObjY = -1.f;  // where the level's floor (y 90) is, from the object layer
+        };
+        // A ground layer's line (its edge toward the play field) in ImGui's
+        // y, or -1 if that ground isn't showing.
+        float groundLineY(GJGroundLayer* g, float winH, float sy) {
+            if (!g || !g->isVisible() || !g->m_lineSprite)
+                return -1.f;
+            for (cocos2d::CCNode* n = g; n; n = n->getParent())
+                if (!n->isVisible())
+                    return -1.f;
+            auto* line = g->m_lineSprite;
+            cocos2d::CCPoint const w = line->getParent()->convertToWorldSpace(line->getPosition());
+            return (winH - w.y) * sy;
+        }
+        PlayersOnScreen playersOnScreen() {
+            PlayersOnScreen out;
+            auto* pl = PlayLayer::get();
+            auto const win = cocos2d::CCDirector::get()->getWinSize();
+            ImVec2 const disp = ImGui::GetIO().DisplaySize;
+            if (!pl || !pl->m_objectLayer || win.width <= 0.f || win.height <= 0.f)
+                return out;
+            float const sx = disp.x / win.width, sy = disp.y / win.height;
+            out.floorY = groundLineY(pl->m_groundLayer, win.height, sy);
+            out.ceilY = groundLineY(pl->m_groundLayer2, win.height, sy);
+            out.floorObjY = (win.height - pl->m_objectLayer->convertToWorldSpace(cocos2d::CCPoint{0.f, 90.f}).y) * sy;
+            int slot = 0;
+            for (PlayerObject* p : {pl->m_player1, pl->m_player2}) {
+                ++slot;
+                if (!p || !p->isVisible())
+                    continue;
+                cocos2d::CCPoint const at = p->getPosition();
+                cocos2d::CCPoint const a = pl->m_objectLayer->convertToWorldSpace(at);
+                cocos2d::CCPoint const b = pl->m_objectLayer->convertToWorldSpace(at + cocos2d::CCPoint{30.f, 0.f});
+                float const half = 20.f * std::max(0.3f, p->m_vehicleSize) * a.getDistance(b) / 30.f;
+                float const cx = a.x * sx, cyp = (win.height - a.y) * sy;
+                out.lo[out.n] = ImVec2(cx - half * sx, cyp - half * sy);
+                out.hi[out.n] = ImVec2(cx + half * sx, cyp + half * sy);
+                ++out.n;
+                int const m = (p->m_isShip ? 1 : 0) | (p->m_isBird ? 2 : 0) | (p->m_isBall ? 4 : 0) |
+                              (p->m_isDart ? 8 : 0) | (p->m_isRobot ? 16 : 0) | (p->m_isSpider ? 32 : 0) |
+                              (p->m_isSwing ? 64 : 0);
+                out.modes |= m << (slot == 1 ? 0 : 8);
+            }
+            return out;
+        }
+
+        // The box's fill over the level: see-through (85% when the lane sits
+        // at the bottom over the play field, not over the ground, so the
+        // level's spikes don't make it busy), and more see-through (eased)
+        // while a player is within 40 px of it, so the player shows.
+        int levelFill(Kind k, PlayersOnScreen const& ps, ImVec2 p0, ImVec2 p1, int base) {
+            static float eased[2] = {1.f, 1.f};  // 1 = the full fill
+            float& e = eased[k == Kind::Jupiter ? 0 : 1];
+            bool nearPlayer = false;
+            for (int i = 0; i < ps.n; ++i)
+                if (ps.hi[i].x + 40.f > p0.x && ps.lo[i].x - 40.f < p1.x && ps.hi[i].y + 40.f > p0.y &&
+                    ps.lo[i].y - 40.f < p1.y)
+                    nearPlayer = true;
+            float const dt = std::clamp(ImGui::GetIO().DeltaTime, 0.f, 0.1f);
+            e += std::clamp((nearPlayer ? 0.f : 1.f) - e, -dt * 8.f, dt * 8.f);
+            return (int)std::round(kFillNearPlayer + (base - kFillNearPlayer) * e);
+        }
+
+        // Where the lane sits over the level, and how see-through it is.
+        // Auto:
+        //  - With a ceiling on screen (ship, UFO, wave, swing, and ball or
+        //    spider parts with one), by the corridor between the ceiling and
+        //    the floor, not by where the player is this moment: the band
+        //    that covers clearly less of it (a quarter lane or more).
+        //  - Otherwise (cube, robot, ball, spider on the ground): the top,
+        //    unless the bottom band fits wholly under GD's ground line, and
+        //    then only once the player has been in the top band for 0.25 s
+        //    (one jump's apex isn't enough). A player in the top band with
+        //    no room under the ground: the lane fades to 30% instead.
+        //  - It moves only after it has wanted the other band for 0.25 s of
+        //    the level's time, at most every 0.6 s, sliding over 0.3 s; a
+        //    new level, restart or respawn decides again with no slide.
+        // On any place, a player inside the lane's band fades the whole lane
+        // to 30%.
+        struct AutoPlace {
+            PlayLayer* level = nullptr;
+            double lastNow = -1.0;
+            int band = 0;
+            float slide = 0.f;  // 0 top .. 1 bottom, before easing
+            double lastMove = -100.0;  // the level's time
+            double wantSince = -1.0;   // the level's time the other band became the better one
+            double inTopSince = -1.0;  // the level's time a player came into the top band
+            float alpha = 1.f;
+        };
+        struct PlaceOut {
+            float y = 0.f, alpha = 1.f;
+            int fill = kFillLevel;
+        };
+        PlaceOut placeLane(Kind k, LaneGeom const& g, PlayersOnScreen const& ps) {
+            static AutoPlace s_auto[2];
+            AutoPlace& st = s_auto[k == Kind::Jupiter ? 0 : 1];
+            auto const& set = ln::settings();
+            float const dt = std::clamp(ImGui::GetIO().DeltaTime, 0.f, 0.1f);
+            float const screenH = ImGui::GetIO().DisplaySize.y;
+            double const now = ln::now(k);
+            auto* pl = PlayLayer::get();
+            // A new level, a restart or a respawn: decide again, no slide.
+            bool const snap = pl != st.level || now < st.lastNow - 0.05;
+            st.level = pl;
+            st.lastNow = now;
+            if (snap) {
+                st.wantSince = st.inTopSince = -1.0;
+                st.lastMove = -100.0;
+            }
+            auto inBandAt = [&](float y0, float right) {
+                for (int i = 0; i < ps.n; ++i)
+                    if (ps.hi[i].x > 0.f && ps.lo[i].x < right && ps.hi[i].y > y0 && ps.lo[i].y < y0 + g.h)
+                        return true;
+                return false;
+            };
+            // Flying (ship, UFO, wave, swing, either player), or a ceiling on
+            // screen: judge by the corridor. Its ceiling can sit at or above
+            // the screen's top edge (then the corridor starts at the top).
+            int const flyBits = 1 | 2 | 8 | 64;
+            bool const flying = (ps.modes & (flyBits | flyBits << 8)) != 0;
+            bool const ceiling = flying || (ps.ceilY > 0.f && ps.ceilY < screenH);
+            float const floorLine = ps.floorY >= 0.f ? ps.floorY : ps.floorObjY;
+            bool const bottomFits = floorLine >= 0.f && g.bottomY >= floorLine;
+            auto& out = ln::placement(k);
+            int want = st.band;
+            if (set.place != ln::Place::Auto) {
+                want = set.place == ln::Place::Bottom ? 1 : 0;
+            } else if (ps.n > 0) {
+                if (ceiling) {
+                    // The corridor the player flies in, on screen.
+                    float const top = std::max(0.f, ps.ceilY);
+                    float const bot = floorLine >= 0.f ? std::min(floorLine, screenH) : screenH;
+                    auto cover = [&](float y0) {
+                        return std::max(0.f, std::min(y0 + g.h, bot) - std::max(y0, top));
+                    };
+                    float const cTop = cover(g.topY), cBot = cover(g.bottomY);
+                    // Only for a clear difference (a quarter of the lane):
+                    // when the corridor fills the screen both bands cover
+                    // it, and the lane stays put (fading while the player
+                    // is in it) instead of moving on a few pixels.
+                    float const clear = g.h * 0.25f;
+                    if (cBot + clear < cTop)
+                        want = 1;
+                    else if (cTop + clear < cBot)
+                        want = 0;
+                    st.inTopSince = -1.0;
+                } else {
+                    if (inBandAt(g.topY, g.x + g.w)) {
+                        if (st.inTopSince < 0.0)
+                            st.inTopSince = now;
+                    } else {
+                        st.inTopSince = -1.0;
+                    }
+                    bool const topBusy = st.inTopSince >= 0.0 && now - st.inTopSince >= 0.25;
+                    if (st.band == 1)
+                        want = bottomFits ? 1 : 0;
+                    else
+                        want = bottomFits && topBusy ? 1 : 0;
+                }
+            }
+            if (snap) {
+                // At a start, without a reason to be at the bottom, the top.
+                st.band = set.place == ln::Place::Auto && !ceiling ? 0 : want;
+                st.wantSince = -1.0;
+            } else if (want != st.band) {
+                if (set.place != ln::Place::Auto) {
+                    st.band = want;
+                } else {
+                    if (st.wantSince < 0.0)
+                        st.wantSince = now;
+                    if (now - st.wantSince >= 0.25 && now - st.lastMove >= 0.6) {
+                        st.band = want;
+                        st.lastMove = now;
+                        st.wantSince = -1.0;
+                        ++out.moves;
+                    }
+                }
+            } else {
+                st.wantSince = -1.0;
+            }
+            float const target = (float)st.band;
+            if (snap)
+                st.slide = target;
+            else
+                st.slide += std::clamp(target - st.slide, -dt / 0.3f, dt / 0.3f);
+            float const e = st.slide * st.slide * (3.f - 2.f * st.slide);  // ease in and out
+            float const y = std::round(g.topY + (g.bottomY - g.topY) * e);
+            // A player over the box (the verdict is inside it): it fades.
+            auto inRect = [&](float y0, float left, float right) {
+                for (int i = 0; i < ps.n; ++i)
+                    if (ps.hi[i].x > left && ps.lo[i].x < right && ps.hi[i].y > y0 && ps.lo[i].y < y0 + g.h)
+                        return true;
+                return false;
+            };
+            float const wantA = inRect(y, g.x, g.x + g.w) ? kInBandAlpha : 1.f;
+            st.alpha = snap ? wantA : st.alpha + std::clamp(wantA - st.alpha, -dt * 5.f, dt * 5.f);
+            PlaceOut po;
+            po.y = y;
+            po.alpha = st.alpha;
+            // At the bottom over the play field (not under the ground line):
+            // a fuller fill.
+            bool const overPlay = floorLine < 0.f || y < floorLine;
+            po.fill = e > 0.5f && overPlay ? kFillBottomOverPlay : kFillLevel;
+            out.band = st.band;
+            out.slide = e;
+            out.alpha = st.alpha;
+            out.y = y;
+            out.h = g.h;
+            out.floorY = floorLine;
+            out.ceilY = ps.ceilY;
+            out.fill = po.fill;
+            out.bottomFits = bottomFits;
+            return po;
+        }
+
+        // The lane over the trainer's level while you play it.
+        void laneOverlay(Kind k) {
+            auto s = tr::state(k);
+            auto const& set = ln::settings();
+            if (set.style != ln::Style::Lane || !set.inLevel || !s.barEnabled || s.macro.clickIntervalsSec.empty() ||
+                !tr::followsLevel(k) || tr::busy())
+                return;
+            // On the trainer's own page, open, the card shows it.
+            if (s.pageVisible)
+                return;
+            auto const g = levelGeom();
+            auto const ps = playersOnScreen();
+            auto const place = placeLane(k, g, ps);
+            float const alpha = place.alpha;
+            float const y = place.y;
+            ImVec2 const p0(g.x, y), p1(g.x + g.w, y + g.h);
+            // The background list: over the game, under every window, and it
+            // never takes a click from the game. The verdict goes inside the
+            // box, just left of the hit marker.
+            auto* dl = ImGui::GetBackgroundDrawList();
+            int const vtx0 = dl->VtxBuffer.Size;
+            VerdictSpot spot;
+            spot.side = true;
+            spot.pill = IM_COL32(0, 0, 0, 110);
+            LaneVtx const vt = drawLaneBox(k, dl, p0, ImVec2(g.w, g.h), g.hitAt,
+                                           lanePxPerSec(g.w, g.hitAt, ln::view(k).tps),
+                                           levelFill(k, ps, p0, p1, place.fill), spot);
+            // A player over the box: the box's fill, border and the verdict's
+            // pill fade to 30%; the bars, flash and marker to 70% (their dark
+            // lines, every near-black vertex, not at all); the notes, caps and
+            // the word stay as they are, so the tier colors still read.
+            if (alpha < 0.999f) {
+                float const t = (1.f - alpha) / (1.f - kInBandAlpha);  // 0 full .. 1 in the band
+                float const contentA = 1.f - t * (1.f - kInBandContentAlpha);
+                auto scale = [&](int from, int to, float f, bool keepDark) {
+                    for (int vi = from; vi < to; ++vi) {
+                        ImDrawVert& vx = dl->VtxBuffer.Data[vi];
+                        if (keepDark && (vx.col & 0xFF) < 28 && ((vx.col >> 8) & 0xFF) < 28 &&
+                            ((vx.col >> 16) & 0xFF) < 28)
+                            continue;
+                        ImU32 const a = (ImU32)(((vx.col >> IM_COL32_A_SHIFT) & 0xFF) * f);
+                        vx.col = (vx.col & ~IM_COL32_A_MASK) | (a << IM_COL32_A_SHIFT);
+                    }
+                };
+                scale(vtx0, vt.content0, alpha, false);
+                scale(vt.content0, vt.solid0, contentA, true);
+                scale(vt.pill0, vt.text0, alpha, false);
+            }
+            ln::markShownInLevel(k);
+        }
         // ------------------------------------------------------------ cards
+
+        // The lane's own rows: how it scrolls, how big it is, and whether it
+        // shows over the level.
+        void laneSettings() {
+            auto& set = ln::settings();
+            bool changed = false;
+            changed |= kit::SliderRow("Lead", "How many ticks ahead of the hit marker the lane shows. Fewer is "
+                                              "faster scrolling.",
+                                      &set.leadTicks, 24, 960, "%d ticks");
+            changed |= kit::SliderRow("Lane size", "1x is 12% of the screen's height", &set.size, 0.6f, 2.f, "%.2fx");
+            changed |= kit::SwitchRow("Judgments", "PERFECT, EARLY 1f, LATE 2f or MISS as you hit: at the hit circle in the level, under it here",
+                                      &set.judgments);
+            changed |= kit::SwitchRow("Show in the level", "The lane over the trainer's level while you play it, "
+                                                            "with the menu closed",
+                                      &set.inLevel);
+            if (set.inLevel) {
+                changed |= kit::SliderRow("Width in the level", nullptr, &set.levelWidth, 0.3f, 1.f, "%.2f");
+                // Auto first: the band the player is farther from.
+                int place = set.place == ln::Place::Auto ? 0 : set.place == ln::Place::Top ? 1 : 2;
+                const char* const places[] = {"Auto", "Top", "Bottom"};
+                if (kit::DropdownRow("Place in the level",
+                                     "Auto: at the top or the bottom, whichever the player is farther from. It "
+                                     "moves over at a gamemode portal or when the player comes near, and fades "
+                                     "while the player is inside it.",
+                                     &place, places, 3)) {
+                    set.place = place == 0 ? ln::Place::Auto : place == 1 ? ln::Place::Top : ln::Place::Bottom;
+                    changed = true;
+                }
+            }
+            if (changed)
+                ln::saveSettings();
+        }
 
         void clickTrainerCard(Kind k) {
             auto* gb = GucciEngine::get();
@@ -332,7 +1455,19 @@ namespace gucci::ui::pages {
                 "and each of its presses you answer gets a {} line at its start.",
 #endif
                 look().pal.light ? "dark" : "white", look().pal.hitName);
-            kit::BeginCard("Click Trainer", caption.c_str());
+            bool const laneCaption = ln::settings().style == ln::Style::Lane;
+            kit::BeginCard("Click Trainer",
+                           laneCaption ?
+#if defined(GEODE_IS_MOBILE)
+                                       "The macro's clicks scroll into the hit marker as notes, each sized by how "
+                                       "tight Calculate counted its window. Hold the Tap button under it along with "
+                                       "them, or play the level: each press is judged as it lands."
+#else
+                                       "The macro's clicks scroll into the hit marker as notes, each sized by how "
+                                       "tight Calculate counted its window. Tap space, up or W along with them, or "
+                                       "play the level: each press is judged as it lands."
+#endif
+                                       : caption.c_str());
             {
                 // A cheat only while it follows the trainer's own level.
                 kit::LegitGate gate(tr::followsLevel(k));
@@ -350,7 +1485,14 @@ namespace gucci::ui::pages {
                 return;
             }
 
-            drawBar(k);
+            bool const laneStyle = ln::settings().style == ln::Style::Lane;
+            if (laneStyle) {
+                drawLane(k);
+                kit::Gap(0.2f);
+                laneLegend(k);
+            } else {
+                drawBar(k);
+            }
             kit::Gap(0.3f);
 
             {
@@ -389,11 +1531,74 @@ namespace gucci::ui::pages {
                                        "looping on, the bar loops the looped segments.",
                                &s.barLoop))
                 tr::saveSettings(k);
-            if (kit::SliderRow("Window", "How much of the macro the bar shows at once", &s.barWindowSec, 0.5f, 10.f,
-                               "%.1f s"))
+            {
+                // Classic first: the default (the saved value is still the
+                // Style enum: 0 Lane, 1 Classic).
+                int style = ln::settings().style == ln::Style::Lane ? 1 : 0;
+                const char* const styles[] = {"Classic", "Lane"};
+                if (kit::DropdownRow("Style", "Classic: the bar, the macro's clicks over yours. Lane: notes scroll "
+                                              "into a hit marker, sized by their window.",
+                                     &style, styles, 2)) {
+                    ln::settings().style = style == 1 ? ln::Style::Lane : ln::Style::Classic;
+                    ln::saveSettings();
+                }
+                // Both styles: the drawing runs this far ahead of the game
+                // (trainers/lane.hpp, delayMs); judging never sees it.
+                auto& set = ln::settings();
+                if (kit::SliderRow("Delay",
+                                   laneStyle ? "If you keep pressing late, raise it: the notes come this many ms "
+                                               "sooner (below 0, later). PERFECT, EARLY and LATE still go by when "
+                                               "the game got your press. Both trainers share it."
+                                             : "If you keep pressing late, raise it: the clicks reach the center "
+                                               "line this many ms sooner (below 0, later). Your timing still goes "
+                                               "by when the game got your press. Both trainers share it, and "
+                                               "Video Mode's bar doesn't use it.",
+                                   &set.delayMs, gucci::lanerules::kDelayMinMs, gucci::lanerules::kDelayMaxMs,
+                                   "%.0f ms")) {
+                    set.delayMs = gucci::lanerules::clampDelayMs(std::round(set.delayMs));
+                    ln::saveSettings();
+                }
+            }
+            if (laneStyle)
+                laneSettings();
+            else if (kit::SliderRow("Window", "How much of the macro the bar shows at once", &s.barWindowSec, 0.5f,
+                                    10.f, "%.1f s"))
                 tr::saveSettings(k);
+            // Click Between Frames sits out while the bot records or plays
+            // (GucciEngine::syncInputMods), so a CBF player trains without it
+            // then: the trainer lane's measurer found that's the likeliest
+            // "my clicks feel late".
+            if (!gb->inputModsPaused.empty())
+                kit::Note(fmt::format("{} is paused while the bot is on Record or Play, so your presses land on "
+                                      "tick edges. Set the bot to Idle to train with it.",
+                                      gb->inputModsPaused)
+                              .c_str(),
+                          Tone::Warn);
 
             kit::Section("Your timing");
+            if (laneStyle) {
+                auto const v = ln::view(k);
+                kit::Chip(fmt::format("On the frame {}", v.tally.perfect).c_str(), Tone::Good);
+                ImGui::SameLine();
+                kit::Chip(fmt::format("In the window {}", v.tally.inside).c_str(), Tone::Warn);
+                ImGui::SameLine();
+                kit::Chip(fmt::format("Outside {}", v.tally.outside).c_str(), Tone::Bad);
+                ImGui::SameLine();
+                kit::Chip(fmt::format("Missed {}", v.tally.missed).c_str(), Tone::Muted);
+                kit::Hint("A press is judged against the note it lands nearest, in ticks off the macro's frame. In "
+                          "the window means the count says it still lives there. A slider's release is judged too. "
+                          "Notes with no counted window use the OK range below. The tally starts over with each "
+                          "attempt.");
+                bool okChanged =
+                    kit::SliderRow("OK within", "For notes with no counted window", &gb->clickIndicatorOkMs, 1.f,
+                                   200.f, "%.0f ms");
+                if (okChanged) {
+                    gb->clickIndicatorOkMs = std::max(gb->clickIndicatorOkMs, gb->clickIndicatorPerfectMs);
+                    tr::saveScoreWindows();
+                }
+                kit::EndCard();
+                return;
+            }
             auto const& sc = s.score;
             if (sc.hasLastReading) {
                 int const d = sc.lastDeltaFrames;
@@ -1062,7 +2267,7 @@ namespace gucci::ui::pages {
                                                  : "No clicks to show: load a macro on the Trainer page.",
                               Tone::Warn);
                 else
-                    drawBar(k);
+                    drawBar(k, true);
                 // While its level is open the bar follows the level (tick()
                 // holds it paused at the level's time): Pause did nothing and
                 // Restart only wiped your clicks, as on the Click Trainer card,
@@ -1095,6 +2300,12 @@ namespace gucci::ui::pages {
 
     void trainerVideoOverlay() {
         videoBar(Kind::Any);
+    }
+
+    // The trainer lane over its level, menu open or not (ui/shell.cpp).
+    void trainerLaneOverlay() {
+        laneOverlay(Kind::Jupiter);
+        laneOverlay(Kind::Any);
     }
 
     void anyTrainer() {

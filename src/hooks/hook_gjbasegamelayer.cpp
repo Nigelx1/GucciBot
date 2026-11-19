@@ -724,7 +724,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 // The practice trainers' click bars and Click Indicators
                 // scoring: timed off the input event itself, in the frame the
                 // click really arrived in, not polled from the menu.
-                trainers::onLevelInput(pressed);
+                trainers::onLevelInput(pressed, mover2);
                 // Click Indicators' scoring, against the macro it shows.
                 clickind::onRealClick(mover2, pressed);
             }

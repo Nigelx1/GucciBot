@@ -213,6 +213,8 @@ namespace gucci::mcp {
     void registerLevelStringTools(Server& server);
     // gucci_song_time. Defined in song_time_tool.cpp.
     void registerSongTimeTools(Server& server);
+    // gucci_trainer_lane: the Trainer's lane (trainer_lane_tool.cpp).
+    void registerTrainerLaneTools(Server& server);
     // gucci_ui_tap. Defined in ui_tap_tool.cpp.
     void registerUiTapTools(Server& server);
     // gucci_ui_press: a GucciBot menu control pressed by its ID (ui_press_tool.cpp).

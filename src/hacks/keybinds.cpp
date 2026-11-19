@@ -294,7 +294,7 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
     bool dispatchKeyboardMSG(enumKeyCodes key, bool down, bool repeat, double timestamp) {
         int const k = static_cast<int>(key);
         // Every key not kept goes on to the game from here.
-        bool const handedOn = gucciHandle(key, down, repeat);
+        bool const handedOn = gucciHandle(key, down, repeat, timestamp);
         count(handedOn ? g_handedOn : g_kept, k, down, repeat);
         if (!handedOn)
             return true;
@@ -302,7 +302,8 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
     }
 
     // What GucciBot does with a key; false when it keeps it from the game.
-    bool gucciHandle(enumKeyCodes key, bool down, bool repeat) {
+    // `timestamp`: the key event's own time (the trainers stamp a press with it).
+    bool gucciHandle(enumKeyCodes key, bool down, bool repeat, double timestamp) {
         int const k = static_cast<int>(key);
         auto* gb = GucciEngine::get();
 
@@ -345,7 +346,7 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         // The trainers' click bars take the player's own jump key while they
         // run away from a level (in one, GD's handleButton reports it).
         if (live && !repeat && jumpKey(key))
-            trainers::onKeyInput(down);
+            trainers::onKeyInput(down, timestamp);
 
         // Every key goes on to the game as well, bound or not. (Whether one was
         // used only mattered to the autoclicker's old key tracking, which is

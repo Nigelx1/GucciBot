@@ -3,6 +3,8 @@
 #include "core/geode_compat.hpp" // gucci::pathToString
 #include "hacks/legit.hpp"
 #include "analysis/ac/framewindow.hpp"
+#include "analysis/ac/fw_file.hpp"
+#include "trainers/lane_rules.hpp"
 #include "ui/ui.hpp"
 #include <fmt/format.h>
 #include "core/bot_switch.hpp"
@@ -24,6 +26,9 @@
 #include <Geode/binding/FMODAudioEngine.hpp>
 #include <Geode/utils/web.hpp>
 #include <array>
+#include <bit>
+#include <set>
+#include <tuple>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -892,6 +897,97 @@ namespace gucci {
         log::info("[GucciBot] Macro path: loaded {} sample(s) from sidecar", samples.size());
     }
 
+    // GucciBot (2026-11-17): the Trainer's lane draws each note by its window
+    // (Juice's design: a small red note for a 1-frame window, bigger and
+    // yellower as it gets more lenient), so the macro's windows file, when
+    // Calculate has counted one, is read with its clicks. A window belongs to
+    // the press (or release) on its frame, of its player; one counted under
+    // the other player's flag (a 1-player level's dual fixes) still counts,
+    // unless that player has a click of its own there that isn't this
+    // click's double-flag twin (lanerules::pickWindow).
+    static void attachTrainerWindows(const fs::path& macroPath, GucciEngine::TrainerMacroData& out) {
+        static uint64_t s_generation = 0;
+        out.generation = ++s_generation;
+        out.windowsCounted = 0;
+        if (out.clicks.size() != out.clickIntervalsSec.size()) {
+            out.clicks.clear();
+            return;
+        }
+        std::error_code ec;
+        auto const file = fwAcSidecarPath(macroPath);
+        if (!fs::exists(file, ec))
+            return;
+        std::vector<gucci::fwfile::Window> windows;
+        double fileTps = 240.0;
+        if (!gucci::fwfile::readWindows(file, windows, fileTps))
+            return;
+        // (frame, release, player2) -> the window there.
+        auto keyOf = [](uint32_t frame, bool release, bool p2) {
+            return (uint64_t)frame << 2 | (release ? 2u : 0u) | (p2 ? 1u : 0u);
+        };
+        std::unordered_map<uint64_t, gucci::fwfile::Window const*> byKey;
+        for (auto const& w : windows) {
+            if (w.hidden || w.desynced || (w.window <= 0 && w.subframe <= 0.f))
+                continue;
+            byKey.emplace(keyOf(w.frame, w.release, w.player2), &w);
+        }
+        // Who presses (or releases) on each key: the buttons of that player
+        // there, and how many of its clicks. A window goes only to the click
+        // it can belong to (lanerules::pickWindow; the file has no button).
+        std::unordered_map<uint64_t, uint8_t> buttonsAt;  // bit per button
+        std::unordered_map<uint64_t, int> clicksAt;
+        // The macro's clicks by press, release, button and player: the other
+        // player's exact twin of a click is a 1-player macro's double-flag copy.
+        std::set<std::tuple<uint32_t, uint32_t, uint8_t, bool>> twins;
+        for (auto const& c : out.clicks) {
+            for (uint64_t const key : {keyOf(c.pressFrame, false, c.player2), keyOf(c.releaseFrame, true, c.player2)}) {
+                buttonsAt[key] |= (uint8_t)(1u << (c.button & 7));
+                ++clicksAt[key];
+            }
+            twins.emplace(c.pressFrame, c.releaseFrame, c.button, c.player2);
+        }
+        auto buttons = [&](uint64_t key) {
+            auto const it = buttonsAt.find(key);
+            return it == buttonsAt.end() ? 0 : std::popcount((unsigned)it->second);
+        };
+        auto clicks = [&](uint64_t key) {
+            auto const it = clicksAt.find(key);
+            return it == clicksAt.end() ? 0 : it->second;
+        };
+        auto find = [&](GucciEngine::TrainerMacroData::ClickInfo const& c, bool release) -> gucci::fwfile::Window const* {
+            uint32_t const frame = release ? c.releaseFrame : c.pressFrame;
+            uint64_t const own = keyOf(frame, release, c.player2), other = keyOf(frame, release, !c.player2);
+            auto const ownIt = byKey.find(own), otherIt = byKey.find(other);
+            int const twin = twins.count({c.pressFrame, c.releaseFrame, c.button, !c.player2}) ? 1 : 0;
+            switch (gucci::lanerules::pickWindow(buttons(own), clicks(other) - twin, ownIt != byKey.end(),
+                                                 otherIt != byKey.end())) {
+                case gucci::lanerules::WindowPick::Own: return ownIt->second;
+                case gucci::lanerules::WindowPick::Other: return otherIt->second;
+                case gucci::lanerules::WindowPick::None: break;
+            }
+            return nullptr;
+        };
+        auto take = [&](gucci::fwfile::Window const* w, float& window, int& low, int& high, bool& isFree,
+                        bool& subTick) {
+            if (!w)
+                return;
+            subTick = w->cbf && w->subframe > 0.f;
+            window = subTick ? w->subframe : (float)w->window;
+            isFree = w->unbounded;
+            // CBF counts' edges are in slots, not ticks: left at 0, so only
+            // the tick itself is taken as in the window.
+            low = subTick ? 0 : (int)std::clamp<int64_t>(w->low, -1000, 1000);
+            high = subTick ? 0 : (int)std::clamp<int64_t>(w->high, -1000, 1000);
+            ++out.windowsCounted;
+        };
+        for (auto& c : out.clicks) {
+            take(find(c, false), c.pressWindow, c.pressLow, c.pressHigh, c.pressFree,
+                 c.pressSubTick);
+            take(find(c, true), c.releaseWindow, c.releaseLow, c.releaseHigh,
+                 c.releaseFree, c.releaseSubTick);
+        }
+    }
+
     static void loadTrainerMacroData(const fs::path& path, GucciEngine::TrainerMacroData& out) {
         out = {};
 
@@ -925,6 +1021,10 @@ namespace gucci {
                         if (it != openPress.end()) {
                             out.clickIntervalsSec.push_back(
                                 {it->second / tps, (double)inp.frame / tps});
+                            out.clicks.push_back({.pressFrame = it->second,
+                                                  .releaseFrame = inp.frame,
+                                                  .player2 = p2,
+                                                  .button = inp.button});
                             openPress.erase(it);
                         }
                     }
@@ -954,6 +1054,10 @@ namespace gucci {
                     auto it = openPress.find(key);
                     if (it != openPress.end()) {
                         out.clickIntervalsSec.push_back({it->second / tps, (double)inp.frame / tps});
+                        out.clicks.push_back({.pressFrame = (uint32_t)it->second,
+                                              .releaseFrame = (uint32_t)inp.frame,
+                                              .player2 = inp.player2,
+                                              .button = inp.button});
                         openPress.erase(it);
                     }
                 }
@@ -964,11 +1068,13 @@ namespace gucci {
         }
 
         loadPathSamples(path, out.pathSamples);
+        attachTrainerWindows(path, out);
         out.loaded = !out.clickIntervalsSec.empty() || !out.pathSamples.empty();
         log::info(
-            "[GucciBot] Trainer macro data: {} click interval(s), {} path sample(s), level='{}'",
+            "[GucciBot] Trainer macro data: {} click interval(s), {} path sample(s), {} counted window(s), level='{}'",
             out.clickIntervalsSec.size(),
             out.pathSamples.size(),
+            out.windowsCounted,
             out.levelName);
     }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-o (Calculate: no more FWDISP lines in the Geode log, and no false frame-jumped warning after a run that stopped mid-leg)"
+    "2026-11-18-p (Trainer: Juice's osu!taiko-style lane as a Style option next to the Classic bar, and a Delay slider)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
@@ -931,6 +931,31 @@ namespace gucci {
             std::vector<std::pair<double, double>> clickIntervalsSec;
             double clickBarTps = 240.0;
             std::vector<MacroPathSample> pathSamples;
+            // GucciBot (2026-11-17, the Trainer's lane): one per entry of
+            // clickIntervalsSec, in the same order, when the loader knows it:
+            // the click's frames, its player, and Calculate's windows for its
+            // press and release from the macro's windows file (ticks; 0 = not
+            // counted). Empty when the loader doesn't fill it (the JMF macro).
+            struct ClickInfo {
+                uint32_t pressFrame = 0;
+                uint32_t releaseFrame = 0;
+                bool player2 = false;
+                uint8_t button = 1;  // 1 jump, 2 left, 3 right
+                float pressWindow = 0.f;
+                float releaseWindow = 0.f;
+                // The shifts, in ticks, Calculate found still live (low..high).
+                int pressLow = 0, pressHigh = 0;
+                int releaseLow = 0, releaseHigh = 0;
+                // Every shift Calculate tried lived: the timing hardly matters.
+                bool pressFree = false, releaseFree = false;
+                // A CBF window under a tick, or not a whole number of ticks.
+                bool pressSubTick = false, releaseSubTick = false;
+            };
+            std::vector<ClickInfo> clicks;
+            int windowsCounted = 0;  // presses and releases with a window
+            // Bumped on every load, so what is built from the macro knows to
+            // build again.
+            uint64_t generation = 0;
         };
         TrainerMacroData jupiterMacro;
 
