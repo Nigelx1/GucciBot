@@ -9,6 +9,7 @@
 #include "ai/sim.hpp"
 #include "ai/start.hpp"
 #include "ai/tape.hpp"
+#include "ai/train.hpp"
 #include "core/GucciBot.hpp"
 #include "core/platform.hpp"
 #include "tools/macro_convert.hpp"
@@ -259,6 +260,32 @@ namespace gucci::ai::pilot {
         constexpr float kVarietyTempStep = 0.5f;
         constexpr float kVarietyTempMax = 4.0f;
 
+        // Self-training (2026-11-19): a round learns from the newest kKeepTicks
+        // ticks of a sampled run (2 minutes at 240 TPS), leaving out a death's
+        // last quarter second (the mistake is in there); a new round when the
+        // best is a block further than the last round's, while learning has
+        // taken at most kLearnShare of the playing time. A round makes passes
+        // until the network makes every decision of the run (then a cold play
+        // repeats it), at most kRoundPasses, a finished run's kFinalPasses.
+        // In game on 11-19 a trained network swapped in blindly played worse
+        // (one pass at 3e-4 on its own greedy run flipped 6 of 559 decisions:
+        // the cold play fell from 3.48% to 2.86%), and 6 passes at 1e-4 fit a
+        // sampled run badly (197 of 741 decisions still differed). So a round
+        // is kept only when the next attempt, the trained network's best guess,
+        // gets further (judgeCheck), which lets it learn hard: 12 passes at
+        // 3e-4 still left 282 of a sampled run's 921 decisions different (run
+        // 3), and learning only the 1.5 s before the best guess's death, its
+        // own decisions before that, didn't do (run 4: 161 differ, and its best
+        // guess went the other way early on), so a round fits the whole run at
+        // 1e-3 until every decision is the run's, at most 60 passes.
+        constexpr size_t kKeepTicks = 30000;
+        constexpr double kSkipBeforeDeathS = 0.25;
+        constexpr double kLearnShare = 0.5;
+        constexpr size_t kLearnBatch = 64;
+        constexpr int kRoundPasses = 60;
+        constexpr int kFinalPasses = 60;
+        constexpr float kLearnRate = 1e-3f;
+
         uint64_t splitmix(uint64_t& x) {
             uint64_t z = (x += 0x9E3779B97F4A7C15ull);
             z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
@@ -295,6 +322,21 @@ namespace gucci::ai::pilot {
 
             bool slice(Clock::time_point until) override {
                 if (m_t0 == Clock::time_point{}) m_t0 = Clock::now();
+                if (learning()) {
+                    // A self-training round, between attempts (the session stays
+                    // suspended) or after the run ended (the session is over).
+                    learnSlice(until);
+                    if (learning()) {
+                        progress = fmt::format("self-training on its best run ({:.1f}%): pass {}, {} of {} ticks",
+                                               m_learn.setPercent, m_learn.passes + 1, m_learn.at, m_learn.setY.size());
+                        return false;
+                    }
+                    if (m_ended) {
+                        if (result.isObject()) result["self_training"] = learnJson();
+                        return true;
+                    }
+                    return false;
+                }
                 if (!m_running) {
                     if (!m_requested) {
                         m_start.request(0.0);
@@ -325,6 +367,10 @@ namespace gucci::ai::pilot {
                                            percentOf(m_lastX), m_bestPercent);
                     s_live.bestPercent = m_bestPercent;
                     s_live.attempts = m_attempt;
+                }
+                if (over && learning()) {
+                    m_ended = true;  // learn from the last run first (result is set)
+                    return false;
                 }
                 return over;
             }
@@ -401,6 +447,89 @@ namespace gucci::ai::pilot {
             int m_logsWritten = 0;
             std::string m_logError;
 
+            // The pilot this run plays with: a copy of the loaded one, or this
+            // level's own trained network (self-training, 2026-11-19).
+            net::Net m_pilot;
+            int m_hold = -1;
+            std::string m_pilotFrom;
+            bool m_levelNet = false;
+            // The line's newest records (what the pilot saw): m_recs[k] is tick m_recFrom + k.
+            std::vector<obs::Record> m_recs;
+            uint32_t m_recFrom = 0;
+            bool m_ended = false;  // the run is over; a last self-training round is going
+            // Self-training keeps what gets further, as practice does: after a round
+            // the next attempt plays the trained network's best guess (no sampling),
+            // and it is kept only if that gets further than the kept network's did.
+            bool m_checking = false;
+            float m_acceptedX = -1.0f;  // how far the kept network's best guess got
+
+            enum class Phase { Idle, Train, Eval };
+            struct Learn {
+                bool on = false;
+                bool swap = false;       // later attempts play the trained network (the network alone)
+                net::Net net;            // the network being trained
+                net::Net backup;         // from before the round, if the round goes wrong
+                train::Trainer tr;
+                Phase phase = Phase::Idle;
+                bool finished = false;   // the round of a finished run
+                std::vector<obs::Record> setX;  // the run it learns from
+                std::vector<float> setY;        // what that run did: held 1, released 0
+                std::vector<uint32_t> order;
+                std::vector<float> rows, targets;
+                uint64_t rng = 0;
+                size_t at = 0;           // the next row of this pass or check
+                int passes = 0;          // passes this round
+                double lossSum = 0.0;
+                size_t wrongSum = 0;
+                double firstLoss = 0.0;  // the round's first pass, before each minibatch's step
+                double lastLoss = 0.0;   // the check after the round's last pass
+                size_t lastWrong = 0;    // decisions of the run the network still makes differently
+                size_t lastTicks = 0;
+                float setPercent = 0.0f;
+                uint32_t setFrom = 0;    // the run's first tick it learns from (0: from the level's start)
+                float trainedX = -1.0f;  // the best the last round learned from
+                int rounds = 0;
+                int kept = 0;            // rounds whose network was kept
+                uint64_t steps = 0;
+                double seconds = 0.0;    // working time spent learning (not counted in maxSeconds)
+                std::string baseFp;      // the loaded pilot's fingerprint
+                std::string file, error;
+            } m_learn;
+
+            bool learning() const { return m_learn.phase != Phase::Idle; }
+
+            static train::Options trainOptions() {
+                train::Options o;
+                o.lr = kLearnRate;
+                return o;
+            }
+
+            // The check attempt after a round ended at x: keep the trained network
+            // (and save it for the level) if its best guess got further, else go
+            // back to the network from before.
+            void judgeCheck(float x) {
+                auto& L = m_learn;
+                m_checking = false;
+                if (x > m_acceptedX) {
+                    float const before = percentOf(m_acceptedX);
+                    m_acceptedX = x;
+                    L.kept++;
+                    saveLevelNet();
+                    say(fmt::format("Its best guess with the trained network got to {:.1f}% (before: {:.1f}%), so it "
+                                    "keeps the trained network{}.",
+                                    percentOf(x), before,
+                                    L.file.empty() ? " (not saved: " + L.error + ")" : " and saved it for this level"));
+                } else {
+                    L.net = L.backup;
+                    m_pilot = L.net;
+                    std::string w;
+                    L.tr.begin(&L.net, m_hold, trainOptions(), w);  // Adam starts over too
+                    say(fmt::format("Its best guess with the trained network got to {:.1f}%, not past {:.1f}%, so it "
+                                    "goes back to the network from before.",
+                                    percentOf(x), percentOf(m_acceptedX)));
+                }
+            }
+
             float percentOf(float x) const {
                 if (m_levelLength <= 0.0f) return 0.0f;
                 return std::clamp(100.0f * x / m_levelLength, 0.0f, 100.0f);
@@ -451,6 +580,23 @@ namespace gucci::ai::pilot {
                     std::strftime(buf, sizeof buf, "%Y%m%d-%H%M%S", std::localtime(&t));
                     m_stamp = buf;
                 }
+                m_pilot = M.pilot.net;
+                m_hold = M.hold;
+                m_pilotFrom = M.pilot.path;
+                m_learn.baseFp = train::fingerprint(train::save(M.pilot.net));
+                std::string levelNetLine;
+                if (opt.levelNet && m_levelId > 0) levelNetLine = useLevelNet();
+                if (opt.selfTrain && opt.practice) {
+                    m_learn.error = "it's off while Practice is on (its line replays the network's own "
+                                    "decisions, so the network can't change mid-run)";
+                } else if (opt.selfTrain) {
+                    m_learn.net = m_pilot;
+                    std::string w;
+                    m_learn.on = m_learn.tr.begin(&m_learn.net, m_hold, trainOptions(), w);
+                    m_learn.swap = true;
+                    if (!m_learn.on) m_learn.error = "it can't train this pilot: " + w;
+                    if (m_learn.on) m_recs.reserve(kKeepTicks + 4096);
+                }
                 m_attempt = 1;
                 m_first = 0;
                 m_running = true;
@@ -465,8 +611,279 @@ namespace gucci::ai::pilot {
                                     "later attempts start over and sample from its own odds. Up to {} attempts and {:.0f} "
                                     "seconds.",
                                     m_levelName, opt.maxAttempts, opt.maxSeconds));
+                if (!levelNetLine.empty()) say(levelNetLine);
+                if (m_learn.on)
+                    say("Self-training is on: each time it gets further, it trains its network on that run, then plays "
+                        "one attempt with its best guess, and keeps the trained network (for this level only) when "
+                        "that gets further than before (slow; it learns one level at a time).");
+                else if (!m_learn.error.empty())
+                    say("Self-training: " + m_learn.error + ".");
                 sim::suspend();  // the first slice runs on the next frame
                 return false;
+            }
+
+            // This level's trained network, when an earlier run saved one from
+            // the same pilot. The line to say about it (empty: none).
+            std::string useLevelNet() {
+                auto const p = levelNetPath(m_levelId);
+                std::error_code ec;
+                if (!fs::is_regular_file(p, ec)) return {};
+                std::string base;
+                {
+                    auto side = p;
+                    side.replace_extension(".json");
+                    std::ifstream f(side, std::ios::binary);
+                    std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                    auto parsed = matjson::parse(text);
+                    if (parsed) {
+                        auto const h = parsed.unwrap();
+                        base = h["base_fingerprint"].asString().unwrapOr("");
+                    }
+                }
+                if (base != m_learn.baseFp)
+                    return "This level's trained network was trained from another pilot, so it plays the loaded "
+                           "pilot instead (self-training replaces that file).";
+                std::ifstream f(p, std::ios::binary);
+                std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                net::Net n;
+                std::string why;
+                if (!n.load(bytes.data(), bytes.size(), obs::layoutHash(), why))
+                    return "This level's trained network can't be used (" + why + "), so it plays the loaded pilot.";
+                int const hold = n.output("hold_logit");
+                if (n.kind() != net::Kind::Mlp || n.inputs() != (uint32_t)obs::kObsDim || hold < 0 || n.outputs() > 4)
+                    return "This level's trained network isn't a pilot, so it plays the loaded pilot.";
+                m_pilot = std::move(n);
+                m_hold = hold;
+                m_pilotFrom = utf8(p);
+                m_levelNet = true;
+                return "It plays the network it trained on this level before (" + m_pilotFrom + ").";
+            }
+
+            // ------------------------------------------------ self-training (2026-11-19)
+
+            void keepRec(obs::Record const& rec) {
+                m_recs.push_back(rec);
+                if (m_recs.size() >= kKeepTicks + 4096) {
+                    size_t const drop = m_recs.size() - kKeepTicks;
+                    m_recs.erase(m_recs.begin(), m_recs.begin() + (std::ptrdiff_t)drop);
+                    m_recFrom += (uint32_t)drop;
+                }
+            }
+
+            // After the line goes back to tick m_t.
+            void trimRecs() {
+                if (!m_learn.on) return;
+                if (m_t >= m_recFrom) {
+                    size_t const keep = m_t - m_recFrom;
+                    if (m_recs.size() > keep) m_recs.resize(keep);
+                } else {
+                    m_recs.clear();
+                    m_recFrom = m_t;
+                }
+            }
+
+            // A round on the run that ended at tick `end` (exclusive) at x: a new
+            // best far enough past the last round's, or a finished run.
+            void learnFrom(uint32_t end, float x, bool finished) {
+                auto& L = m_learn;
+                if (!L.on || learning()) return;
+                if (!finished) {
+                    if (L.trainedX >= 0.0f && x < L.trainedX + kProgressX) return;  // a block further
+                    if (L.rounds > 0 && L.seconds > kLearnShare * secondsUsed()) return;  // learning's share used
+                }
+                uint32_t const skip = finished ? 0 : ticksOf(kSkipBeforeDeathS);
+                if (end <= m_recFrom + skip) return;
+                uint32_t const b = end - skip;
+                uint32_t const a = std::max<uint32_t>(m_recFrom, b > (uint32_t)kKeepTicks ? b - (uint32_t)kKeepTicks : 0u);
+                if (b < a + 30 || b - m_recFrom > m_recs.size() || b > m_d.size()) return;  // too little (or nothing kept)
+                size_t const n = b - a;
+                L.setX.assign(m_recs.begin() + (a - m_recFrom), m_recs.begin() + (b - m_recFrom));
+                L.setY.resize(n);
+                for (size_t k = 0; k < n; k++) L.setY[k] = m_d[a + k] ? 1.0f : 0.0f;
+                L.order.resize(n);
+                L.finished = finished;
+                L.setPercent = finished ? 100.0f : percentOf(x);
+                L.setFrom = a;
+                L.trainedX = x;
+                L.lastTicks = n;
+                L.backup = L.net;
+                L.passes = 0;
+                L.firstLoss = L.lastLoss = 0.0;
+                L.lastWrong = 0;
+                // Seeded from the level and the round: the same run learns the same.
+                L.rng = ((uint64_t)m_levelId * 0x100000001B3ull) ^ ((uint64_t)(L.rounds + 1) * 0x9E3779B97F4A7C15ull);
+                startPass();
+            }
+
+            void startPass() {
+                auto& L = m_learn;
+                size_t const n = L.setY.size();
+                for (size_t k = 0; k < n; k++) L.order[k] = (uint32_t)k;
+                for (size_t k = n; k > 1; k--) std::swap(L.order[k - 1], L.order[(size_t)(splitmix(L.rng) % k)]);
+                L.at = 0;
+                L.lossSum = 0.0;
+                L.wrongSum = 0;
+                L.phase = Phase::Train;
+            }
+
+            // Minibatches until `until`: a pass in shuffled order, then a check
+            // of every tick in order (the loss after, and the decisions it still
+            // makes differently).
+            void learnSlice(Clock::time_point until) {
+                auto& L = m_learn;
+                auto const t0 = Clock::now();
+                size_t const n = L.setY.size();
+                L.rows.resize(kLearnBatch * obs::kObsDim);
+                L.targets.resize(kLearnBatch);
+                while (learning()) {
+                    size_t const cnt = std::min(kLearnBatch, n - L.at);
+                    bool const train = L.phase == Phase::Train;
+                    for (size_t k = 0; k < cnt; k++) {
+                        size_t const r = train ? L.order[L.at + k] : L.at + k;
+                        obs::expand(L.setX[r], &L.rows[k * obs::kObsDim]);
+                        L.targets[k] = L.setY[r];
+                    }
+                    size_t wrong = 0;
+                    double const l = train ? L.tr.step(L.rows.data(), L.targets.data(), cnt, &wrong)
+                                           : L.tr.loss(L.rows.data(), L.targets.data(), cnt, &wrong);
+                    if (train) L.steps++;
+                    L.lossSum += l * (double)cnt;
+                    L.wrongSum += wrong;
+                    L.at += cnt;
+                    if (L.at >= n) {
+                        if (train) {
+                            L.passes++;
+                            if (L.passes == 1) L.firstLoss = L.lossSum / (double)n;
+                            L.phase = Phase::Eval;
+                            L.at = 0;
+                            L.lossSum = 0.0;
+                            L.wrongSum = 0;
+                        } else {
+                            L.lastLoss = L.lossSum / (double)n;
+                            L.lastWrong = L.wrongSum;
+                            if (L.lastWrong > 0 && L.passes < (L.finished ? kFinalPasses : kRoundPasses)) startPass();
+                            else endRound();
+                        }
+                    }
+                    if (Clock::now() >= until) break;
+                }
+                L.seconds += std::chrono::duration<double>(Clock::now() - t0).count();
+            }
+
+            void endRound() {
+                auto& L = m_learn;
+                L.phase = Phase::Idle;
+                bool finite = std::isfinite(L.lastLoss);
+                for (auto const& Ly : L.net.layers()) {
+                    for (float v : Ly.w) finite = finite && std::isfinite(v);
+                    for (float v : Ly.b) finite = finite && std::isfinite(v);
+                }
+                if (!finite) {
+                    L.net = L.backup;
+                    L.on = false;
+                    L.error = "self-training went wrong (values that aren't finite), so it stopped and kept the network "
+                              "from before";
+                    say("Self-training went wrong (values that aren't finite), so it stopped; the network from before "
+                        "is kept.");
+                    return;
+                }
+                L.rounds++;
+                size_t const n = L.setY.size();
+                std::string const what = L.finished ? "the run that finished the level"
+                                                    : fmt::format("its best run so far (to {:.1f}%)", L.setPercent);
+                std::string after;
+                if (!L.finished) {
+                    m_pilot = L.net;
+                    m_checking = true;
+                    after = " Next, one attempt with its best guess decides whether it keeps the trained network.";
+                } else if (L.lastWrong == 0 && L.setFrom == 0) {
+                    // Every decision from the level's start: its best guess now plays that run.
+                    L.kept++;
+                    m_acceptedX = m_levelLength;
+                    saveLevelNet();
+                    after = L.file.empty() ? " It now makes every decision of that run, but it could not be saved: " + L.error + "."
+                                           : " It now makes every decision of that run, so it keeps it and saved it for this level.";
+                } else {
+                    L.net = L.backup;
+                    after = L.lastWrong ? " Not every decision yet, so it keeps the network from before."
+                                        : " The run is longer than it keeps, so it keeps the network from before.";
+                }
+                say(fmt::format("Self-training round {}: learned from {}, {} ticks, {} pass{}: loss {:.4f} in the first "
+                                "pass, {:.4f} after; {} of the run's {} decisions still differ.{}",
+                                L.rounds, what, n, L.passes, L.passes == 1 ? "" : "es", L.firstLoss, L.lastLoss,
+                                L.lastWrong, n, after));
+                L.setX.clear();
+                L.setY.clear();
+            }
+
+            void saveLevelNet() {
+                auto& L = m_learn;
+                if (m_levelId <= 0) {
+                    L.error = "the level has no ID (an editor level), so there is nowhere to keep it";
+                    return;
+                }
+                auto const p = levelNetPath(m_levelId);
+                std::error_code ec;
+                fs::create_directories(p.parent_path(), ec);
+                auto put = [&](fs::path const& to, void const* data, size_t size) {
+                    auto tmp = to;
+                    tmp += ".tmp";
+                    bool ok;
+                    {
+                        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+                        f.write(static_cast<char const*>(data), (std::streamsize)size);
+                        ok = (bool)f;
+                    }
+                    std::error_code e;
+                    if (ok) fs::rename(tmp, to, e);
+                    if (!ok || e) {
+                        fs::remove(tmp, e);
+                        return false;
+                    }
+                    return true;
+                };
+                auto const bytes = train::save(L.net);
+                auto j = matjson::Value::object();
+                j["format"] = "gbai-level-net";
+                j["version"] = 1;
+                j["level_id"] = m_levelId;
+                j["level_name"] = m_levelName;
+                j["base_fingerprint"] = L.baseFp;  // the loaded pilot it was trained from
+                j["base_file"] = models().pilot.path;
+                j["fingerprint"] = train::fingerprint(bytes);
+                j["learned_from_percent"] = (double)L.setPercent;
+                j["build"] = GB_BUILD_LABEL;
+                std::string const text = j.dump(2);
+                auto side = p;
+                side.replace_extension(".json");
+                if (!put(p, bytes.data(), bytes.size()) || !put(side, text.data(), text.size())) {
+                    L.error = "could not write " + utf8(p);
+                    L.file.clear();
+                    return;
+                }
+                L.file = utf8(p);
+                L.error.clear();
+            }
+
+            matjson::Value learnJson() const {
+                auto const& L = m_learn;
+                auto o = matjson::Value::object();
+                o["on"] = L.on;
+                o["later_attempts_play_it"] = L.on && L.swap;
+                o["rounds"] = L.rounds;
+                o["kept"] = L.kept;
+                o["kept_best_guess_percent"] = (double)percentOf(std::max(0.0f, m_acceptedX));
+                o["steps"] = (int64_t)L.steps;
+                o["seconds"] = L.seconds;
+                o["last_ticks"] = (int64_t)L.lastTicks;
+                o["last_percent"] = (double)L.setPercent;
+                o["last_passes"] = L.passes;
+                o["last_first_pass_loss"] = L.firstLoss;
+                o["last_loss"] = L.lastLoss;
+                o["last_decisions_differ"] = (int64_t)L.lastWrong;
+                o["file"] = L.file.empty() ? matjson::Value(nullptr) : matjson::Value(L.file);
+                if (!L.error.empty()) o["error"] = L.error;
+                return o;
             }
 
             sim::SnapshotPtr takeSnap() {
@@ -517,9 +934,10 @@ namespace gucci::ai::pilot {
                     auto const o0 = Clock::now();
                     m_obs.observe(rec);
                     obs::expand(rec, x);
+                    if (m_learn.on) keepRec(rec);
                     auto const o1 = Clock::now();
-                    M.pilot.net.forward(x, out);
-                    float const logit = out[M.hold];
+                    m_pilot.forward(x, out);
+                    float const logit = out[m_hold];
                     float adv = 0.0f;
                     if (m_critic) {
                         M.critic.net.forward(x, out);
@@ -529,7 +947,7 @@ namespace gucci::ai::pilot {
                     m_obsUs += std::chrono::duration<double, std::micro>(o1 - o0).count();
                     m_netUs += std::chrono::duration<double, std::micro>(o2 - o1).count();
                     bool held = forcedHere ? m_forced[m_t] : net::holds(logit);
-                    if (!opt.practice && m_attempt > 1 && !forcedHere) {
+                    if (!opt.practice && m_attempt > 1 && !forcedHere && !m_checking) {
                         // The network alone (no practice rules): after its first, greedy
                         // attempt it samples from its own odds.
                         double const z = (double)logit / std::max(0.05, opt.temperature);
@@ -573,6 +991,7 @@ namespace gucci::ai::pilot {
                     m_lastX = st.p[0].x;
                     if (dead) {
                         if (onDeath(st)) return true;
+                        if (learning()) return false;  // a self-training round before the next attempt (slice())
                     } else if (st.complete) {
                         return onComplete(st);
                     }
@@ -587,8 +1006,9 @@ namespace gucci::ai::pilot {
                 }
             }
 
+            // Playing time: self-training's rounds come on top of the time limit.
             double secondsUsed() const {
-                return std::chrono::duration<double>(Clock::now() - m_t0).count();
+                return std::chrono::duration<double>(Clock::now() - m_t0).count() - m_learn.seconds;
             }
 
             std::string describe(sim::State const& st) const {
@@ -686,10 +1106,17 @@ namespace gucci::ai::pilot {
                 m_deathsTotal++;
                 if (opt.logPractice && !m_metaRows.empty()) m_metaRows[m_metaRows.size() - 1] = 1.0f;
                 writeLog(false, (int64_t)D, x);
+                // A best-guess run (attempt 1, a check) holds nothing the network doesn't already do.
+                bool const bestGuess = m_attempt == 1 || m_checking;
+                if (m_learn.on) {
+                    if (m_attempt == 1) m_acceptedX = x;  // the best guess of the network it began with
+                    else if (m_checking) judgeCheck(x);
+                }
                 if (x > m_bestX) {
                     m_bestX = x;
                     m_bestPercent = pct;
                     m_bestAttempt = m_attempt;
+                    if (!bestGuess) learnFrom(D + 1, x, false);  // self-training on this run (slice() runs it next)
                 }
                 if (!opt.practice) return freeDeath(st, D, x, pct, cause);
                 // What this attempt's change did.
@@ -862,6 +1289,7 @@ namespace gucci::ai::pilot {
                 m_obs.setHistory(s0.h);
                 m_prev = s0.prev;
                 m_t = 0;
+                trimRecs();
                 m_d.clear();
                 m_logit.clear();
                 m_adv.clear();
@@ -897,6 +1325,7 @@ namespace gucci::ai::pilot {
                 m_obs.setHistory(it->second.h);
                 m_prev = it->second.prev;
                 m_t = it->first;
+                trimRecs();
                 m_d.resize(m_t);
                 m_logit.resize(m_t);
                 m_adv.resize(m_t);
@@ -937,6 +1366,7 @@ namespace gucci::ai::pilot {
                 m_obs.setHistory(it->second.h);
                 m_prev = it->second.prev;
                 m_t = it->first;
+                trimRecs();
                 m_d.resize(m_t);
                 m_logit.resize(m_t);
                 m_adv.resize(m_t);
@@ -1035,7 +1465,7 @@ namespace gucci::ai::pilot {
                     forced.push(f);
                 }
                 h["forced"] = forced;
-                h["pilot_file"] = models().pilot.path;
+                h["pilot_file"] = m_pilotFrom;
                 h["critic"] = m_critic;
                 h["build"] = GB_BUILD_LABEL;
                 {
@@ -1050,6 +1480,8 @@ namespace gucci::ai::pilot {
             bool onComplete(sim::State const&) {
                 uint32_t const T = m_t;
                 writeLog(true, -1, 0.0f);
+                if (m_learn.on && m_checking) judgeCheck(m_levelLength);  // the trained network's best guess finished it
+                else if (m_attempt > 1) learnFrom(T, m_levelLength, true);  // the last round (slice() runs it after this)
                 m_bestPercent = 100.0f;
                 m_bestX = m_levelLength;
                 m_bestAttempt = m_attempt;
@@ -1165,8 +1597,10 @@ namespace gucci::ai::pilot {
                 out["critic"] = m_critic;
                 out["practice"] = opt.practice;
                 out["temperature"] = opt.temperature;
-                out["pilot"] = models().pilot.path;
+                out["pilot"] = m_pilotFrom;
                 out["pilot_layout_hash"] = models().pilot.net.layoutHash();
+                out["level_net"] = m_levelNet;  // it played this level's own trained network
+                out["self_training"] = learnJson();
                 out["changes_kept"] = (int64_t)m_forced.size();
                 out["variety_tries"] = m_varietyTries;
                 out["variety_kept"] = m_varietyKept;
@@ -1221,6 +1655,10 @@ namespace gucci::ai::pilot {
 
     void setWeightsDir(std::string const& dir) {
         g_weightsDir = dir.empty() ? fs::path() : underRoot(fs::path(std::u8string(dir.begin(), dir.end())));
+    }
+
+    fs::path levelNetPath(int64_t levelId) {
+        return weightsDir() / "levels" / (std::to_string(levelId) + ".gbnn");
     }
 
     matjson::Value reload() {

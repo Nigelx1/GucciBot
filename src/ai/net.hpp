@@ -54,6 +54,12 @@ namespace gucci::ai::net {
         uint32_t outputs() const { return m_layers.empty() ? 0 : m_layers.back().nOut; }
         std::vector<std::string> const& outputNames() const { return m_names; }
         std::vector<Layer> const& layers() const { return m_layers; }
+        // The input normalization (the file's mean and std), for the GBNN
+        // writer and self-training (src/ai/train.*).
+        std::vector<float> const& mean() const { return m_mean; }
+        std::vector<float> const& stdev() const { return m_std; }
+        // Self-training changes the weights in place (shapes stay).
+        std::vector<Layer>& layersForTraining() { return m_layers; }
         // The output's index by name, or -1.
         int output(std::string const& name) const;
 

@@ -2431,8 +2431,11 @@ namespace gucci::ui {
             kit::Hint(oldRules ? "Now: the AI plays, and after each death Practice changes one of its decisions and "
                                  "tries again from just before it."
                                : "Now: the AI plays alone. Attempt 1 is its best guess; each later attempt starts "
-                                 "over and lets it try its own less likely choices. The network itself doesn't "
-                                 "change while it plays.");
+                                 "over and lets it try its own less likely choices.");
+            kit::Hint(oldRules ? "Self-training is off while Practice is on."
+                               : "Self-training: each time it gets further, it trains its network on that run, and keeps "
+                                 "it for this level when its best guess then gets further too (slow; it learns one "
+                                 "level at a time).");
             kit::RowBegin("", nullptr);
             if (!running) {
                 ImGui::BeginDisabled(!PlayLayer::get() || !ready || legit::on());  // a pathfinder run is a cheat

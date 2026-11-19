@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-19-e (AI engine ships with a built-in network: Start works without training anything; the page says plainly it is an early, weak AI, and Old practice rules is now Practice)"
+    "2026-11-19-f (AI self-training: playing alone, the AI learns from its own best runs and keeps what gets further, one level at a time)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

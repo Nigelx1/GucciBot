@@ -191,20 +191,32 @@ namespace gucci::mcp {
             "picks the decision most likely to be the mistake (the critic's advantage, or without a critic the "
             "pilot's least-sure decisions near its last presses and releases, most recent first), changes it and "
             "goes again from a saved state just before it. A finished run is saved as a GucciBot macro and played "
-            "in the real game (the judge) to confirm it. Never uses the old search. Returns {job}; the result "
-            "(gucci_ai_status) is {completed, best_percent, attempts, ticks_simulated, deaths: [{tick, x, percent, "
-            "cause, mistake_tick, mistake_was, fix, sentence}], macro_file?, judge?: {completed, died_x}}.",
+            "in the real game (the judge) to confirm it. Never uses the old search. Self-training (self_train, "
+            "default true; network alone only): each time a sampled run gets a block further than the last round "
+            "(up to a quarter second before its death; learning takes at most half the playing time), it trains on "
+            "what that run did; the next attempt plays the trained network's best guess and the network is kept "
+            "(saved as weights\\levels\\<level id>.gbnn) only if that gets further; a finished sampled run is kept "
+            "once the network makes every decision of it. level_net "
+            "(default true) plays that level's own trained network when one was trained from the loaded pilot. For "
+            "a cold exam pass self_train false (and level_net false for the loaded pilot alone). Returns {job}; the "
+            "result (gucci_ai_status) is {completed, best_percent, attempts, ticks_simulated, deaths: [{tick, x, "
+            "percent, cause, mistake_tick, mistake_was, fix, sentence}], macro_file?, judge?: {completed, died_x}, "
+            "level_net, self_training: {on, rounds, kept, steps, seconds, last_loss, last_decisions_differ, file}}.",
             schemaFor({{"max_attempts", "integer", "stop after this many attempts (default 50000)"},
                        {"max_seconds", "number", "stop after this many seconds (default 300)"},
                        {"save_macro", "string", "name of the macro a finished run is saved as (default AI - <level>)"},
                        {"log_practice", "boolean", "write practice logs to AI_ROOT\\practice (default false)"},
                        {"judge", "boolean", "play a finished run in the real game to confirm it (default true)"},
                        {"practice", "boolean", "use the hand-written practice rules, the page's Practice (default false: the network alone)"},
-                       {"temperature", "number", "network alone: sampling temperature of attempts after the first (default 1)"}}),
+                       {"temperature", "number", "network alone: sampling temperature of attempts after the first (default 1)"},
+                       {"self_train", "boolean", "network alone: train the pilot on its best runs and keep it for the level when its best guess gets further (default true)"},
+                       {"level_net", "boolean", "play the level's own trained network when there is one (default true)"}}),
             [](matjson::Value const& a) {
                 requireNoOwner();
                 ai::pilot::PlayOptions o;
                 if (a.contains("practice")) o.practice = a["practice"].asBool().unwrapOr(false);
+                if (a.contains("self_train")) o.selfTrain = a["self_train"].asBool().unwrapOr(true);
+                if (a.contains("level_net")) o.levelNet = a["level_net"].asBool().unwrapOr(true);
                 if (a.contains("temperature")) o.temperature = a["temperature"].asDouble().unwrapOr(1.0);
                 o.maxAttempts = (int)intArg(a, "max_attempts", o.maxAttempts);
                 if (a.contains("max_seconds")) o.maxSeconds = a["max_seconds"].asDouble().unwrapOr(o.maxSeconds);

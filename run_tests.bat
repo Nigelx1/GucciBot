@@ -82,9 +82,10 @@ build\run_hitborder_tests.exe || exit /b 1
 
 REM The AI pilot's networks (src/ai/net) and its record expansion (src/ai/obs_core) against the
 REM trainer's golden set in tools/ai/golden (python tools/ai/export.py golden): outputs within 1e-5,
-REM the same decisions, the expansion bit for bit, broken weight files refused.
+REM the same decisions, the expansion bit for bit, broken weight files refused; self-training (src/ai/train):
+REM the GBNN writer round-trips, the gradient matches a finite difference, the loss falls on a toy set.
 cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
-   tools\run_ai_net_tests.cpp src\ai\net.cpp src\ai\obs_core.cpp /Fe:build\run_ai_net_tests.exe /Fo:build\ || exit /b 1
+   tools\run_ai_net_tests.cpp src\ai\net.cpp src\ai\obs_core.cpp src\ai\train.cpp /Fe:build\run_ai_net_tests.exe /Fo:build\ || exit /b 1
 
 build\run_ai_net_tests.exe || exit /b 1
 

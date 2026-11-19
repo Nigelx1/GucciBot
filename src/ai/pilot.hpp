@@ -66,7 +66,23 @@ namespace gucci::ai::pilot {
         // and sample from its own odds at `temperature`.
         bool practice = false;
         double temperature = 1.0;
+        // Self-training (2026-11-19), with the network alone: each time a
+        // sampled run gets further (a block past the last time it trained, up
+        // to a quarter second before the death, while learning has taken at
+        // most half the playing time), the pilot trains on what that run did
+        // (up to 60 passes, in the job's slices); the next attempt plays the trained
+        // network's best guess, and the trained network is kept, and saved for
+        // the level (weightsDir()/levels/<level id>.gbnn), only if that gets
+        // further than the kept one's did. A finished sampled run is learned
+        // until every decision of it is the network's own. Off with Practice
+        // (its line replays the network's decisions).
+        bool selfTrain = true;
+        // Play with the level's own trained network when there is one (from
+        // the same pilot), before pilot.gbnn and the built-in one.
+        bool levelNet = true;
     };
+    // Where a level's trained network is kept.
+    std::filesystem::path levelNetPath(int64_t levelId);
     // Plays the open level. Null with `why` when it can't start.
     std::unique_ptr<job::Job> makePlay(PlayOptions const& options, std::string& why);
 
