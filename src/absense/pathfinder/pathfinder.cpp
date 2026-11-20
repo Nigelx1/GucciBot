@@ -154,6 +154,30 @@ constexpr double kStuckWallSeconds = 3600.0;
 // A stall that ends after this many decisions is logged (with its decisions
 // and wall clock), so later runs show how close a stall came to the rule.
 constexpr uint64_t kStuckLogDecisions = 50;
+// GucciBot (2026-11-19, orbs lane): the stuck rule's backup plan (Nigel: "go
+// for it, but as a backup plan instead of a switch"). Where the stuck rule
+// would end a run, the search's look-ahead starts clicking the orbs its copy
+// touches (evaluateOrbs) and it walks back again, once a run (engageOrbBackup).
+// RobsVault's Deadlocked (77240630) stops at 51.59% because its way on is a
+// robot jump timed onto a green orb and then three orb clicks in a row: the
+// ideas press an orb only when a tap or hold pattern happens to land in its
+// window, so a jump that sets the orbs up looks no better than one that does
+// not (lanes/sweep1119/DEADLOCKED_ORB.md). The look-ahead's bounds, so the
+// extra runs stay a few times a decision's own:
+//  - orbs tried in a row, one after another, on an idea judged over its whole
+//    look (kOrbContacts) or on the Rest stage's first cheap look (kOrbScreen-);
+//  - ticks of one contact tried (spread over it: a gravity orb's flip lands
+//    elsewhere at each);
+//  - extra runs an idea may make, and a decision.
+constexpr int kOrbContacts = 4;
+constexpr int kOrbTries = 4;
+constexpr int kOrbIdeaRuns = kOrbContacts * kOrbTries;
+constexpr int kOrbScreenContacts = 2;
+constexpr int kOrbScreenTries = 3;
+constexpr int kOrbScreenRuns = kOrbScreenContacts * kOrbScreenTries;
+constexpr int kOrbDecisionRuns = 3000;
+// ... and how many decisions in a run log the clicks they play.
+constexpr uint64_t kOrbPlayedLines = 200;
 // GucciBot (2026-11-15, pf2 lane; pf_start_stop): how many times a spot whose
 // floor is the search's own start, with no stored frame before it, may fail
 // before the run stops (see escalate), and how close to the start the death
@@ -596,6 +620,8 @@ bool AbsensePathfinder::start() {
     m_stuckClock = m_startedAt;
     restartStuckCount();
     m_forkBest = 0;
+    m_orbBackup = false;  // GucciBot (orbs lane): a run begins without the backup plan
+    m_orbBackupTick = 0;
     m_stats.message = "Searching";
 
     absense::gpu::Client::get().setEnabled(SLSettings::get()->pathfinder.gpu);
@@ -810,6 +836,16 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     if (m_stats.forkJumps > 0) {
         log("%llu dead ends went back to a portal the path passed untaken, %llu found a way into it there",
             (unsigned long long)m_stats.forkJumps, (unsigned long long)m_stats.forkTaken);
+    }
+    if (m_orbBackup) {
+        // GucciBot (2026-11-19, orbs lane): what the stuck rule's backup plan did.
+        log("backup plan (on from tick %llu): %llu ideas touched an orb without clicking it and were run again with "
+            "a click there, in %llu extra runs (%llu simulated ticks); %llu ideas kept a click, %llu decisions "
+            "played one; %llu decisions ran out of extra runs",
+            (unsigned long long)m_orbBackupTick, (unsigned long long)m_stats.orbIdeas,
+            (unsigned long long)m_stats.orbRuns, (unsigned long long)m_stats.orbTicks,
+            (unsigned long long)m_stats.orbKept, (unsigned long long)m_stats.orbPlayed,
+            (unsigned long long)m_stats.orbCapped);
     }
     if (m_stats.driveDecisions > 0 || m_stats.driveHandoffs > 0) {
         log("route drives: %llu decisions played as a leg to the next gate's option, %llu decided by today's engine "
@@ -1161,6 +1197,7 @@ void AbsensePathfinder::tick() {
         m_stuckClock = now;
         const uint64_t tries = decisions - m_stuckDecisions;
         std::string why;
+        bool backstop = false;  // GucciBot (orbs lane): the 60-minute rule fired
         if (!absense::stuckWork()) {
             if (m_stuckWallSeconds >= kStuckSeconds)
                 why = fmt::format("stuck at x {:.0f} (tick {}) for 5 minutes", m_stats.bestX, m_stats.bestTick);
@@ -1169,12 +1206,37 @@ void AbsensePathfinder::tick() {
                               m_stats.bestTick, tries);
         } else if (m_stuckWallSeconds >= kStuckWallSeconds) {
             why = fmt::format("stuck at x {:.0f} (tick {}) for 60 minutes", m_stats.bestX, m_stats.bestTick);
+            backstop = true;
         }
         if (!why.empty()) {
-            log("%s: the furthest it got has not moved on (%llu decisions, %.0f s)", why.c_str(),
-                (unsigned long long)tries, m_stuckWallSeconds);
-            giveUp(why);
-            return;
+            // GucciBot (2026-11-19, orbs lane): the first time a run gets here,
+            // its backup plan begins instead of the stop (engageOrbBackup).
+            // Not on the 60-minute backstop: that one is there so nothing runs
+            // forever, and it keeps counting through the backup plan. While a
+            // restore is under way the plan waits for it to land (the stop and
+            // its lines wait with it; the slice goes on as usual meanwhile) -
+            // but never past the backstop's 60 minutes, which the rules above
+            // do not reach once the work rule has fired: a restore that never
+            // lands still ends the run.
+            const bool backup = !m_orbBackup && !backstop;
+            const bool waits = backup && orbBackupWaits();
+            if (!waits || m_stuckWallSeconds >= kStuckWallSeconds) {
+                log("%s: the furthest it got has not moved on (%llu decisions, %.0f s)", why.c_str(),
+                    (unsigned long long)tries, m_stuckWallSeconds);
+                if (backup && !waits) {
+                    engageOrbBackup(why);
+                    return;
+                }
+                // The stop says the backup plan was tried; " - furthest path
+                // saved as <name>" stays the message's last part (the queue
+                // reads the name from there to the end).
+                if (m_orbBackup)
+                    why += fmt::format(" (after the backup plan too: from tick {} its look-ahead tried clicking the "
+                                       "orbs it touches)",
+                                       m_orbBackupTick);
+                giveUp(why);
+                return;
+            }
         }
     }
 
@@ -2777,6 +2839,7 @@ constexpr uint64_t kRunSalt = 0x72756e;           // a plain run
 constexpr uint64_t kLateSalt = 0x6c617465;        // robust()'s late run (+ its bar)
 constexpr uint64_t kSteerSalt = 0x7374656572;     // a steered idea (+ its look-ahead)
 constexpr uint64_t kSearchSalt = 0x736561726368;  // the search (+ its budget and widening)
+constexpr uint64_t kOrbSalt = 0x6f726273;         // GucciBot (orbs lane): a run of the backup plan's (evaluateOrbs)
 
 // Two independent 64-bit hashes of (start, ticks, button, salt, script): the
 // entries of the script a run of `ticks` reads, and how many there are.
@@ -2910,6 +2973,9 @@ bool AbsensePathfinder::evaluate(Candidate& c, int horizon, bool held, std::vect
         countEvents(c, held, m_decision.window);
         c.claimed = sr.complete ? horizon : sr.survived;
     }
+    // GucciBot (2026-11-19, orbs lane): the stuck rule's backup plan judges
+    // the script with orb clicks tried (off: never, and nothing below changes).
+    if (m_orbBackup) return evaluateOrbs(c, horizon, held, trace, from);
     const auto runKey = from ? memoKey(from, horizon, held, c.inputs, kRunSalt) : std::pair<uint64_t, uint64_t>{0, 0};
     if (from) {
         const auto it = m_runMemo.find(runKey.first);
@@ -2981,6 +3047,218 @@ bool AbsensePathfinder::evaluate(Candidate& c, int horizon, bool held, std::vect
         // simulation's branch-and-restore is not putting something back.
         log("%s says it lasts %d ticks but its script lasts %d", c.name.c_str(), c.claimed, r.survived);
     }
+    return true;
+}
+
+// GucciBot (2026-11-19, orbs lane): evaluate() while the stuck rule's backup
+// plan is on (see kOrbContacts and engageOrbBackup). The idea's script is run
+// as it is, with its samples. Where they show the copy on an orb it has not
+// fired after a tick (TraceSample::onRing) and the script presses nothing on
+// the next tick, the script is run again with a click on that tick - a few
+// ticks of the contact, spread over it, since a gravity orb flips the copy
+// somewhere else at each - and the version that lasts longest is kept if it
+// lasts longer than the one before it. Then the same for the next orb the
+// kept version touches, a few orbs at most: a chain, so a jump that sets the
+// orbs up is credited with where they take the copy. A click is a press held
+// for its tick: from a held button a release and a press inside the tick (the
+// hold goes on), from a free one a press that the idea's own next tick lets go
+// of. What is kept becomes the idea's inputs, so committing the idea commits
+// its clicks (the trim may still take one out where the path does as well
+// without it). A route idea's way to its gate stays as its leg found it: the
+// clicks go after it. Everything a plain evaluate() fills in comes from the
+// version kept, the samples too, so the verdict, the commit and the drift
+// check all see what is played. The idea's own script goes in orbRaw (the
+// whole-horizon copy of a screened idea starts again from it), the clicks'
+// ticks in orbAt, and its first event stays its own (decide's shortcut and the
+// Rest stage's keepSame compare it with keep's). From a kept start the answer
+// goes in the run memo under a salt of its own, so a run made without clicks
+// is never taken for one made with them, or the other way round.
+bool AbsensePathfinder::evaluateOrbs(Candidate& c, int horizon, bool held, std::vector<TraceSample>* trace,
+                                     const Trajectory::SimStart* from) {
+    auto* pl = PlayLayer::get();
+    if (!pl) return false;
+    Decision& d = m_decision;
+    const int ownFirst = c.firstEvent;
+    auto fillKiller = [&c](bool died, const Trajectory::Killer& k) {
+        c.killerStatic = died && k.valid &&
+                         ((k.id != 0 && k.certainty != Trajectory::Killer::Certainty::Uncertain) || k.voidDeath);
+        c.killerId = k.valid ? k.id : 0;
+        c.killerUid = k.valid ? k.uid : 0;
+        c.killerX = k.x;
+        c.killerY = k.y;
+    };
+    const auto key = from ? memoKey(from, horizon, held, c.inputs, kOrbSalt) : std::pair<uint64_t, uint64_t>{0, 0};
+    if (from) {
+        const auto it = m_runMemo.find(key.first);
+        if (it != m_runMemo.end() && it->second.check == key.second) {
+            const RunMemo& m = it->second;
+            if (!m.orbAt.empty() && !m.script.empty()) {
+                c.orbRaw = c.inputs;
+                c.inputs = m.script;
+                c.orbAt = m.orbAt;
+                c.orbFrom = m.orbFrom;
+                countEvents(c, held, d.window);
+                c.firstEvent = ownFirst;
+            }
+            c.survived = m.survived;
+            c.complete = m.complete;
+            c.reach = reachOf(m.x, m.goingLeft);
+            c.evaluated = true;
+            fillKiller(m.died, m.killer);
+            return true;
+        }
+    }
+
+    // The script as it is (its path is the one "Show the search" draws).
+    std::vector<TraceSample> samples;
+    PathTap* const tap = absense::view::tapFor((uint64_t)d.began.time_since_epoch().count());
+    if (tap) Bot::get()->trajectory().setPathTap(tap);
+    RunResult r = runFor(d, c.inputs, horizon, &samples);
+    if (tap) {
+        Bot::get()->trajectory().setPathTap(nullptr);
+        const auto& all = d.candidates;
+        const bool mine = !all.empty() && &c >= all.data() && &c < all.data() + all.size();
+        absense::view::keep(mine ? (int)(&c - all.data()) : -1, r.survived, r.complete);
+    }
+    m_stats.simulations++;
+    m_stats.simulatedTicks += (uint64_t)std::max(0, r.survived) + (r.died ? 1u : 0u);
+    Trajectory::Killer killer = Bot::get()->trajectory().lastKiller();
+    if (c.claimed >= 0 && std::abs(c.claimed - (r.complete ? horizon : r.survived)) > 1) {
+        m_stats.unrepeatable++;
+        log("%s says it lasts %d ticks but its script lasts %d", c.name.c_str(), c.claimed, r.survived);
+    }
+
+    // The clicks.
+    const int plainLasted = r.survived;
+    const int maxContacts = c.screen ? kOrbScreenContacts : kOrbContacts;
+    const int maxTries = c.screen ? kOrbScreenTries : kOrbTries;
+    const int maxRuns = c.screen ? kOrbScreenRuns : kOrbIdeaRuns;
+    std::vector<TickInput> inputs = c.inputs;
+    // A run repeats a script's last entry past its end: a click there would be
+    // repeated on every tick after it, so a short script is padded out with
+    // that same entry first (its own run reads the same).
+    if (!inputs.empty())
+        while ((int)inputs.size() < horizon) inputs.push_back(inputs.back());
+    std::vector<int> at;
+    int runs = 0;
+    int contacts = 0;
+    int firstClick = std::max(1, c.gateTicks);  // the first input a click may go on (a sample before it shows the orb)
+    auto lasts = [](const RunResult& x) -> int64_t { return x.complete ? INT64_MAX : (int64_t)x.survived; };
+    while (contacts < maxContacts && runs < maxRuns && !r.complete && r.survived < horizon &&
+           d.orbRuns < kOrbDecisionRuns) {
+        // The last input a click can go on: the one of the tick the copy dies in.
+        const int lastIn = std::min({r.survived, horizon - 1, (int)inputs.size() - 1});
+        int a = -1;
+        for (int i = firstClick - 1; i >= 0 && i < (int)samples.size() && i + 1 <= lastIn; i++) {
+            if (samples[(size_t)i].onRing && inputs[(size_t)i + 1].presses == 0) {
+                a = i;
+                break;
+            }
+        }
+        if (a < 0) break;
+        int b = a;  // the contact: samples a..b on the orb, so a click on a + 1 .. b + 1 fires it
+        while (b + 1 < (int)samples.size() && b + 2 <= lastIn && samples[(size_t)b + 1].onRing) b++;
+        contacts++;
+        const int j0 = a + 1, j1 = b + 1;
+        int ticks[kOrbTries] = {};
+        int n = 0;
+        auto add = [&](int j) {
+            if (j < j0 || j > j1 || n >= kOrbTries || inputs[(size_t)j].presses != 0) return;
+            for (int k = 0; k < n; k++)
+                if (ticks[k] == j) return;
+            ticks[n++] = j;
+        };
+        // Inside the contact first: on a tie the earlier try is kept, and a
+        // click at either end is the one a tick late (the slack check) misses.
+        const double span = (double)(j1 - j0);
+        if (maxTries >= 4) {
+            add(j0 + (int)std::lround(span / 3.0));
+            add(j0 + (int)std::lround(span * 2.0 / 3.0));
+        } else {
+            add(j0 + (int)std::lround(span / 2.0));
+        }
+        add(j0);
+        add(j1);
+        bool found = false;
+        int bestJ = -1;
+        std::vector<TickInput> bestIn;
+        RunResult bestR;
+        Trajectory::Killer bestK;
+        std::vector<TraceSample> bestS;
+        for (int k = 0; k < n && k < maxTries && runs < maxRuns; k++) {
+            if (d.orbRuns >= kOrbDecisionRuns) break;
+            const int j = ticks[k];
+            std::vector<TickInput> v = inputs;
+            v[(size_t)j] = TickInput{1, true};
+            std::vector<TraceSample> vs;
+            const RunResult vr = runFor(d, v, horizon, &vs);
+            runs++;
+            d.orbRuns++;
+            const uint64_t ran = (uint64_t)std::max(0, vr.survived) + (vr.died ? 1u : 0u);
+            m_stats.simulations++;
+            m_stats.simulatedTicks += ran;
+            m_stats.orbRuns++;
+            m_stats.orbTicks += ran;
+            if (lasts(vr) > lasts(found ? bestR : r)) {
+                found = true;
+                bestJ = j;
+                bestIn = std::move(v);
+                bestR = vr;
+                bestK = Bot::get()->trajectory().lastKiller();
+                bestS = std::move(vs);
+            }
+        }
+        if (d.orbRuns >= kOrbDecisionRuns && !d.orbCapped) {
+            d.orbCapped = true;
+            if (++m_stats.orbCapped <= 20)
+                log("tick %llu: backup plan: this decision's %d extra runs for orb clicks are spent; its other ideas "
+                    "are judged without them",
+                    (unsigned long long)d.tick, kOrbDecisionRuns);
+        }
+        if (found) {
+            inputs = std::move(bestIn);
+            r = bestR;
+            killer = bestK;
+            samples = std::move(bestS);
+            at.push_back(bestJ);
+            firstClick = bestJ + 1;
+        } else {
+            firstClick = b + 2;  // no click on this orb helped: the next one the same version touches
+        }
+    }
+    if (runs > 0) m_stats.orbIdeas++;
+    if (!at.empty()) {
+        m_stats.orbKept++;
+        c.orbRaw = std::move(c.inputs);
+        c.inputs = std::move(inputs);
+        c.orbAt = at;
+        c.orbFrom = plainLasted;
+        countEvents(c, held, d.window);
+        c.firstEvent = ownFirst;
+    }
+    c.survived = r.survived;
+    c.complete = r.complete;
+    c.reach = reachOf(r.x, r.goingLeft);
+    c.evaluated = true;
+    fillKiller(r.died, killer);
+    if (from) {
+        if (m_runMemo.size() >= kMaxRunMemo) m_runMemo.clear();
+        RunMemo& m = m_runMemo[key.first];
+        m = RunMemo{};
+        m.check = key.second;
+        m.survived = r.survived;
+        m.complete = r.complete;
+        m.died = r.died;
+        m.x = r.x;
+        m.goingLeft = r.goingLeft;
+        m.killer = killer;
+        if (!at.empty()) {
+            m.script = c.inputs;
+            m.orbAt = at;
+            m.orbFrom = plainLasted;
+        }
+    }
+    if (trace) *trace = std::move(samples);
     return true;
 }
 
@@ -3930,7 +4208,12 @@ void AbsensePathfinder::decide() {
         while (d.next < end && mayWork()) {
             Candidate& c = d.candidates[d.next++];
             if (c.evaluated && !c.screen) continue;  // judged in full by an earlier stage (the card's ideas sit inside the ordinary ideas' range): not twice
-            if (!c.inputs.empty() && isTabu(d.tick, c.inputs, d.player2)) continue;
+            // GucciBot (2026-11-19, orbs lane): with the backup plan on, the
+            // tabu is asked of what the idea comes to with its orb clicks
+            // (after evaluate, below): an idea that led nowhere here as it was
+            // may not with a click, and one a click turns into what led
+            // nowhere is skipped.
+            if (!m_orbBackup && !c.inputs.empty() && isTabu(d.tick, c.inputs, d.player2)) continue;
             const int hz = c.screen && d.screenHorizon > 0 ? d.screenHorizon : H;
             // Exact shortcut: every input before an idea's first event is
             // "keep"'s own, so an idea that changes nothing up to and
@@ -3953,12 +4236,42 @@ void AbsensePathfinder::decide() {
                         c.killerY = k.killerY;
                         c.reach = k.reach;  // the same path over this look: it ends where keep ended
                         c.evaluated = true;
+                        // GucciBot (2026-11-19, orbs lane): keep with the backup
+                        // plan's orb clicks in it (never outside the plan). Up to
+                        // this idea's first event its script is keep's own, so
+                        // keep's clicks before that event (the ones inside this
+                        // look) go in with keep's outcome: with them its script
+                        // is keep's as played up to the tick keep dies at (all
+                        // of keep's clicks are before it), or over the whole
+                        // look - so the outcome is this script's own.
+                        if (!k.orbAt.empty()) {
+                            const int upTo = c.firstEvent < 0 ? hz : std::min(hz, c.firstEvent);
+                            std::vector<int> copied;
+                            for (const int t : k.orbAt) {
+                                if (t < upTo && (size_t)t < c.inputs.size() && (size_t)t < k.inputs.size())
+                                    copied.push_back(t);
+                            }
+                            if (!copied.empty()) {
+                                const int own = c.firstEvent;
+                                c.orbRaw = c.inputs;
+                                for (const int t : copied) c.inputs[(size_t)t] = k.inputs[(size_t)t];
+                                c.orbAt = std::move(copied);
+                                c.orbFrom = std::min(k.orbFrom, hz);
+                                countEvents(c, d.held, d.window);
+                                c.firstEvent = own;
+                            }
+                        }
                     }
                 }
             }
             d.scratchTrace.clear();
             if (!evaluate(c, hz, d.held, c.screen ? nullptr : &d.scratchTrace)) break;
-            if (c.steer > 0 && isTabu(d.tick, c.inputs, d.player2)) continue;
+            if ((c.steer > 0 || m_orbBackup) && isTabu(d.tick, c.inputs, d.player2)) {
+                // (orbs lane) A first look's idea that is a dead end here is no
+                // idea for the whole horizon either, as before the plan.
+                if (m_orbBackup && c.screen) c.evaluated = false;
+                continue;
+            }
             if (c.inputs.empty()) continue;  // a steer that found nothing: not an idea
             if (c.screen) continue;  // only a first look: it does not count as an idea yet
             d.tried.push_back(d.next - 1);
@@ -4173,6 +4486,19 @@ void AbsensePathfinder::decide() {
                 again.evaluated = false;
                 again.survived = 0;
                 again.claimed = -1;
+                // GucciBot (2026-11-19, orbs lane): an idea the backup plan put
+                // orb clicks in on the first look is judged over the whole
+                // horizon from its own script again (the clicks are chosen anew
+                // there). Never outside the plan: orbRaw is empty.
+                if (!again.orbRaw.empty()) {
+                    const int own = again.firstEvent;
+                    again.inputs = std::move(again.orbRaw);
+                    again.orbRaw.clear();
+                    again.orbAt.clear();
+                    again.orbFrom = -1;
+                    countEvents(again, d.held, d.window);
+                    again.firstEvent = own;
+                }
                 d.candidates.push_back(std::move(again));
             }
             for (const size_t i : best) d.candidates[i].screen = false;  // the first look is over: not a screen for the Rest stage either
@@ -4254,7 +4580,11 @@ void AbsensePathfinder::decide() {
                 if (d.candidates.size() > d.restEnd) {
                     Candidate& c = d.candidates.back();
                     d.scratchTrace.clear();
-                    if (!isTabu(d.tick, c.inputs, d.player2) && evaluate(c, H, d.held, &d.scratchTrace)) {
+                    // (orbs lane: with the backup plan on, the tabu is asked of
+                    // the script with its orb clicks, after evaluate.)
+                    if ((m_orbBackup || !isTabu(d.tick, c.inputs, d.player2)) &&
+                        evaluate(c, H, d.held, &d.scratchTrace) &&
+                        (!m_orbBackup || !isTabu(d.tick, c.inputs, d.player2))) {
                         d.tried.push_back(d.candidates.size() - 1);
                         if (d.best < 0 || better(c, d.candidates[(size_t)d.best])) d.best = (int)d.candidates.size() - 1;
                         if (d.best == (int)d.candidates.size() - 1 && !d.scratchTrace.empty()) {
@@ -4303,7 +4633,9 @@ void AbsensePathfinder::decide() {
             if (d.candidates.size() > d.restEnd) {
                 Candidate& c = d.candidates.back();
                 d.scratchTrace.clear();
-                if (!isTabu(d.tick, c.inputs, d.player2) && evaluate(c, H, d.held, &d.scratchTrace)) {
+                if ((m_orbBackup || !isTabu(d.tick, c.inputs, d.player2)) &&
+                    evaluate(c, H, d.held, &d.scratchTrace) &&
+                    (!m_orbBackup || !isTabu(d.tick, c.inputs, d.player2))) {  // (orbs lane: as above)
                     d.tried.push_back(d.candidates.size() - 1);
                     if (d.best < 0 || better(c, d.candidates[(size_t)d.best])) d.best = (int)d.candidates.size() - 1;
                     if (d.best == (int)d.candidates.size() - 1 && !d.scratchTrace.empty()) {
@@ -4478,6 +4810,19 @@ void AbsensePathfinder::decide() {
                 again.evaluated = false;
                 again.survived = 0;
                 again.claimed = -1;
+                // GucciBot (2026-11-19, orbs lane): an idea the backup plan put
+                // orb clicks in on the first look is judged over the whole
+                // horizon from its own script again (the clicks are chosen anew
+                // there). Never outside the plan: orbRaw is empty.
+                if (!again.orbRaw.empty()) {
+                    const int own = again.firstEvent;
+                    again.inputs = std::move(again.orbRaw);
+                    again.orbRaw.clear();
+                    again.orbAt.clear();
+                    again.orbFrom = -1;
+                    countEvents(again, d.held, d.window);
+                    again.firstEvent = own;
+                }
                 d.candidates.push_back(std::move(again));
             }
             d.screenHorizon = 0;
@@ -5245,6 +5590,27 @@ void AbsensePathfinder::decide() {
                                 d.passChosen >= 0 ? ", holds up a tick late" : ", only to the tick", commit,
                                 ahead ? " (decided ahead)" : ""));
     }
+    // GucciBot (2026-11-19, orbs lane): the backup plan's orb clicks this
+    // decision plays - the ones the trim left in, inside what is committed.
+    // (Two-player mode: player 2's, whose decision this is.)
+    if (!best->orbAt.empty()) {
+        std::string at;
+        int clicks = 0;
+        for (const int t : best->orbAt) {
+            if (t < 0 || t >= commit || (size_t)t >= best->inputs.size() || best->inputs[(size_t)t].presses == 0)
+                continue;
+            clicks++;
+            at += fmt::format("{}{}", at.empty() ? "" : ", ", tick + (uint64_t)t);
+        }
+        if (clicks > 0) {
+            m_stats.orbPlayed++;
+            if (m_stats.orbPlayed <= kOrbPlayedLines)
+                log("tick %llu: backup plan: %s clicks %d orb%s it touches (at tick%s %s); it lasts %s%d ticks, %d "
+                    "without the clicks",
+                    (unsigned long long)tick, name.c_str(), clicks, clicks == 1 ? "" : "s", clicks == 1 ? "" : "s",
+                    at.c_str(), survived >= H ? ">=" : "", survived, best->orbFrom);
+        }
+    }
     if (name.rfind("route", 0) == 0) m_stats.routeWins++;
     char buf[200];
     std::snprintf(buf, sizeof(buf), "tick %llu: %s (lasts %s%d ticks), committing %d%s%s", (unsigned long long)tick,
@@ -5573,6 +5939,97 @@ void AbsensePathfinder::giveUp(const std::string& reason) {
     cancelAhead();
     absense::modal::info({.title = "AbsensePathfinder stopped", .message = reason});
     stop(reason);
+}
+
+// GucciBot (2026-11-19, orbs lane): the stuck rule's backup plan (see
+// kOrbContacts). Where tick()'s stuck rule would end the run - the first time
+// in a run, and never on the 60-minute backstop - the search's look-ahead
+// starts clicking the orbs its copy touches (evaluateOrbs) for the rest of the
+// run, the stuck rule's count starts over, and the search goes back to where
+// the route can still change, through the walk back it already has:
+//  - a walk back from a dead end under way (the game standing at the dead end,
+//    the stops looked at from kept starts): it starts again from its first
+//    stop, so every stop down to its floor - as far back as the walk reaches at
+//    the spot's level, up to ten seconds before the dead end - is decided again
+//    with the clicks. The stuck route's mistake on Deadlocked is a jump 0.4 to
+//    1.5 s before its dead end, and more than one input has to change;
+//  - a dead end just found (the last live tick's bookkeeping, or a verdict)
+//    with no walk under way: its walk begins as it would, with the clicks;
+//  - anywhere else (a stop gone back to for real, a resumed path on its way to
+//    the spot): the decision is made again from the tick the game is at, and
+//    every decision after it has the clicks (a dead end on the way walks back
+//    with them).
+// What failed here before does not stop an idea from being judged again: the
+// run memo keeps the plan's runs apart (evaluateOrbs), the tabu is asked of an
+// idea with its clicks in it (decide), and the floor's tries "anyway" start
+// over. The stuck rule's own count starts over (the work rule's decisions, or
+// with pf_stuck_work off its five minutes); the 60-minute backstop keeps
+// counting, so it bounds the backup plan too. Until this runs, nothing in any
+// decision differs from a run without it (m_orbBackup).
+void AbsensePathfinder::engageOrbBackup(const std::string& why) {
+    auto* bot = Bot::get();
+    // The last live tick's bookkeeping first: it may find a death or a drift.
+    pauseLive();
+    cancelAhead();
+    if (m_probe.active) endProbe();
+    if (m_decision.searching && bot->trajectory().searching()) {
+        std::vector<TickInput> dropped;
+        (void)bot->trajectory().finishSearch(dropped);  // puts the game state back
+    }
+    if (m_decision.routeLeg) {
+        if (auto* traj = bot->trajectory().unsafeInner(); traj && traj->legActive()) (void)traj->finishLeg();
+    }
+    m_decision = Decision{};
+    m_pairSecondPass = false;
+    m_probe = Probe{};
+    // A jump back still to be made (a probe's way on, a fork or route jump) is
+    // dropped, and the forced decision it was going back for with it.
+    m_goTo = UINT64_MAX;
+    m_forkForceAt = UINT64_MAX;
+    m_forceRouteAt = UINT64_MAX;
+
+    m_orbBackup = true;
+    const uint64_t now = currentTick();
+    m_orbBackupTick = now;
+    m_stuckDecisions = m_stats.decisions;
+    if (!absense::stuckWork()) m_stuckWallSeconds = 0.0;
+    // From here only the best tick moving on starts the count over (a fork
+    // jump's new route counted its own furthest too: pf_fork_dual).
+    m_forkBest = 0;
+
+    const double scale = std::max(1.0, bot->updater().getTps() / 240.0);
+    // In realtime the game can stand a tick or two past where the walk began.
+    const uint64_t slack = (uint64_t)std::lround(2.0 * scale);
+    std::string where;
+    if (m_repair.active && now + slack >= m_repair.from) {
+        Trap* trap = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * scale));
+        m_repair.probe = trap ? std::min(std::max(0, trap->fails - 1), 7) : 0;  // the first stop, as beginRepair has it
+        m_repair.retries = 0;
+        m_repair.retryTarget = UINT64_MAX;
+        m_repair.routeJumped = true;  // the planned route's jump back has had its look at this dead end
+        if (trap) trap->anyway = 0;
+        m_plan.clear();
+        m_plan2.clear();
+        m_planIndex = 0;
+        m_phase = Phase::Backtracking;
+        where = fmt::format("walking back again from the dead end at tick {}, as far as tick {}", m_repair.deathTick,
+                            m_repair.floor);
+    } else if (m_phase == Phase::Backtracking && !m_repair.active) {
+        where = fmt::format("the dead end at tick {} just found is walked back from with them", m_deadEndAt);
+    } else {
+        m_plan.clear();
+        m_plan2.clear();
+        m_planIndex = 0;
+        m_planTrace.clear();
+        m_planKnownDeath = UINT64_MAX;  // a plan played into a death to see what the game says: not any more
+        m_planTail.clear();
+        m_planTailTick = UINT64_MAX;
+        m_phase = Phase::Deciding;
+        where = fmt::format("deciding again from tick {}, {} ticks before the furthest", now,
+                            m_stats.bestTick > now ? m_stats.bestTick - now : 0);
+    }
+    log("stuck: backup plan: the look-ahead now tries clicking orbs it touches; %s (%s)", where.c_str(), why.c_str());
+    m_stats.message = "Searching (backup plan: clicking the orbs it touches)";  // a live note; stop() replaces it
 }
 
 int AbsensePathfinder::widenLevel(uint64_t at) {

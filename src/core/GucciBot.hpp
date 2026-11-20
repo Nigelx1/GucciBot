@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-19-f (AI self-training: playing alone, the AI learns from its own best runs and keeps what gets further, one level at a time)"
+    "2026-11-19-g (Pathfinder backup plan: when stuck, the look-ahead also clicks the orbs it touches)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

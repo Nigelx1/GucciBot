@@ -3918,6 +3918,8 @@ RunResult Trajectory::run(GJBaseGameLayer* pl, bool p1,
             sample.mini = player->m_vehicleSize != 1.0f;
             sample.speed = player->m_playerSpeed;
             sample.fired = firedThisTick(player);
+            // GucciBot (2026-11-19, orbs lane): read only (TraceSample::onRing).
+            sample.onRing = player->m_touchingRings && player->m_touchingRings->count() > 0;
             if (s.count == 2) {
                 sample.dual = true;
                 const cocos2d::CCPoint pos2 = s.players[1]->getPosition();
