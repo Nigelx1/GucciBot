@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-20-e (Trainer lane: sliders end in a circle, hit marker the 1-frame size (Juice))"
+    "2026-11-20-f (Sound sliders explain themselves on hover, Showcase size note fixed)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

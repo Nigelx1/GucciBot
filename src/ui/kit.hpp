@@ -52,6 +52,9 @@ namespace gucci::ui::kit {
     // on the right. Rows can hold several controls (use ImGui::SameLine()).
     void RowBegin(const char* label, const char* hint = nullptr);
     void RowEnd();
+    // A tooltip while the mouse is over the row just finished (its label or
+    // its control). Call it right after the row (after RowEnd or a *Row call).
+    void RowTooltip(const char* tip);
 
     // ---- controls
 

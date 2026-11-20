@@ -297,11 +297,26 @@ namespace gucci::ui::kit {
         rowStack().push_back({start, labelBottom});
     }
 
+    // The last finished row's rectangle, label and control (RowTooltip): a
+    // row ends in a zero-size Dummy, so ImGui::IsItemHovered() right after a
+    // row never sees the mouse (2026-11-20: the sound sliders' tooltips never
+    // showed).
+    static ImVec2 g_lastRowMin, g_lastRowMax;
+
+    void RowTooltip(const char* tip) {
+        if (!tip || !*tip)
+            return;
+        if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+            ImGui::IsMouseHoveringRect(g_lastRowMin, g_lastRowMax))
+            ImGui::SetTooltip("%s", tip);
+    }
+
     void RowEnd() {
         ImGui::EndGroup();
         if (probe::on())
             probe::endRow();
         float const controlBottom = ImGui::GetItemRectMax().y;
+        float const controlRight = ImGui::GetItemRectMax().x;
         if (rowStack().empty()) {
             if (search::recording())
                 search::endRow(ImGui::GetCursorScreenPos(), controlBottom);
@@ -310,6 +325,8 @@ namespace gucci::ui::kit {
         }
         RowFrame const row = rowStack().back();
         rowStack().pop_back();
+        g_lastRowMin = row.start;
+        g_lastRowMax = ImVec2(controlRight, std::max(row.labelBottom, controlBottom));
         if (search::recording())
             search::endRow(row.start, std::max(row.labelBottom, controlBottom));
         ImGui::SetCursorScreenPos(ImVec2(row.start.x, std::max(row.labelBottom, controlBottom)));

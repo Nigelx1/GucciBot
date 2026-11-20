@@ -2818,7 +2818,7 @@ namespace gucci::ui {
                 applyShowcasePreset();
                 s_note = "Showcase set: 7680x4320 at 60, lossless x264 in yuv444p (ultrafast), FLAC in MP4, the music "
                          "and the level's own sounds, nothing after the end. It's slow, and the files are big: "
-                         "about 3.5 GB a minute.";
+                         "about 3.5 GB a minute for a simple level, 11 for one as busy as Phobos.";
             }
             if (kit::Button("Basic: 1080p60")) {
                 applyBasicPreset();
@@ -2970,10 +2970,9 @@ namespace gucci::ui {
                 float v = static_cast<float>(mod->getSavedValue<double>(key, 1.0)) * 100.f;
                 if (kit::SliderRow(label, nullptr, &v, 0.f, 100.f, "%.0f%%"))
                     mod->setSavedValue<double>(key, v / 100.0);
-                // Explained on hover (Nigel, 2026-11-20: the two sound sliders
-                // weren't clear).
-                if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                    ImGui::SetTooltip("%s", tip);
+                // Explained on hover, over the label or the slider (Nigel,
+                // 2026-11-20: the two sound sliders weren't clear).
+                kit::RowTooltip(tip);
             };
             auto saveText = [&](const char* label, const char* hint, const char* key, const char* def,
                                 const char* placeholder) {
