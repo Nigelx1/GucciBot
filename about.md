@@ -1,4 +1,4 @@
-# GucciBot 2.0.0-beta.5
+# GucciBot 2.0.0
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -15,7 +15,7 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 
 ## Platforms
 
-Windows is GucciBot's home, and where all of it has been tested. Since 2.0.0-beta.3 it also runs on **macOS, iOS and Android**. It's still experimental there: it has been played on an Android phone, but the rest has had little testing, so if something looks wrong, open an issue. On a phone the menu opens from the **GucciBot** button in the pause menu, fills the screen and scrolls when you drag it; **Menu size** in Settings makes it bigger or smaller. On a Mac the menu key's default is **Option**, and the pause-menu button is there too. On iOS no key reaches GucciBot, so Settings > Keybinds says so instead of offering keys.
+Windows is GucciBot's home, and where all of it has been tested. Since 2.0.0-beta.3 it also runs on **macOS, iOS and Android**. It's still experimental there: it has been played on an Android phone, but the rest has had little testing, so if something looks wrong, open an issue. On a phone the menu opens from the **GucciBot** button in the pause menu, fills the screen and scrolls when you drag it; **Menu size** in Settings makes it bigger or smaller. The Mac build runs on Apple silicon and, since 2.0, on Intel Macs too, though nobody has run it on an Intel Mac yet. On a Mac the menu key's default is **Option**, and the pause-menu button is there too. On iOS no key reaches GucciBot, so Settings > Keybinds says so instead of offering keys.
 
 What still needs Windows:
 
@@ -84,7 +84,7 @@ What still needs Windows:
 
 Makes a macro for you. Open a level with nothing recorded, start Pathfinder, and it plays the level itself until it reaches the end -- then saves that run as a macro named after the level.
 
-Pick the engine at the top of the Pathfinder page. **Search** is the default, and by far the stronger one. Under it, the **Search** row picks one of its two searches, Absense or Classic (both below). **AI** is an early AI: a small network, trained on human play and then on its own runs, decides each click. It comes with the mod, so its Start works, but it's weak and beats very few levels. **Practice** (on by default) keeps it trying a level: after each death it changes the decision most likely to be the mistake and tries again from just before it. With Practice off, it plays alone and learns from its own best runs (self-training: slow, one level at a time).
+Pick the engine at the top of the Pathfinder page. **Search** is the default, and by far the stronger one: in Claude's test runs it has beaten all 22 of RobTop's main levels from a cold start (Deadlocked on an online copy of it). Under it, the **Search** row picks one of its two searches, Absense or Classic (both below). **AI** is an early AI: a small network, trained on human play and then on its own runs, decides each click. It comes with the mod, so its Start works, but it's weak and beats very few levels. **Practice** (on by default) keeps it trying a level: after each death it changes the decision most likely to be the mistake and tries again from just before it. With Practice on, the AI beat Stereo Madness, its own training level, after 7 seconds of practice. With Practice off, it plays alone and learns from its own best runs (self-training: slow, one level at a time, with small gains so far).
 
 **Absense** (Search's default) — Absent's pathfinder from Absense, ported in whole.
 
@@ -92,6 +92,7 @@ Pick the engine at the top of the Pathfinder page. **Search** is the default, an
 - **Plays where you can see it** — the level runs in real time while it plans the next stretch, with its progress in the corner.
 - **Shows what it's trying** — with **Show the search** on (the default), the level shows the last paths it tried as faint lines while the game waits for a decision, a red dot where one dies, the best one so far brighter, and how many it has tried in the corner.
 - **Goes back when it has to** — a dead end sends it back through Backwards Stepping's stored frames to try another way, and further back each time a spot keeps biting.
+- **Has a backup plan when it's stuck** — before a stuck run gives up, it looks again from where it's stuck, this time also trying a press wherever a copy of the player passes an orb, and keeps the presses that get it further. It only runs once a run is stuck, so a run that never gets stuck plays the same as without it.
 - **Can learn levels** — with **Remember solutions** on (off by default, so every search is cold), what got it past a spot is remembered per level and tried first the next time.
 - **Maps the whole level** — **Show the level map** draws the gaps the player fits through, the choices (forks, orbs, pads, portals) and the parts that move; a copy of the player rides the level in the background to time what moves, without holding the game up. Shown in a level, safe mode counts it as a cheat: it shows the way through.
 - **Plans a route through it** — **Show the planned route** draws the way through the whole level it would take. **Follow the planned route** set to **Route ideas** has each decision first try the way GD's physics finds to the route's next gate, and a dead end jump back to where it left the route. Set to **Route drives** (experimental), every decision aims at the next gate's best choice from where the player is (use or skip an orb, touch or avoid a pad or portal) and plays the way physics finds through it, only as far as that gate.

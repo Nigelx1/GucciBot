@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-19-h (Pathfinder page: Search (old) is now just Search, and the AI's Practice is on by default)"
+    "2026-11-19-i (GucciBot 2.0.0)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
