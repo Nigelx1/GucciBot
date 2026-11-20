@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-20-b (Renders start on the level's first frame (0.00%))"
+    "2026-11-20-c (Separate audio tracks keep their own channel count (no garble))"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

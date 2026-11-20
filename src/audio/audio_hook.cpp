@@ -152,12 +152,44 @@ namespace gucci {
         audio->syncMixFormat();
 
         const unsigned int frameSize = 1024;
-        const size_t totalFrameSize = frameSize * static_cast<size_t>(audio->m_channels);
+        const int inCh = audio->m_channels;
+        const int outCh = renderer->channels();
+        const size_t totalFrameSize = frameSize * static_cast<size_t>(inCh);
+        // A track whose group mixes a different channel count than the video's
+        // (set by the combined recorder alone, see syncMixFormat) is converted
+        // block by block: more channels than it has repeat its own (mono to
+        // stereo: the same sample on both sides), fewer are averages of the
+        // channels that fold onto them (stereo to mono: (L + R) / 2).
+        std::vector<float> remixed;
 
-        while (audio->m_buffer.size() >= totalFrameSize) {
+        while (inCh > 0 && audio->m_buffer.size() >= totalFrameSize) {
             uint64_t pts = static_cast<uint64_t>(audio->m_index) * frameSize;
 
-            auto result = renderer->writeAudio(audio->m_buffer, pts, trackIndex);
+            std::vector<float>* block = &audio->m_buffer;
+            if (outCh > 0 && outCh != inCh) {
+                remixed.assign(static_cast<size_t>(frameSize) * outCh, 0.f);
+                for (unsigned int f = 0; f < frameSize; f++) {
+                    float const* in = audio->m_buffer.data() + static_cast<size_t>(f) * inCh;
+                    float* out = remixed.data() + static_cast<size_t>(f) * outCh;
+                    if (outCh > inCh) {
+                        for (int c = 0; c < outCh; c++)
+                            out[c] = in[c % inCh];
+                    } else {
+                        for (int c = 0; c < outCh; c++) {
+                            float sum = 0.f;
+                            int n = 0;
+                            for (int i = c; i < inCh; i += outCh) {
+                                sum += in[i];
+                                n++;
+                            }
+                            out[c] = n > 0 ? sum / static_cast<float>(n) : 0.f;
+                        }
+                    }
+                }
+                block = &remixed;
+            }
+
+            auto result = renderer->writeAudio(*block, pts, trackIndex);
             if (result.isErr()) {
                 renderer->signalStop(
                     fmt::format("writing the audio failed (track {}): {}", trackIndex, result.unwrapErr()),

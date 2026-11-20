@@ -276,6 +276,9 @@ namespace gucci {
         void setChannels(int c) {
             m_channels = c;
         }
+        int channels() const {
+            return m_channels;
+        }
         // Frames the encode thread has written to the video so far.
         int renderedFrames() const {
             return (int)m_encoded.load(std::memory_order_acquire);

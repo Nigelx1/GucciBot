@@ -15,11 +15,19 @@ namespace gucci {
 
         geode::log::warn(
             "[GucciBot] FMOD is mixing {} channels but the software format said {} "
-            "-- the format is read before the output switches to NRT. Using {}.",
-            mixed, m_channels, mixed);
+            "-- the format is read before the output switches to NRT. Using {}{}.",
+            mixed, m_channels, mixed, this == AudioRecorder::get() ? "" : " for this track");
 
         m_channels = mixed;
-        SLRenderer::get()->setChannels(mixed);
+        // Only the combined (master) recorder sets the video's channel count.
+        // The music, SFX and frame-window groups can mix a different count
+        // than the master (one mono, one stereo); when each one set the shared
+        // count, it flipped back and forth during a render with Separate audio
+        // tracks on and garbled the tracks. They keep their own count here,
+        // and drainRecorderIntoTrack (audio_hook.cpp) converts them to the
+        // video's.
+        if (this == AudioRecorder::get())
+            SLRenderer::get()->setChannels(mixed);
     }
 
     // Only the master recorder silences what it hears (a render isn't played
