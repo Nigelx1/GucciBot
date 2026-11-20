@@ -25,17 +25,24 @@ This guide is for GucciBot 2.0. Things that are new since 2.0.0-beta.5 say **(ne
 
 ## 1. Install
 
-You need **Geometry Dash 2.2081** and **[Geode](https://geode-sdk.org/) 5.10.1 or a later 5.x**.
-There is **one file** for every platform: `nigelx1.guccibot.geode` (over 200 MB, because the renderer, the music and the JMF Trainer's video come with it).
+You need **Geometry Dash 2.2081** with **[Geode](https://geode-sdk.org/) 5.10.1 or a later 5.x**, or **Geometry Dash 2.2091** with **Geode 6.0.0-alpha.2** (Windows only for now).
+The release has **two files**, one for each GD version **(new in 2.0)**. Take the one for your game, and keep only that one in your mods folder:
+
+- **GD 2.2081** (Geode 5): `nigelx1.guccibot2208.geode`, for Windows, Mac, iPhone, iPad and Android.
+- **GD 2.2091** (Geode 6.0.0-alpha.2, exactly that version): `nigelx1.guccibot2209.geode`, a preview for Windows. It has everything except the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro and High TPS precision. Those are coming in 2.0.1.
+
+Not sure which you have? Open Geode's mod list: Geode itself is listed there with its version. Geode 5 means GD 2.2081, Geode 6 means GD 2.2091 ([more in the README](../README.md#which-gd-and-geode-do-i-have)). Each file is over 200 MB, because the renderer, the music and the JMF Trainer's video come with it.
 
 ### Every platform
 
 1. Install Geode first, using the steps on [geode-sdk.org](https://geode-sdk.org/) for your platform.
-2. Download `nigelx1.guccibot.geode` from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
+2. Download the file for your GD (`nigelx1.guccibot2208.geode` or `nigelx1.guccibot2209.geode`) from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
 3. Open the game, then open Geode's mod list.
-4. Press the gear for Geode's settings, then **Install From File**, and pick the file.
-   Or put the file in Geode's mods folder yourself: **Open Mods Folder** is in the same place.
-5. Restart the game.
+4. Press the gear for Geode's settings, then **Install From File**, and pick the file. Geode saves it as `nigelx1.guccibot.geode`, whichever file it was.
+   Or put the file in Geode's mods folder yourself: **Open Mods Folder** is in the same place. Delete any older GucciBot file there first.
+5. If GucciBot is already installed, Geode asks whether to replace it. Press **Replace** to update.
+   **But if Geode first says the mod "can not be installed"**, you picked the other GD's file. Press **OK**, then **Cancel** on the next box. **Replace** there would delete your working GucciBot and put in one that won't load.
+6. Restart the game.
 
 ### Where the mods folder is
 
@@ -54,7 +61,7 @@ The **Open Mods Folder** button always finds it. By hand:
 - **Android** has run on a phone.
 - **Mac, iPhone and iPad** have had little testing. The Mac build runs on Apple silicon and on Intel Macs **(new in 2.0)**; nobody has tried it on an Intel Mac yet.
 - **Rendering and Video Mode** work on Windows and Mac **(Mac is new in 2.0, and not tried on a Mac yet)**. They don't work on phones yet.
-- **The Pathfinder** runs everywhere **(new in 2.0)**, but it's at its best on Windows. Off Windows it can't see what move and rotate triggers will do next, so levels that use them fail more often. The page says so. It hasn't been tried on a Mac or a phone yet.
+- **The Pathfinder** runs everywhere **(new in 2.0)**, but it's at its best on Windows. Off Windows it can't see what move and rotate triggers will do next, so levels that use them fail more often. The page says so. It hasn't been tried on a Mac or a phone yet. The GD 2.2091 preview doesn't have it yet.
 - **Still Windows only:** tick rates under 162 TPS, High TPS precision, and the Pathfinder's **Rotate triggers (experimental)** switch.
 
 ---
@@ -242,12 +249,12 @@ The Pathfinder finds its own way through a level. It tries moves in a copy of th
 In a test on Stereo Madness it took about 2 minutes. Harder levels can take much longer.
 
 - **Show the search** (on by default) draws what it's trying while the game waits: faint lines for the paths it tries, a red dot where one dies, the best one so far brighter, and a line in the corner saying how it's going **(new in 2.0)**. It doesn't change what the search decides.
-- A run that makes 300 decisions in a row without getting any further stops and says where. It counts the search's own work, not time, so whether a run stops depends much less on how fast or busy your PC is (not entirely: an hour on the clock without getting further also stops a run, and a few spots don't always go the same way from run to run). On a hard spot giving up can take 20 minutes or more, so in a queue a level the search can't beat often uses up its whole time limit.
+- A run that makes 300 decisions in a row without getting any further stops and says where. It counts the search's own work, not time, so whether a run stops depends much less on how fast or busy your PC is (not entirely: an hour on the clock without getting further also stops a run, and a few spots don't always go the same way from run to run). On a hard spot giving up can take 20 minutes or more, so in a queue a level the search can't beat often uses up its whole time limit. Before a stuck run stops, it tries a backup plan once: it looks again from where it's stuck, this time also pressing the orbs its copies of the player pass, and keeps the presses that get it further **(new in 2.0)**.
 - **Remember solutions** (off by default) lets it reuse what got past a spot last time.
 - **Rotate triggers (experimental)** (off by default, Windows only) makes its copy of the game turn rotating blocks the way the game does. On some levels that makes the search slower, so it's off **(new in 2.0)**.
 - The **AI** engine is an early AI: a small network, trained on human play, decides each click. It comes with the mod, so its **Start** works, but it's weak and beats very few levels. **Practice** (on by default) keeps it trying a level: after each death it changes the decision most likely to be the mistake and tries again from just before it. With **Practice** off it plays alone, and each time it gets further it trains its network on that run (self-training: slow, one level at a time). To get a level done, use **Search**.
 
-How good is it? In Claude's test runs it beat Stereo Madness, Clubstep, Theory of Everything 2, Deadlocked, The Nightmare, Bloodbath, Slaughterhouse and Forest Temple from scratch. It can't beat everything yet: GRIEF, LIMBO, ORBIT and Heliopolis are still out of reach. A Pathfinder run counts as a cheat.
+How good is it? In Claude's test runs it beat all 22 of RobTop's main levels from scratch, Geometrical Dominator included (Deadlocked on an online copy of it, because RobTop's own needs 30 secret coins the test saves don't have), plus The Nightmare, Bloodbath, Slaughterhouse, GRIEF, Forest Temple and Stalemate. It can't beat everything yet: LIMBO, ORBIT and Heliopolis are still out of reach. A Pathfinder run counts as a cheat.
 
 ![The Pathfinder page](images/howto/pathfinder.png)
 *The Pathfinder page, set to Search and Absense, ready to Start.*
@@ -356,8 +363,8 @@ What it looks for:
 
 ### "Unable to read entry (code -3)"
 This is Geode saying it can't unpack the file. Usually the download is damaged (it didn't finish, or got cut off).
-1. Delete `nigelx1.guccibot.geode` from the mods folder.
-2. Download it again from the [release page](https://github.com/Nigelx1/GucciBot/releases/latest). It should be over 200 MB.
+1. Delete the GucciBot file from the mods folder (`nigelx1.guccibot.geode`, or `nigelx1.guccibot2208.geode` / `nigelx1.guccibot2209.geode` if you put it there yourself).
+2. Download the file for your GD again from the [release page](https://github.com/Nigelx1/GucciBot/releases/latest). It should be over 200 MB.
 3. Install it again and restart.
 
 ### "GucciBot Is Standing Down"
@@ -367,9 +374,9 @@ GucciBot can't run alongside **ToastyReplay Lite**, **Silicate** or **Antic's Co
 3. Restart the game.
 
 ### Geode lists a second GucciBot as invalid
-Geode loads one copy of a mod and marks any other copy invalid. This happens when an old file is still in the mods folder.
+Geode loads one copy of a mod and marks any other copy invalid. This happens when an old file is still in the mods folder, or when both the 2208 and the 2209 file are in it.
 1. Open the mods folder.
-2. Keep the newest GucciBot file and delete the rest.
+2. Keep the newest GucciBot file for your GD and delete the rest.
 3. Restart the game.
 
 In 2.0 the setup check names the file for you.
