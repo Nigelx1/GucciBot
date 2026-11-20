@@ -411,7 +411,8 @@ namespace gucci::ui::pages {
         constexpr int kFillCard = 235;
         // While a player is inside the lane's band: the box's fill, border
         // and the verdict's pill fade to 30%, the bars, flash and marker to
-        // 70%, and the notes, release caps and the verdict's word not at all.
+        // 70%, and the notes (presses and slider ends) and the verdict's word
+        // not at all.
         // Each note sits on its own dark outline disc, so it hides the player
         // either way: fading its color would only darken it (round 5 measured
         // a 3-frame ring at 70% as RGB 183,164,25, mustard, not yellow).
@@ -437,11 +438,11 @@ namespace gucci::ui::pages {
             float two;     // 58% across
             float three;   // 76% across (and 4+)
             float plain;   // a note with no counted window
-            float marker;  // the hit marker (70% across)
+            float marker;  // the hit marker: a 1-frame note's size (Juice, 2026-11-20; it was 70% across)
             float edge;    // the dark outline's width
         };
         NoteSizes noteSizes(float h) {
-            return {h * 0.20f, h * 0.17f, h * 0.29f, h * 0.38f, h * 0.24f, h * 0.35f, std::max(2.f, h * 0.024f)};
+            return {h * 0.20f, h * 0.17f, h * 0.29f, h * 0.38f, h * 0.24f, h * 0.20f, std::max(2.f, h * 0.024f)};
         }
 
         float outerRadius(LTier tier, NoteSizes const& z) {
@@ -487,59 +488,6 @@ namespace gucci::ui::pages {
             }
             if (p2)
                 dl->AddCircle(c, r + ew * 1.9f, u32(kNoteP2, fade), 0, ew * 1.5f);
-        }
-
-        // A release (a slider's end): a rounded upright cap in its window's
-        // color with a white core, drawn at the release's own time. No press
-        // has this shape, so a ring around a red center always means a press
-        // tier and a cap always means "let go here". Its height grows with
-        // the window, as a press's size does: 1 frame 54% of the lane (so it
-        // stands out of the 40% slider bar), 2 frames 66%, 3+ 78%. It is 16%
-        // of the lane wide (20 px at 1080p) with a 2 px light line down its
-        // middle, so its color reads at a glance (round 5's 11 px cap with a
-        // 3 px white core read as a white pin). Under a press it runs the
-        // box's full height, through the border, so 12 px of it shows above
-        // and below even a 3-frame press (the caps pass in drawLaneBox).
-        float capWidth(float h) {
-            return std::max(10.f, std::round(h * 0.16f));
-        }
-        float capHalf(LTier tier, float h) {
-            switch (tier) {
-                case LTier::One: return h * 0.27f;
-                case LTier::Two: return h * 0.33f;
-                case LTier::Three:
-                case LTier::Wide: return h * 0.39f;
-                case LTier::Unknown: break;
-            }
-            return h * 0.30f;
-        }
-        // `tall`: the cap runs the box's full height (half = h / 2, its ends
-        // square but for a small rounding, meeting the box's outer dark
-        // line), for a cap a press is drawn over.
-        void drawReleaseCap(ImDrawList* dl, ImVec2 c, LTier tier, float half, NoteSizes const& z, float h, bool p2,
-                            float fade, bool tall = false) {
-            if (fade <= 0.01f)
-                return;
-            float const ew = std::max(2.f, z.edge * 0.8f);
-            float const hw = capWidth(h) * 0.5f;
-            float const oe = tall ? 0.f : ew;  // the dark line above and below (the box's own, when tall)
-            float const rnd = tall ? 3.f : hw;
-            dl->AddRectFilled(ImVec2(c.x - hw - ew, c.y - half - oe), ImVec2(c.x + hw + ew, c.y + half + oe),
-                              darkEdge(fade), tall ? rnd : hw + ew);
-            ImVec4 const col = tierColor(tier);
-            dl->AddRectFilled(ImVec2(c.x - hw, c.y - half), ImVec2(c.x + hw, c.y + half), u32(col, fade), rnd);
-            // A 2 px light line down the middle (the tier's color toward
-            // white), so a cap reads as a cap and 9 px of color shows on each
-            // side of it at 1080p.
-            float const cw = 1.f;
-            float const ch = (tall ? capHalf(tier, h) : half) * 0.62f;
-            ImVec4 const hi(col.x + (1.f - col.x) * 0.65f, col.y + (1.f - col.y) * 0.65f,
-                            col.z + (1.f - col.z) * 0.65f, 1.f);
-            dl->AddRectFilled(ImVec2(c.x - cw, c.y - ch), ImVec2(c.x + cw, c.y + ch), u32(hi, 0.92f * fade), cw);
-            if (p2)
-                dl->AddRect(ImVec2(c.x - hw - ew * 2.f, c.y - half - oe * 2.f),
-                            ImVec2(c.x + hw + ew * 2.f, c.y + half + oe * 2.f), u32(kNoteP2, fade),
-                            tall ? rnd : hw + ew * 2.f, 0, ew);
         }
 
         // A word drawn big with a dark outline, its top-left at `at`.
@@ -702,10 +650,10 @@ namespace gucci::ui::pages {
 
         // Which vertices drawLaneBox drew for what, so the overlay can fade
         // the box (fill, border, the verdict's pill) and its content (marker,
-        // bars, caps, notes, the verdict's word) apart.
+        // bars, notes, the verdict's word) apart.
         struct LaneVtx {
             int content0 = 0;  // from the box's fill to here: the box (fill and border)
-            int solid0 = 0;    // bars, flash, marker, then (from here) caps and presses
+            int solid0 = 0;    // bars, flash, marker, then (from here) presses and slider ends
             int pill0 = 0;     // the verdict's pill (the box's)
             int text0 = 0;     // the verdict's word (content)
             int end = 0;
@@ -740,7 +688,7 @@ namespace gucci::ui::pages {
             ImVec2 const hc(hitX, cy);
             float const border = laneBorder(h);
             float const round = std::min(h * 0.14f, 16.f);
-            // Nothing is drawn across the border: every note, cap and bar
+            // Nothing is drawn across the border: every note and bar
             // vertex is kept inside the box's inner edge (3 px inside the
             // border), and they fade out together over the last 5% of the
             // lane, to nothing at that edge (one pass over their vertices,
@@ -759,8 +707,7 @@ namespace gucci::ui::pages {
                               IM_COL32(0, 0, 0, fill * 70 / kFillLevel));
             // The border: light, with a dark line outside it so it shows over
             // a white level too. Drawn before the content: everything else is
-            // kept inside the inner edge, except a cap under a press, which
-            // runs through the border (over it, under the press).
+            // kept inside the inner edge.
             dl->AddRect(ImVec2(p0.x - 1.f, p0.y - 1.f), ImVec2(p1.x + 1.f, p1.y + 1.f), IM_COL32(0, 0, 0, 190),
                         round + 1.f, 0, 2.f);
             dl->AddRect(ImVec2(p0.x + border * 0.5f, p0.y + border * 0.5f),
@@ -800,11 +747,10 @@ namespace gucci::ui::pages {
             }
 
             int const fadeVtx = dl->VtxBuffer.Size;  // bars and notes, kept inside and faded below
-            float const capHw = capWidth(h) * 0.5f;
             float const mt = markerStroke(h);
 
             // 1. The hold bars, each from its press to its release at their
-            // own times (a slider's bar ends square at its cap). Each is split
+            // own times (a slider's bar ends square under its end circle). Each is split
             // where the right end's fade starts, so the fade has a vertex to
             // start from, and its edge is drawn as lines and caps (no seam
             // across it there).
@@ -906,62 +852,32 @@ namespace gucci::ui::pages {
 
             out.solid0 = dl->VtxBuffer.Size;
 
-            // 2. Slider ends: a cap at the release's own time, under every
-            // press (a press nearby draws whole on top of it). A cap whose
-            // middle a press covers runs the box's full height, through the
-            // border, so 12 px of it (at 1080p) shows above and below even a
-            // 3-frame press (round 5's cap stood only 7 px out of one: "the
-            // slider looks like it simply ends at the next note"). One a press
-            // only grazes stands 12 px (9.6% of the lane) out of it.
-            float const capMax = h * 0.5f - border - 2.f;
-            float const peek = std::max(8.f, std::round(h * 0.096f));
-            float const tallL = p0.x + round + capHw + 2.f, tallR = p1.x - round - capHw - 2.f;  // clear of the corners
-            // The tall caps' vertices, kept inside the box's outer edge (not
-            // its inner one) below. A fixed array: no allocation per frame.
-            std::array<std::pair<int, int>, 16> tallVtx{};
-            int nTall = 0;
-            for (size_t i = from; i < to; ++i) {
-                auto const& n = notes[i];
-                auto const& r = results[i];
-                if (n.tail != ln::Note::Tail::Slider || r.released)
-                    continue;
-                float const xb = x(n.releaseSec);
-                if (xb + capHw < inL || xb - capHw > inR)
-                    continue;
-                float half = capHalf(n.releaseTier, h);
-                bool tall = false;
-                for (size_t j = from; j < to; ++j) {
-                    if (results[j].pressed)
-                        continue;
-                    float const pr = outerRadius(notes[j].pressTier, z) + z.edge;
-                    float const dx = std::fabs(x(notes[j].pressSec) - xb);
-                    if (dx < pr)
-                        tall = true;
-                    else if (dx < pr + capHw)
-                        half = std::max(half, std::sqrt(std::max(0.f, pr * pr - (dx - capHw) * (dx - capHw))) + peek);
-                }
-                tall = tall && xb >= tallL && xb <= tallR && nTall < (int)tallVtx.size();
-                half = tall ? h * 0.5f : std::min(half, capMax);
-                float const fade = (r.missed ? 0.32f : 1.f) * leftFade(xb, capHw);
-                int const v0 = dl->VtxBuffer.Size;
-                drawReleaseCap(dl, ImVec2(xb, cy), n.releaseTier, half, z, h, n.player2, fade, tall);
-                if (tall)
-                    tallVtx[nTall++] = {v0, dl->VtxBuffer.Size};
-            }
-
-            // 3. Presses, latest first so the next to hit is on top, each at
-            // its tier's full size; a hit one is gone, as in taiko.
+            // 2. Presses and slider ends, latest first so the next to hit is
+            // on top, each at its tier's full size; a hit one is gone, as in
+            // taiko. A slider ends in the same circle as a press, in its
+            // release window's color and size, at the release's own time
+            // (Juice, 2026-11-20: a slider is two notes joined by its bar; it
+            // ended in an upright cap before). A note's end is drawn before
+            // its own press (a short slider's press covers it) and after the
+            // next note's press: it's let go first, so it sits on top of that
+            // press until then.
             for (size_t j = to; j-- > from;) {
                 auto const& n = notes[j];
                 auto const& r = results[j];
+                float const missFade = r.missed ? 0.32f : 1.f;
+                if (n.tail == ln::Note::Tail::Slider && !r.released) {
+                    float const xb = x(n.releaseSec);
+                    float const rb = outerRadius(n.releaseTier, z);
+                    if (xb + rb >= inL && xb - rb <= inR)
+                        drawHead(dl, ImVec2(xb, cy), n.releaseTier, z, n.player2, missFade * leftFade(xb, rb));
+                }
                 if (r.pressed)
                     continue;
                 float const xa = x(n.pressSec);
                 float const rr = outerRadius(n.pressTier, z);
                 if (xa + rr < inL || xa - rr > inR)
                     continue;
-                float const fade = (r.missed ? 0.32f : 1.f) * leftFade(xa, rr);
-                drawHead(dl, ImVec2(xa, cy), n.pressTier, z, n.player2, fade);
+                drawHead(dl, ImVec2(xa, cy), n.pressTier, z, n.player2, missFade * leftFade(xa, rr));
             }
 
             // Keep everything above inside the box, and fade it at the right
@@ -969,7 +885,6 @@ namespace gucci::ui::pages {
             // from each vertex's own spot, then the spot is pulled in to the
             // inner edge: a big triangle that crossed the edge would
             // otherwise smear color past the border (round 3's leak).
-            int ti = 0;
             for (int vi = fadeVtx; vi < dl->VtxBuffer.Size; ++vi) {
                 ImDrawVert& vx = dl->VtxBuffer.Data[vi];
                 if (vx.pos.x > fadeFrom) {
@@ -977,11 +892,8 @@ namespace gucci::ui::pages {
                     ImU32 const a = (ImU32)(((vx.col >> IM_COL32_A_SHIFT) & 0xFF) * f);
                     vx.col = (vx.col & ~IM_COL32_A_MASK) | (a << IM_COL32_A_SHIFT);
                 }
-                while (ti < nTall && vi >= tallVtx[ti].second)
-                    ++ti;
-                bool const inTall = ti < nTall && vi >= tallVtx[ti].first;
                 vx.pos.x = std::clamp(vx.pos.x, inL, inR);
-                vx.pos.y = inTall ? std::clamp(vx.pos.y, p0.y, p1.y) : std::clamp(vx.pos.y, inT, inB);
+                vx.pos.y = std::clamp(vx.pos.y, inT, inB);
             }
             out.pill0 = out.text0 = dl->VtxBuffer.Size;
 
@@ -1060,7 +972,7 @@ namespace gucci::ui::pages {
             float const sh = 56.f;
             NoteSizes const z = noteSizes(sh);
             auto* dl = ImGui::GetWindowDrawList();
-            enum class Swatch { Press, Cap, Slider, Hold };
+            enum class Swatch { Press, Slider, Hold };
             struct Item {
                 Swatch kind;
                 LTier tier;
@@ -1071,8 +983,8 @@ namespace gucci::ui::pages {
                                   {Swatch::Press, LTier::Three, "3 frames"},
                                   {Swatch::Press, LTier::Wide, "4+ or any"},
                                   {Swatch::Press, LTier::Unknown, "not counted"},
-                                  {Swatch::Cap, LTier::Two, "let go here (a slider's end, its window's color)"},
-                                  {Swatch::Slider, LTier::Two, "thick bar: a slider, the release is judged"},
+                                  {Swatch::Slider, LTier::Two,
+                                   "thick bar: a slider, let go at its end circle (its window's color)"},
                                   {Swatch::Hold, LTier::Unknown, "thin bar: a hold, the release isn't judged"}};
             ImVec2 p = ImGui::GetCursorScreenPos();
             float const startX = p.x;
@@ -1084,7 +996,6 @@ namespace gucci::ui::pages {
                 float halfW = 0.f;  // the swatch's half width
                 switch (it.kind) {
                     case Swatch::Press: halfW = outerRadius(it.tier, z) + z.edge; break;
-                    case Swatch::Cap: halfW = capWidth(sh) * 0.5f + 3.f; break;
                     case Swatch::Slider:
                     case Swatch::Hold: halfW = barLen * 0.5f; break;
                 }
@@ -1097,20 +1008,18 @@ namespace gucci::ui::pages {
                 ImVec2 const c(p.x + halfW + 2.f, y + lineH * 0.5f);
                 switch (it.kind) {
                     case Swatch::Press: drawHead(dl, c, it.tier, z, false, 1.f); break;
-                    case Swatch::Cap:
-                        drawReleaseCap(dl, c, it.tier, capHalf(it.tier, sh), z, sh, false, 1.f);
-                        break;
                     case Swatch::Slider:
                     case Swatch::Hold: {
                         bool const slider = it.kind == Swatch::Slider;
                         float const half = std::round(sh * (slider ? 0.20f : 0.085f));
-                        ImVec2 const a(c.x - halfW, c.y - half), b(c.x + halfW, c.y + half);
+                        // A slider's bar runs into its end circle, drawn over the bar's end.
+                        float const endR = slider ? outerRadius(it.tier, z) + z.edge : 0.f;
+                        ImVec2 const a(c.x - halfW, c.y - half), b(c.x + halfW - endR, c.y + half);
                         dl->AddRectFilled(ImVec2(a.x - 1.f, a.y - 1.f), ImVec2(b.x + 1.f, b.y + 1.f),
                                           IM_COL32(6, 7, 11, 235), half + 1.f);
                         dl->AddRectFilled(a, b, u32(kBarIdle, slider ? 0.85f : 0.7f), half);
                         if (slider)
-                            drawReleaseCap(dl, ImVec2(b.x - capWidth(sh) * 0.5f, c.y), it.tier,
-                                           capHalf(it.tier, sh), z, sh, false, 1.f);
+                            drawHead(dl, ImVec2(b.x, c.y), it.tier, z, false, 1.f);
                         break;
                     }
                 }
@@ -1378,8 +1287,9 @@ namespace gucci::ui::pages {
                                            levelFill(k, ps, p0, p1, place.fill), spot);
             // A player over the box: the box's fill, border and the verdict's
             // pill fade to 30%; the bars, flash and marker to 70% (their dark
-            // lines, every near-black vertex, not at all); the notes, caps and
-            // the word stay as they are, so the tier colors still read.
+            // lines, every near-black vertex, not at all); the notes (presses
+            // and slider ends) and the word stay as they are, so the tier
+            // colors still read.
             if (alpha < 0.999f) {
                 float const t = (1.f - alpha) / (1.f - kInBandAlpha);  // 0 full .. 1 in the band
                 float const contentA = 1.f - t * (1.f - kInBandContentAlpha);
