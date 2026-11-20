@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-19-j (Platformer saves: a full restart with every cheat off clears the cheat lock)"
+    "2026-11-20-a (Editor levels: with safe mode off, a run with a cheat or the bot verifies them again, as before Nov 10)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

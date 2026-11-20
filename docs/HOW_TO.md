@@ -330,7 +330,7 @@ Hitboxes, Show Trajectory and Hitborders while you play count as cheats.
 - **Settings > Safe mode** has **Auto safe mode** and **Green dot when clean** (a green dot in the top-left corner while no cheat is on).
 - If you turn **Auto safe mode** off, a **red dot** shows in the top-left corner while a cheat is on (or was, this attempt). The run counts then, and the dot shows it was cheated.
 - The level's end screen shows the red dot whenever a cheat was on in that attempt, whatever safe mode did **(new in 2.0)**.
-- **Your own editor levels (new in 2.0):** a run with a cheat or the bot on (recording too) never verifies the level, even with **Auto safe mode** off. The end screen says so instead of "Level Verified!". A clean run with safe mode off still verifies.
+- **Your own editor levels:** a run under safe mode never verifies the level, and the end screen says so instead of "Level Verified!". With safe mode off, a run verifies the level as GD does, cheats and the bot included.
 - **Hacks > Gameplay > Safe mode** makes no run count at all, cheat or not.
 
 **Legit only (new in 2.0):** **Hacks > Gameplay > Legit only** turns off everything that counts as a cheat, at once, and keeps it off. Macros can't play or record while it's on, and buttons like Calculate and the Pathfinder's Start are grayed out. Turn it off and your settings come back as they were.
