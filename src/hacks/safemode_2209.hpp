@@ -11,8 +11,10 @@
 //     does it; GD's own speed is otherwise held at 1x, and any speed but 1x is
 //     a cheat;
 //  3. GD's Ignore Damage is a cheat (red dot, safe mode, Legit only);
-//  4. no platformer save is written for a visit to a level with the bot or a
-//     cheat on in it; legit runs save as normal.
+//  4. no platformer save is written for an attempt with the bot or a cheat on
+//     in it; legit runs save as normal. A full restart with every cheat off
+//     starts a clean attempt that saves again; a respawn at a checkpoint
+//     doesn't (Nigel, 2026-11-19; until then the whole visit stayed held).
 // None of it is in the GD 2.2081 file: everything here is behind
 // GB_SAFETY_2209, which is 0 there.
 

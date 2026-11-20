@@ -242,6 +242,24 @@ namespace gucci::gdaddr {
             0x519969, {0x48, 0x8b, 0x86, 0x78, 0x08, 0x00, 0x00, 0xff, 0x80, 0xac, 0x06, 0x00, 0x00},
             "GJGameLevel practice attempts (0x6ac)"};
 
+        // PlayLayer: the platformer checkpoint GD's platformer save is made
+        // from (a CheckpointObject GD holds a reference to). processCheckpoints
+        // (0x513890) puts the one markCheckpoint just made there when a
+        // platformer checkpoint is reached (the call at +0x14a, the store at
+        // +0x32c; never in practice, test mode or one of RobTop's own levels,
+        // +0x280..+0x2a1), and loadPersistentCheckpoint (0x5182b0) the one it
+        // loads; GD's own removeAllCheckpoints (0x517210, a full restart;
+        // GucciBot's hook doesn't call it) and a completion (levelComplete
+        // +0x967) let go of it. Only read, except by a test launch's probe.
+        // PlayLayer::writePersistentSave (0x517f10) +0xc2: `mov r14,
+        // [rbp+0x39f0]; mov [rsp+0x30], r14; test r14, r14` (it saves nothing
+        // when it's empty).
+        inline constexpr uintptr_t kPlSaveCheckpoint = 0x39f0;
+        inline const GuardedSite kCheckSaveCheckpoint{
+            0x517fd2,
+            {0x4c, 0x8b, 0xb5, 0xf0, 0x39, 0x00, 0x00, 0x4c, 0x89, 0x74, 0x24, 0x30, 0x4d, 0x85, 0xf6},
+            "PlayLayer platformer save checkpoint (0x39f0)"};
+
         // GameLevelManager::uploadDeathData (0x2266f0, the bindings' number;
         // TodoReturn there, so it is hooked by address, not through
         // $modify). Its prologue. It reads only `this` (rcx) before it

@@ -27,6 +27,8 @@
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/AchievementManager.hpp>
+#include <Geode/binding/CheckpointGameObject.hpp>
+#include <Geode/binding/CheckpointObject.hpp>
 #include <Geode/binding/GameLevelManager.hpp>
 #include <Geode/binding/GameStatsManager.hpp>
 #include <Geode/binding/PauseLayer.hpp>
@@ -85,6 +87,7 @@ namespace {
         bool flags = false;       // PlayLayer +0x39f9 / +0x39fa
         bool speed = false;       // GJBaseGameLayer +0x3560 and +0x3564
         bool ignoreOff = false;   // the fields resetLevel clears to turn Ignore Damage off
+        bool saveCheckpoint = false;  // PlayLayer +0x39f0, the platformer save's checkpoint
     };
 
     Checks const& checks() {
@@ -93,8 +96,10 @@ namespace {
             c.flags = siteHolds(v2091::kCheckFlags);
             c.speed = siteHolds(v2091::kCheckSpeed) && siteHolds(v2091::kCheckMusicSpeed);
             c.ignoreOff = c.flags && siteHolds(v2091::kCheckIgnoreDamageOff);
-            log::info("[safety 2.2091] byte checks: flags {}, speed {}, Ignore Damage {}", c.flags, c.speed,
-                      c.ignoreOff);
+            c.saveCheckpoint = siteHolds(v2091::kCheckSaveCheckpoint);
+            log::info("[safety 2.2091] byte checks: flags {}, speed {}, Ignore Damage {}, platformer save "
+                      "checkpoint {}",
+                      c.flags, c.speed, c.ignoreOff, c.saveCheckpoint);
             return c;
         }();
         return c;
@@ -123,8 +128,10 @@ namespace {
         int scoresBlocked = 0;
         int achievementsBlocked = 0;
         int platformerSavesBlocked = 0;
+        int platformerSavesPassed = 0;
         int platformerLoadsRefused = 0;
         int journalBlocked = 0;
+        int journalPassed = 0;
         int speedPinned = 0;
     } g_counts;
 
@@ -223,13 +230,14 @@ namespace gucci::safemode {
     std::string probeCounts() {
         auto const& c = g_counts;
         return fmt::format(
-            "checks flags={} speed={} ignoreOff={}; deathsShielded={} playtimeShielded={} deathWritesBlocked={} "
-            "uploadCalls={} uploadsBlocked={} uploadsPassed={} scoresBlocked={} achievementsBlocked={} "
-            "platformerSavesBlocked={} platformerLoadsRefused={} journalBlocked={} speedPinned={}",
-            checks().flags, checks().speed, checks().ignoreOff, c.deathsShielded, c.playtimeShielded,
-            c.deathWritesBlocked, c.uploadCalls, c.uploadsBlocked, c.uploadsPassed, c.scoresBlocked,
-            c.achievementsBlocked, c.platformerSavesBlocked, c.platformerLoadsRefused, c.journalBlocked,
-            c.speedPinned);
+            "checks flags={} speed={} ignoreOff={} saveCheckpoint={}; deathsShielded={} playtimeShielded={} "
+            "deathWritesBlocked={} uploadCalls={} uploadsBlocked={} uploadsPassed={} scoresBlocked={} "
+            "achievementsBlocked={} platformerSavesBlocked={} platformerSavesPassed={} platformerLoadsRefused={} "
+            "journalBlocked={} journalPassed={} speedPinned={}",
+            checks().flags, checks().speed, checks().ignoreOff, checks().saveCheckpoint, c.deathsShielded,
+            c.playtimeShielded, c.deathWritesBlocked, c.uploadCalls, c.uploadsBlocked, c.uploadsPassed,
+            c.scoresBlocked, c.achievementsBlocked, c.platformerSavesBlocked, c.platformerSavesPassed,
+            c.platformerLoadsRefused, c.journalBlocked, c.journalPassed, c.speedPinned);
     }
 
 }  // namespace gucci::safemode
@@ -438,52 +446,120 @@ class $modify(GB2209SafeAchievements, AchievementManager) {
 // GD keeps a platformer level's checkpoints between visits: writePersistentSave
 // (from onQuit, the practice switch, removing checkpoints, and every game save
 // through GameManager / LocalLevelManager::encodeDataTo) and the save journal
-// (GameLevelManager::writePlatformerSaveJournal, from onQuit). None is written
-// for a visit in which the bot or a cheat was on at any point -- not just this
-// attempt, and not just until a full restart. A full restart does take the
-// checkpoints away (resetLevelFromStart -> removeAllCheckpoints), but
-// writePersistentSave also saves state it copies from the layer's +0x968
-// object (+0x370, +0x3b0 and the map at +0x480: 0x518059..0x51814e), and
-// neither resetLevel (it clears that object's +0x3f8 and +0x438 only,
-// 0x519337..0x519351) nor resetLevelFromStart (0x518a50) clears those. So
-// what a cheat collected there could still be saved by a legit run after the
-// restart. I'm fairly sure of this from GD's code; it isn't tested in a game.
-// Leaving the level and coming back starts a visit that saves again. A legit
-// visit saves as normal, with the Safe mode switch on
-// too (Nigel, 2026-11-17: "yes", legit platformer runs keep their progress;
-// only bot or cheat runs don't). Loading a save is refused while GucciBot
-// records or plays: the macro starts the level from its start.
+// (GameLevelManager::writePlatformerSaveJournal, from onQuit). Neither is
+// written while the attempt has had the bot or a cheat on. That is safe mode's
+// attempt mark (hacks/safemode.cpp): a respawn at a checkpoint (practice or
+// platformer) keeps it, and only a reset to the level's start with every cheat
+// off clears it. So a full restart with every cheat off saves again (Nigel,
+// 2026-11-19, on how a player gets back to a legit save without leaving the
+// level); a cheat still on at the restart, or turned on later in that attempt,
+// holds the save again, and so does a macro playing or recording. Before
+// (2026-11-16 to 11-19), one cheat held the saves for the rest of the visit,
+// full restarts included; leaving the level was the only way back.
+//
+// What a full restart keeps. GD's own removeAllCheckpoints lets go of the
+// checkpoint a platformer save is made from (+0x39f0), but GucciBot's
+// (hooks/hook_playlayer.cpp) doesn't call it, so after the restart that is
+// still the last checkpoint the cheated attempt reached, and a quit right
+// after the restart would save it. The save stays held while it's that one:
+// until a checkpoint is reached in a clean attempt, or a completion lets go
+// of it (levelComplete), or the level is left. Read from GD's code
+// (processCheckpoints, writePersistentSave, removeAllCheckpoints).
+//
+// Not covered, and I'm not sure it can be without changing how a level plays:
+// GD keeps a level's persistent items and timers (Item Persistence triggers)
+// through a full restart, by design, and writePersistentSave saves them with
+// the checkpoint (the +0x968 object's +0x370, +0x3b0 and the timers at
+// +0x478: 0x518059..0x51814e; resetLevel clears only its +0x3f8 and +0x438,
+// resetLevelFromStart neither). In a level that uses them, what a cheat
+// changed there before the restart can still reach a later legit save.
+// Leaving the level and coming back has no such gap: the held saves never
+// wrote them.
+//
+// If +0x39f0's byte check fails, the old rule: no save for the rest of the
+// visit once the bot or a cheat was on.
+//
+// A legit run saves as normal, with the Safe mode switch on too (Nigel,
+// 2026-11-17: "yes", legit platformer runs keep their progress; only bot or
+// cheat runs don't). Loading a save is refused while GucciBot records or
+// plays: the macro starts the level from its start.
 class $modify(GB2209PlatformerSave, PlayLayer) {
     struct Fields {
+        // The bot or a cheat was on at some point in this visit (only for
+        // the old rule, when +0x39f0 can't be read).
         bool cheatedVisit = false;
+        // GD's save checkpoint (+0x39f0) as last seen (compared, never
+        // used), and whether it was placed while the attempt had the bot or
+        // a cheat on.
+        void* seenCheckpoint = nullptr;
+        bool checkpointCheated = false;
     };
 
     static void onModify(auto& self) {
         gucci::mcponly::keep(self);
     }
 
-    bool cheatedNow() {
+    // This attempt has had the bot or a cheat on, or has one now. Not
+    // runShielded(): the Safe mode switch (and a test launch's forced safe
+    // mode) shield every run, legit or not, and rule 4 keeps a legit run's
+    // save. A test launch writes none of GD's save files anyway (the
+    // test-save guard, and the journal hook below).
+    bool cheatedAttempt() {
         bool const cheat = live() && (safemode::cheatingNow() || safemode::tainted());
         if (cheat)
             m_fields->cheatedVisit = true;
-        // Not runShielded(): the Safe mode switch (and a test launch's forced
-        // safe mode) shield every run, legit or not, and rule 4 keeps a legit
-        // run's save. A test launch writes none of GD's save files anyway (the
-        // test-save guard, and the journal hook below).
-        return m_fields->cheatedVisit;
+        return cheat;
+    }
+
+    // A save checkpoint that wasn't there at the last look was placed in this
+    // attempt (GD places one at a time, and holds the old one until the new
+    // one is in, so two can't share an address).
+    void watchSaveCheckpoint(bool cheatedAttemptNow) {
+        void* const now = field<void*>(this, v2091::kPlSaveCheckpoint);
+        if (now == m_fields->seenCheckpoint)
+            return;
+        m_fields->seenCheckpoint = now;
+        m_fields->checkpointCheated = now && cheatedAttemptNow;
+    }
+
+    // Would a platformer save be held back right now?
+    bool saveHeld() {
+        bool const attempt = cheatedAttempt();
+        if (!checks().saveCheckpoint)
+            return m_fields->cheatedVisit;
+        watchSaveCheckpoint(attempt);
+        return attempt || m_fields->checkpointCheated;
+    }
+
+    // For the probe: the save checkpoint there now was placed with the bot or
+    // a cheat on.
+    bool saveCheckpointCheated() {
+        (void)saveHeld();
+        return checks().saveCheckpoint && m_fields->checkpointCheated;
     }
 
     void postUpdate(float dt) {
         PlayLayer::postUpdate(dt);
-        (void)cheatedNow();
+        (void)saveHeld();
+    }
+
+    // Looked at before the reset too, while the attempt that placed a new
+    // save checkpoint is still the one whose mark counts.
+    void resetLevel() {
+        (void)saveHeld();
+        PlayLayer::resetLevel();
     }
 
     void writePersistentSave() {
-        if (cheatedNow()) {
+        bool const attempt = cheatedAttempt();
+        if (saveHeld()) {
             ++g_counts.platformerSavesBlocked;
-            note("no platformer save: the bot or a cheat was on in this visit");
+            note(attempt || !checks().saveCheckpoint
+                     ? "no platformer save: the bot or a cheat was on in this attempt"
+                     : "no platformer save: its checkpoint was reached with the bot or a cheat on");
             return;
         }
+        ++g_counts.platformerSavesPassed;
         PlayLayer::writePersistentSave();
     }
 
@@ -500,6 +576,12 @@ class $modify(GB2209PlatformerSave, PlayLayer) {
             return;
         }
         PlayLayer::loadPersistentCheckpoint(save);
+        // The checkpoint GD just loaded is the save's own, not one this visit
+        // placed.
+        if (checks().saveCheckpoint) {
+            m_fields->seenCheckpoint = field<void*>(this, v2091::kPlSaveCheckpoint);
+            m_fields->checkpointCheated = false;
+        }
     }
 };
 
@@ -511,11 +593,12 @@ class $modify(GB2209PlatformerJournal, GameLevelManager) {
     void writePlatformerSaveJournal(GJGameLevel* level) {
         bool hold = safemode::testLaunch();  // a test launch writes none of GD's saves
         if (auto* pl = PlayLayer::get())
-            hold = hold || static_cast<GB2209PlatformerSave*>(pl)->cheatedNow();
+            hold = static_cast<GB2209PlatformerSave*>(pl)->saveHeld() || hold;
         if (hold) {
             ++g_counts.journalBlocked;
             return;
         }
+        ++g_counts.journalPassed;
         GameLevelManager::writePlatformerSaveJournal(level);
     }
 };
@@ -712,9 +795,17 @@ std::string gucci::safemode::probeLevel() {
                                checks().flags && field<bool>(pl, v2091::kPlSpeedChanged), pl->m_isTestMode,
                                safemode::gdOwnCheat(), safemode::tainted(),
                                pl->m_checkpointArray ? pl->m_checkpointArray->count() : 0u);
-        if (pl)
-            // Rule 4: would a platformer save be held back for this visit?
-            out += fmt::format("visitHeld={}; ", static_cast<GB2209PlatformerSave*>(pl)->cheatedNow());
+        if (pl) {
+            // Rule 4: would a platformer save be held back right now, is GD's
+            // save checkpoint there, and was it placed with a cheat on?
+            auto* save = static_cast<GB2209PlatformerSave*>(pl);
+            out += fmt::format("saveHeld={} saveCp={} saveCpCheated={} platformer={} "
+                               "platformerCheckpoints={} practice={}; ",
+                               save->saveHeld(),
+                               checks().saveCheckpoint && field<void*>(pl, v2091::kPlSaveCheckpoint) != nullptr,
+                               save->saveCheckpointCheated(), pl->m_isPlatformer,
+                               GucciEngine::get()->practiceFix.m_platformerCheckpoints.size(), pl->m_isPracticeMode);
+        }
         if (l->m_levelType == GJLevelType::Main)
             out += fmt::format("completedMain={}; ",
                                GameStatsManager::sharedState()->hasCompletedMainLevel(l->m_levelID.value()));
@@ -747,6 +838,13 @@ std::string gucci::safemode::probeLevel() {
 //   gd_speed:<x>       GD's own speed written as its slider would (no GucciBot hook)
 //   ignore_damage      GD's Ignore Damage turned on, as its keybind does
 //   checkpoint         a checkpoint stored where the player is (as practice's)
+//   pcheckpoint:<n>    the level's n-th platformer checkpoint (from 0, in the
+//                      level's object list) activated as touching it does
+//                      (PlayLayer::checkpointActivated); GD's processCheckpoints
+//                      places the checkpoint on the next tick
+//   savecp             GucciBot's newest platformer checkpoint made the one a
+//                      platformer save is written from (+0x39f0), as GD does
+//                      in a level that isn't a main level
 //   respawn            PlayLayer::resetLevel, as a death's respawn calls it
 //   restart            PlayLayer::resetLevelFromStart (the checkpoints go)
 std::string gucci::safemode::probeAction(std::string const& action) {
@@ -846,6 +944,45 @@ std::string gucci::safemode::probeAction(std::string const& action) {
         if (!cp)
             return "no checkpoint made";
         pl->storeCheckpoint(cp);
+        return "";
+    }
+    if (auto n = arg("pcheckpoint:")) {
+        if (!pl->m_isPlatformer)
+            return "not a platformer level";
+        int const want = std::atoi(n->c_str());
+        int seen = 0;
+        CheckpointGameObject* found = nullptr;
+        if (pl->m_objects)
+            for (auto* obj : CCArrayExt<GameObject*>(pl->m_objects))
+                if (auto* cp = typeinfo_cast<CheckpointGameObject*>(obj); cp && seen++ == want) {
+                    found = cp;
+                    break;
+                }
+        if (!found)
+            return fmt::format("the level has {} platformer checkpoints, no number {}", seen, want);
+        pl->checkpointActivated(found);
+        return "";
+    }
+    if (action == "savecp") {
+        // GD's processCheckpoints keeps the checkpoint it just placed at
+        // +0x39f0 (what a platformer save is made from) only in a level that
+        // isn't one of RobTop's (+0x280: `cmp dword [level+0x4c4], 1; je`),
+        // so a test on a main level never gets one. This stores GucciBot's
+        // newest platformer checkpoint there the way processCheckpoints does
+        // (+0x308..+0x32c: the new one retained, the old one released).
+        if (!checks().saveCheckpoint)
+            return "the save checkpoint byte check failed";
+        auto const& placed = GucciEngine::get()->practiceFix.m_platformerCheckpoints;
+        if (placed.empty() || !placed.back().first)
+            return "no platformer checkpoint placed yet (pcheckpoint first)";
+        auto* cp = placed.back().first;
+        auto*& slot = field<CheckpointObject*>(pl, v2091::kPlSaveCheckpoint);
+        if (slot != cp) {
+            cp->retain();
+            if (slot)
+                slot->release();
+            slot = cp;
+        }
         return "";
     }
     if (action == "respawn") {
