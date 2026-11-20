@@ -233,7 +233,7 @@ The Pathfinder finds its own way through a level. It tries moves in a copy of th
 
 1. Open the level.
 2. Go to the **Pathfinder** page.
-3. Set **Engine** to **Search (old)** (that's the default), and **Search** to **Absense** (also the default).
+3. Set **Engine** to **Search** (that's the default), and the **Search** row under it to **Absense** (also the default).
 4. Press **Start**.
 5. Watch. The game pauses now and then while it thinks. When it beats the level, it saves the macro and says **Macro saved as "..."**, on the page too. It's named after the level. **Mode** goes back to what it was before the run, so to replay it or run Calculate on it, click its name in **Saved macros** first (section 4).
 
@@ -245,12 +245,12 @@ In a test on Stereo Madness it took about 2 minutes. Harder levels can take much
 - A run that makes 300 decisions in a row without getting any further stops and says where. It counts the search's own work, not time, so whether a run stops depends much less on how fast or busy your PC is (not entirely: an hour on the clock without getting further also stops a run, and a few spots don't always go the same way from run to run). On a hard spot giving up can take 20 minutes or more, so in a queue a level the search can't beat often uses up its whole time limit.
 - **Remember solutions** (off by default) lets it reuse what got past a spot last time.
 - **Rotate triggers (experimental)** (off by default, Windows only) makes its copy of the game turn rotating blocks the way the game does. On some levels that makes the search slower, so it's off **(new in 2.0)**.
-- The **AI** engine is an early AI: a small network, trained on human play, decides each click. It comes with the mod, so its **Start** works, but it's weak and beats very few levels. Turn on **Practice** and it keeps trying a level: after each death it changes the decision most likely to be the mistake and tries again from just before it. To get a level done, use **Search (old)**.
+- The **AI** engine is an early AI: a small network, trained on human play, decides each click. It comes with the mod, so its **Start** works, but it's weak and beats very few levels. **Practice** (on by default) keeps it trying a level: after each death it changes the decision most likely to be the mistake and tries again from just before it. With **Practice** off it plays alone, and each time it gets further it trains its network on that run (self-training: slow, one level at a time). To get a level done, use **Search**.
 
 How good is it? In Claude's test runs it beat Stereo Madness, Clubstep, Theory of Everything 2, Deadlocked, The Nightmare, Bloodbath, Slaughterhouse and Forest Temple from scratch. It can't beat everything yet: GRIEF, LIMBO, ORBIT and Heliopolis are still out of reach. A Pathfinder run counts as a cheat.
 
 ![The Pathfinder page](images/howto/pathfinder.png)
-*The Pathfinder page, set to Search (old) and Absense, ready to Start.*
+*The Pathfinder page, set to Search and Absense, ready to Start.*
 
 ### Queue: leave it running on a list of levels (new in 2.0)
 
@@ -261,7 +261,7 @@ Juice's idea: give it a list of levels, leave your PC on, and come back to macro
 3. Press **Start**. For each level it downloads it if you don't have it (the way the game does when you open a level), opens it, and lets the Pathfinder's search play it from the start. A win is saved as **"Level name (ID)"**. Otherwise the furthest it got is saved as **"Level name (ID) furthest"**. A name that's taken gets a number (**"Level name (ID) 2"**), so a rerun never replaces an earlier macro. With counting on, Calculate then counts the win's windows and saves them with it.
 4. The table shows each level's result (beaten, or the best %), the time it took, the macro's name and the windows it counted (with L*). Hover a row to see why a level failed. A level that doesn't download is marked and skipped.
 
-It always uses the search (**Search (old)**, Absense), whatever **Engine** says. Safe mode is on from Start until the queue ends; if a level is still open then, it stays on until you leave that level. **Legit only** keeps a queue from starting. If a macro in memory isn't saved, Start asks first (**Start anyway**), since the queue replaces it. If the game closes mid-queue, the results are kept, and next time the card asks **Continue the queue (3 left)?** After a crash, the level that was running gets one more try; a second crash on it marks it failed. Closing the game normally doesn't count as a try.
+It always uses the search (**Search**, Absense), whatever **Engine** says. Safe mode is on from Start until the queue ends; if a level is still open then, it stays on until you leave that level. **Legit only** keeps a queue from starting. If a macro in memory isn't saved, Start asks first (**Start anyway**), since the queue replaces it. If the game closes mid-queue, the results are kept, and next time the card asks **Continue the queue (3 left)?** After a crash, the level that was running gets one more try; a second crash on it marks it failed. Closing the game normally doesn't count as a try.
 
 The **Calculate** page has a queue too: tick saved macros, press **Add the ticked**, then **Start**. Each macro's level is opened (found by the "(ID)" in its name when that level is the one the macro was recorded on, otherwise by the level name it was recorded on), Calculate counts it, and the windows are saved with the macro. A macro whose level isn't on your PC is skipped, with the reason.
 
@@ -382,7 +382,7 @@ In 2.0 the setup check names the file for you.
 
 ### A button is grayed out
 - **Calculate** needs a level open, a macro loaded and **Mode** set to **Play**.
-- The **Pathfinder's Start** needs a level open (and **Engine** set to **Search (old)**).
+- The **Pathfinder's Start** needs a level open.
 - Under **Legit only**, everything that counts as a cheat is grayed out.
 
 ### Where the logs are

@@ -207,7 +207,7 @@ namespace gucci::mcp {
                        {"save_macro", "string", "name of the macro a finished run is saved as (default AI - <level>)"},
                        {"log_practice", "boolean", "write practice logs to AI_ROOT\\practice (default false)"},
                        {"judge", "boolean", "play a finished run in the real game to confirm it (default true)"},
-                       {"practice", "boolean", "use the hand-written practice rules, the page's Practice (default false: the network alone)"},
+                       {"practice", "boolean", "use the hand-written practice rules, like the page's Practice switch (default false here: the network alone; the page's switch is on by default)"},
                        {"temperature", "number", "network alone: sampling temperature of attempts after the first (default 1)"},
                        {"self_train", "boolean", "network alone: train the pilot on its best runs and keep it for the level when its best guess gets further (default true)"},
                        {"level_net", "boolean", "play the level's own trained network when there is one (default true)"}}),

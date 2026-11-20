@@ -2412,8 +2412,8 @@ namespace gucci::ui {
             }
             bool const ready = pilot::ready();
             kit::Hint("An early AI: a small network, trained on human play, decides each click. It's weak and beats "
-                      "very few levels. Practice (below) keeps it trying a level. To get a level done, use Search "
-                      "(old): it's much stronger.");
+                      "very few levels. Practice (below, on by default) keeps it trying a level. To get a level done, "
+                      "use Search: it's much stronger.");
             kit::Note(pilot::weightsLine().c_str(), ready ? Tone::Muted : Tone::Warn);
             int attempts = std::clamp(geode::Mod::get()->getSavedValue<int>("pf_ai_max_attempts", 50000), 1, 1000000);
             int seconds = std::clamp(geode::Mod::get()->getSavedValue<int>("pf_ai_max_seconds", 300), 10, 3600);
@@ -2421,18 +2421,22 @@ namespace gucci::ui {
                 geode::Mod::get()->setSavedValue("pf_ai_max_attempts", attempts);
             if (kit::SliderRow("Time limit", "It stops after this long", &seconds, 10, 3600, "%d s"))
                 geode::Mod::get()->setSavedValue("pf_ai_max_seconds", seconds);
-            bool oldRules = geode::Mod::get()->getSavedValue<bool>("pf_ai_old_practice", false);
-            // 2026-11-19: was "Old practice rules", "For comparison only"; the
-            // same switch and saved value (off by default), named for what it
-            // does now that it's the way the built-in AI finishes a level.
-            if (kit::SwitchRow("Practice", "After each death, hand-written rules change the decision most likely to "
-                               "be the mistake and try again from just before it, keeping what gets further", &oldRules))
-                geode::Mod::get()->setSavedValue("pf_ai_old_practice", oldRules);
-            kit::Hint(oldRules ? "Now: the AI plays, and after each death Practice changes one of its decisions and "
+            // 2026-11-19: was "Old practice rules", "For comparison only",
+            // named for what it does now that it's the way the built-in AI
+            // finishes a level. Build -h (Nigel's call): on by default, under a
+            // new saved key (pilot::practiceOn), since the old one
+            // (pf_ai_old_practice) holds the off Geode wrote into the save.
+            bool practice = pilot::practiceOn();
+            if (kit::SwitchRow("Practice", "On by default. After each death, hand-written rules change the decision "
+                               "most likely to be the mistake and try again from just before it, keeping what gets "
+                               "further. Off: the AI plays alone, and self-training runs",
+                               &practice))
+                pilot::setPracticeOn(practice);
+            kit::Hint(practice ? "Now: the AI plays, and after each death Practice changes one of its decisions and "
                                  "tries again from just before it."
                                : "Now: the AI plays alone. Attempt 1 is its best guess; each later attempt starts "
                                  "over and lets it try its own less likely choices.");
-            kit::Hint(oldRules ? "Self-training is off while Practice is on."
+            kit::Hint(practice ? "Self-training runs only with Practice off, when the AI plays alone."
                                : "Self-training: each time it gets further, it trains its network on that run, and keeps "
                                  "it for this level when its best guess then gets further too (slow; it learns one "
                                  "level at a time).");
@@ -2443,7 +2447,7 @@ namespace gucci::ui {
                     pilot::PlayOptions o;
                     o.maxAttempts = attempts;
                     o.maxSeconds = seconds;
-                    o.practice = oldRules;
+                    o.practice = practice;
                     std::string why;
                     auto job = pilot::makePlay(o, why);
                     if (job) {
@@ -2513,12 +2517,14 @@ namespace gucci::ui {
             bool const anyRun = absense::isRunning() || absense::startPending() || Pathfinder::get()->active ||
                                 aiRunning();
             int brain = gucci::ai::pilot::engineAi() ? 0 : 1;
-            const char* brains[] = {"AI", "Search (old)"};
+            // 2026-11-19 (build -h, Nigel's call): "Search (old)" became just
+            // "Search"; the saved value behind it (pf_engine_ai) is the same.
+            const char* brains[] = {"AI", "Search"};
             ImGui::BeginDisabled(anyRun);
             if (kit::ChoiceRow("Engine",
                                anyRun ? "Stop the run first"
-                                      : "AI: an early, weak AI; a small trained network decides each click. Search "
-                                        "(old): the searches from before the AI, and much stronger",
+                                      : "AI: an early, weak AI; a small trained network decides each click. Search: "
+                                        "the searches from before the AI, and much stronger",
                                &brain, brains, 2))
                 gucci::ai::pilot::setEngineAi(brain == 0);
             ImGui::EndDisabled();

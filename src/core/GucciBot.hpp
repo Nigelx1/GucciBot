@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-19-g (Pathfinder backup plan: when stuck, the look-ahead also clicks the orbs it touches)"
+    "2026-11-19-h (Pathfinder page: Search (old) is now just Search, and the AI's Practice is on by default)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

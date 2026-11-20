@@ -5,6 +5,7 @@
 #include "mcp/test_settings.hpp"
 
 #include "absense/glue.hpp"
+#include "ai/pilot.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/fw_settings_store.hpp"
 #include "analysis/pathfinder.hpp"
@@ -404,6 +405,14 @@ namespace gucci::testset {
                 // The Pathfinder page's engine (AI or Search): read where it's used
                 // (ai/pilot.cpp engineAi), so a test can show the Search's rows.
                 v.push_back(live("pf_engine_ai", LiveType::Bool));
+                // The AI card's Practice (on by default since 2026-11-19, build
+                // -h: a missing key reads as on), through its own getter and
+                // setter for the same reason as exact start flags.
+                v.push_back({"pf_ai_practice", "bool", Store::Live,
+                             [] { return matjson::Value(gucci::ai::pilot::practiceOn()); },
+                             [](matjson::Value const& val, bool) {
+                                 gucci::ai::pilot::setPracticeOn(wantBool("pf_ai_practice", val));
+                             }});
                 // Show the search (on by default: a missing key reads as on), through
                 // its own getter and setter for the same reason as exact start flags.
                 v.push_back({"pf_show_search", "bool", Store::Live,

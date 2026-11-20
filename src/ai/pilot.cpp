@@ -1812,4 +1812,27 @@ namespace gucci::ai::pilot {
         Mod::get()->setSavedValue("pf_engine_ai", on);
     }
 
+    // GucciBot (2026-11-19, build -h): the AI card's Practice switch, on by
+    // default (Nigel's call). Until now it was off by default under
+    // pf_ai_old_practice ("Old practice rules"), and Geode writes a default it
+    // reads into the save, so a save that ever showed the AI card holds that
+    // off. Saved under a new key, as Exact start flags did
+    // (pf_exact_start_flags2, absense/compat/bot.cpp): nothing reads the old
+    // one now.
+    static constexpr const char* kPracticeKey = "pf_ai_practice";
+
+    bool practiceOn() {
+        // A missing key is on. Read without getSavedValue's default, which
+        // would write the key into the save on a mere look.
+        auto const& saved = Mod::get()->getSaveContainerConst();
+        return !saved.contains(kPracticeKey) || saved[kPracticeKey].asBool().unwrapOr(true);
+    }
+
+    void setPracticeOn(bool on) {
+        // Written outright: Geode's setSavedValue writes nothing when the value
+        // equals what the key reads as, and to it a missing key reads as off -
+        // so switching this off before it was ever saved would not stick.
+        Mod::get()->getSaveContainer()[kPracticeKey] = on;
+    }
+
 } // namespace gucci::ai::pilot

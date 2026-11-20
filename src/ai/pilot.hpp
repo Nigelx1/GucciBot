@@ -60,10 +60,12 @@ namespace gucci::ai::pilot {
         std::string saveMacro;      // empty: "AI - <level name>"
         bool logPractice = false;   // write practice logs (AI contract v2 section 6)
         bool judge = true;          // confirm a completed run in the real game
-        // The old hand-written practice rules (comparison only, 2026-11-03).
-        // Off: the network alone plays. Its first attempt is its own best
-        // guess (greedy); later attempts start from the level's start again
-        // and sample from its own odds at `temperature`.
+        // The hand-written practice rules (2026-11-03): the Pathfinder page's
+        // Practice switch, on by default there since 2026-11-19 (practiceOn,
+        // below). False here, so gucci_ai_play without `practice` still plays
+        // the network alone. Off: its first attempt is its own best guess
+        // (greedy); later attempts start from the level's start again and
+        // sample from its own odds at `temperature`.
         bool practice = false;
         double temperature = 1.0;
         // Self-training (2026-11-19), with the network alone: each time a
@@ -100,5 +102,11 @@ namespace gucci::ai::pilot {
     // The Pathfinder page's engine: the AI or the search (the default).
     bool engineAi();
     void setEngineAi(bool on);
+
+    // The AI card's Practice switch (saved under pf_ai_practice; on by
+    // default since 2026-11-19, build -h). Self-training runs only with it
+    // off, when the network plays alone.
+    bool practiceOn();
+    void setPracticeOn(bool on);
 
 } // namespace gucci::ai::pilot
