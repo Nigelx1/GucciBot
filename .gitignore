@@ -41,3 +41,6 @@ __pycache__/
 
 # The Geode 6 (GD 2.2091) build folder
 build-g6/
+
+# Working notes (plans, research, audits, test passes): private, kept out of the public repo (2026-11-20)
+notes/
