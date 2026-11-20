@@ -2774,9 +2774,35 @@ namespace gucci::ui {
             mod->setSavedValue<std::string>("render_pix_fmt", "yuv444p");
             mod->setSavedValue<std::string>("render_video_args",
                                             fmt::format("-preset ultrafast -qp 0 -threads {}", threads));
-            mod->setSavedValue<std::string>("render_file_extension", ".mkv");
+            // .mp4 since 2026-11-20 (Nigel); it was .mkv. FLAC in MP4 needs the
+            // muxer's experimental flag, which the renderer sets for that pair.
+            mod->setSavedValue<std::string>("render_file_extension", ".mp4");
             mod->setSavedValue("render_include_audio", true);
             mod->setSavedValue<std::string>("render_audio_codec", "flac");
+            mod->setSavedValue<double>("render_music_volume", 1.0);
+            mod->setSavedValue<double>("render_sfx_volume", 0.0);
+            mod->setSavedValue<double>("render_trigger_sfx_volume", 1.0);
+            mod->setSavedValue<std::string>("render_seconds_after", "0");
+        }
+
+        // "Basic" (Nigel, 2026-11-20): his everyday render setup, with the
+        // bitrate at 0 so x264 picks the quality itself (its default, CRF 23).
+        // The same keys as Showcase, so one replaces the other cleanly, plus
+        // the bitrate and his fades (none; the default is 1.5 seconds).
+        void applyBasicPreset() {
+            auto* mod = Mod::get();
+            mod->setSavedValue<int64_t>("render_width", 1920);
+            mod->setSavedValue<int64_t>("render_height", 1080);
+            mod->setSavedValue<int64_t>("render_fps", 60);
+            mod->setSavedValue<std::string>("render_codec", "libx264");
+            mod->setSavedValue<std::string>("render_pix_fmt", "yuv420p");
+            mod->setSavedValue<std::string>("render_video_args", "");
+            mod->setSavedValue<std::string>("render_bitrate", "0");
+            mod->setSavedValue<double>("render_fade_in", 0.0);
+            mod->setSavedValue<double>("render_fade_out", 0.0);
+            mod->setSavedValue<std::string>("render_file_extension", ".mp4");
+            mod->setSavedValue("render_include_audio", true);
+            mod->setSavedValue<std::string>("render_audio_codec", "aac");
             mod->setSavedValue<double>("render_music_volume", 1.0);
             mod->setSavedValue<double>("render_sfx_volume", 0.0);
             mod->setSavedValue<double>("render_trigger_sfx_volume", 1.0);
@@ -2790,9 +2816,14 @@ namespace gucci::ui {
             kit::BeginCard("Presets", "Every render setting at once, saved under a name.");
             if (kit::Button("Showcase: 8K60 lossless", Tone::Accent)) {
                 applyShowcasePreset();
-                s_note = "Showcase set: 7680x4320 at 60, lossless x264 in yuv444p (ultrafast), FLAC in MKV, the music "
+                s_note = "Showcase set: 7680x4320 at 60, lossless x264 in yuv444p (ultrafast), FLAC in MP4, the music "
                          "and the level's own sounds, nothing after the end. It's slow, and the files are big: "
                          "about 3.5 GB a minute.";
+            }
+            if (kit::Button("Basic: 1080p60")) {
+                applyBasicPreset();
+                s_note = "Basic set: 1920x1080 at 60, x264 in yuv420p with the bitrate at 0 (x264 picks the quality), "
+                         "AAC in MP4, the music and the level's own sounds, no fades, nothing after the end.";
             }
             kit::RowBegin("Save as", nullptr);
             kit::InputText("presetname", &s_name, "preset name");
@@ -2935,10 +2966,14 @@ namespace gucci::ui {
                 if (kit::SliderRow(label, nullptr, &v, 0.f, most, "%.1f s"))
                     mod->setSavedValue<double>(key, v);
             };
-            auto saveVolume = [&](const char* label, const char* key) {
+            auto saveVolume = [&](const char* label, const char* key, const char* tip = nullptr) {
                 float v = static_cast<float>(mod->getSavedValue<double>(key, 1.0)) * 100.f;
                 if (kit::SliderRow(label, nullptr, &v, 0.f, 100.f, "%.0f%%"))
                     mod->setSavedValue<double>(key, v / 100.0);
+                // Explained on hover (Nigel, 2026-11-20: the two sound sliders
+                // weren't clear).
+                if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    ImGui::SetTooltip("%s", tip);
             };
             auto saveText = [&](const char* label, const char* hint, const char* key, const char* def,
                                 const char* placeholder) {
@@ -2984,7 +3019,10 @@ namespace gucci::ui {
                                    kPixCount))
                     mod->setSavedValue<std::string>("render_pix_fmt", kPixKeys[idx]);
             }
-            saveWhole("Bitrate (Mbps)", nullptr, "render_bitrate", 30, 1, 1000);
+            // 0 (2026-11-20, Nigel): no bitrate, so the encoder picks the
+            // quality itself (x264: its default, CRF 23). -qp or -crf in the
+            // extra options win over any bitrate.
+            saveWhole("Bitrate (Mbps)", "0 lets the encoder pick the quality", "render_bitrate", 30, 0, 1000);
             saveText("File type", nullptr, "render_file_extension", ".mp4", ".mp4");
             // The encoder's own options, as -name value pairs (renderer.cpp
             // parseArgs). An -vf filter is skipped with a log line: there is
@@ -3003,8 +3041,12 @@ namespace gucci::ui {
             saveSwitch("Include audio", nullptr, "render_include_audio", true);
             saveText("Audio codec", nullptr, "render_audio_codec", "aac", "aac");
             saveVolume("Music volume", "render_music_volume");
-            saveVolume("Sound effects volume", "render_sfx_volume");
-            saveVolume("Trigger sound volume", "render_trigger_sfx_volume");
+            saveVolume("Sound effects volume", "render_sfx_volume",
+                       "GD's own game sounds: the death sound, the level complete sound and the like.\n"
+                       "Not the level's own sounds (that's Trigger sound volume) and not click sounds.");
+            saveVolume("Trigger sound volume", "render_trigger_sfx_volume",
+                       "The sounds the level's creator placed with SFX triggers.\n"
+                       "Not GD's own game sounds (that's Sound effects volume).");
             saveSwitch("Separate audio tracks", "Four tracks: everything mixed, then the music, the sound effects and "
                                                 "the frame-window sounds on their own",
                        "render_split_audio_tracks", false);

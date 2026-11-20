@@ -11,6 +11,7 @@
 #include <Geode/binding/GJGameLevel.hpp>
 #include <Geode/binding/ShaderLayer.hpp>
 
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <optional>
@@ -721,6 +722,18 @@ namespace gucci {
             }
         }
 
+        // FLAC in an MP4 (the Showcase preset saves .mp4 since 2026-11-20):
+        // FFmpeg's MP4 muxer has long marked FLAC there as experimental and
+        // refused it unless that's allowed, so it's allowed for exactly that
+        // pair. Nothing else changes compliance. (MOV doesn't take FLAC at
+        // all; that still fails, with FFmpeg's own message.)
+        {
+            std::string ext = out.extension().string();
+            for (auto& c : ext)
+                c = (char)std::tolower((unsigned char)c);
+            if (m_collectAudio && m_settings.m_audioCodec == "flac" && ext == ".mp4")
+                m_formatCtx->strict_std_compliance = -2;  // FF_COMPLIANCE_EXPERIMENTAL
+        }
         if (ff->avio_open(&m_formatCtx->pb, outPath.c_str(), AVIO_FLAG_WRITE) < 0)
             return geode::Err("Failed to open output file");
         if (ff->avformat_write_header(m_formatCtx, nullptr) < 0)
