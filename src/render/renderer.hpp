@@ -212,6 +212,14 @@ namespace gucci {
         // True means the frame was the intro's: drawScene must not advance the
         // game this frame.
         bool tickIntro(PlayLayer* pl);
+        // The level's starting frame (frame 0, before the game has taken a
+        // step), once a render, right after the intro card if there is one.
+        // levelStartDue decides, on the first frame of the level part: true
+        // means drawScene captures it now (captureLevelStart) and doesn't
+        // advance the game this frame. False on every later frame, and for a
+        // render begun mid-level, which gets no extra frame.
+        bool levelStartDue(PlayLayer* pl);
+        void captureLevelStart();
         bool introEnabled() const;
         // This render has played (or is playing) an intro card: fixed when the
         // intro starts, so changing the settings mid-render doesn't change it.
@@ -373,6 +381,13 @@ namespace gucci {
         int m_introIndex = 0;
         int m_introTotal = 0;
         void writeIntroSilence(double seconds);
+
+        // levelStartDue has made its once-a-render decision.
+        bool m_levelStartDecided = false;
+        // 1 when this render captured the level's starting frame, else 0. The
+        // level's clock (m_time) and the video's length count it.
+        int m_levelStartFrames = 0;
+        void writeLevelStartSilence();
 
         uint8_t* m_buffer = nullptr;
         size_t m_bufferSize = 0;

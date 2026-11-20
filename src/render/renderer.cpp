@@ -783,6 +783,8 @@ namespace gucci {
         m_introFinished = false;
         m_introIndex = 0;
         m_introTotal = 0;
+        m_levelStartDecided = false;
+        m_levelStartFrames = 0;
         RenderIntro::get()->destroy();
         m_layer = pl;
         m_layerGen = m_levelGen;
@@ -1152,9 +1154,10 @@ namespace gucci {
         m_lastRender.width = (unsigned)m_settings.m_width;
         m_lastRender.height = (unsigned)m_settings.m_height;
         m_lastRender.fps = (unsigned)m_settings.m_fps;
-        // m_time counts from the level's first frame; the video also has the
-        // intro card in front of it.
-        m_lastRender.duration = m_time + m_introTotal * (double)getDt();
+        // m_time counts the level's stepped frames; the video also has the
+        // intro card in front of them, and the level's starting frame when
+        // the render began at the level's start (levelStartDue).
+        m_lastRender.duration = m_time + (m_introTotal + m_levelStartFrames) * (double)getDt();
         m_lastRender.fileSize = 0;
         std::error_code ec;
         // m_lastRender.path is UTF-8 (start() takes it from u8string()).
@@ -1408,6 +1411,97 @@ namespace gucci {
         return true;
     }
 
+    // Every level frame of a render is captured after the game's step for it
+    // (drawScene: the scheduler update, then update() -> capture()), as in
+    // Silicate. So the video's first level frame was the level one step in
+    // (0.01%), and the level as it stands before anything moves was never in
+    // it (Nigel, 2026-11-20: "my render starts at 0.01%, it should start at
+    // 0.00%"). This captures that frame once, at level time 0, without
+    // stepping the game; drawScene carries on as before from the next frame,
+    // whose level time is dt as it always was.
+    //
+    // Only when the render begins at the level's start: GucciBot's frame
+    // counter is still 0 (no tick has run since the level's start or a
+    // restart from it). A render begun mid-level, or at a checkpoint, starts
+    // where it starts, with no extra frame. drawScene draws anticroom's
+    // frame-window HUD between the two calls: it is drawn on each tick, and
+    // none has run yet at frame 0.
+    bool SLRenderer::levelStartDue(PlayLayer* pl) {
+        if (m_levelStartDecided || !this->isRecording())
+            return false;
+        m_levelStartDecided = true;
+
+        uint32_t const frame = GucciEngine::get()->updater.getFrame();
+        if (frame != 0 || pl->m_hasCompletedLevel || pl->m_playerDied) {
+            geode::log::info("[GucciBot] Render: began mid-level (frame {}), so the video starts there", frame);
+            return false;
+        }
+        return true;
+    }
+
+    void SLRenderer::captureLevelStart() {
+        m_levelStartFrames = 1;
+        m_time = 0.0;
+        // The fade-in at level time 0 (update()'s formula with m_time 0 and
+        // no fade-out yet).
+        m_fadeThreshold = m_settings.m_fadeInTime == 0.0 ? 1.f : 0.f;
+        this->writeLevelStartSilence();
+        m_updateIndex++;
+        this->capture();
+        geode::log::info("[GucciBot] Render: the video starts on the level's first frame (frame 0)");
+    }
+
+    // The starting frame's dt of sound: silence, written straight to each
+    // track (as the intro's is), with FMOD not pumped. The recorders' clocks
+    // pace FMOD's mixing (audio_hook.cpp), and they never see this, so the
+    // level's audio comes out sample for sample as it did without the
+    // starting frame, just dt later -- as its picture is. Every sound keeps
+    // the frame it had relative to the action. Pumping FMOD for this frame
+    // instead would move a song that is already playing at frame 0 a frame
+    // earlier against the action, while the clicks stayed where they were.
+    // Silence fed through a recorder wouldn't do either: its clock only
+    // counts whole blocks, so the part-block left over would push every
+    // sound after it a frame later against the picture.
+    void SLRenderer::writeLevelStartSilence() {
+        if (!m_collectAudio || m_audioTracks.empty())
+            return;
+        if (m_sampleRate <= 0 || m_channels <= 0)
+            return;
+
+        int const samples = (int)std::round((double)this->getDt() * m_sampleRate);
+        if (samples <= 0)
+            return;
+
+        AudioRecorder* const recorders[] = {
+            AudioRecorder::get(),
+            AudioRecorder::getMusic(),
+            AudioRecorder::getSfx(),
+            AudioRecorder::getFrameWindow(),
+        };
+        size_t const tracks =
+            std::min(m_audioTracks.size(), (size_t)(m_settings.m_splitAudioTracks ? 4 : 1));
+
+        std::vector<float> silence;
+        for (size_t t = 0; t < tracks; t++) {
+            // A track's first write sets where it starts; this is where the
+            // recorder would have started it (the intro's silence, if any,
+            // came first and set it already).
+            uint64_t const pts = (uint64_t)recorders[t]->m_index * kAudioBlockSamples;
+            // writeAudio takes at most a block at a time.
+            for (int left = samples; left > 0;) {
+                int const n = std::min(left, kAudioBlockSamples);
+                silence.assign((size_t)n * m_channels, 0.f);
+                auto ret = this->writeAudio(silence, pts, (int)t);
+                if (ret.isErr()) {
+                    geode::log::error("[GucciBot] Failed to write the starting frame's silence (track {}): {}",
+                                      t, ret.unwrapErr());
+                    return;
+                }
+                left -= n;
+            }
+        }
+    }
+
     void SLRenderer::update(PlayLayer* pl) {
         if (!this->isRecording())
             return;
@@ -1416,8 +1510,10 @@ namespace gucci {
             return;
 
         // Intro frames used update indices too (they are the start of the
-        // video), but the level's clock starts after them.
-        m_time = (++m_updateIndex - m_introTotal) * this->getDt();
+        // video), but the level's clock starts after them. The level's
+        // starting frame, when there is one, is level time 0, so the first
+        // frame after it is dt, as the first frame of a render without it.
+        m_time = (++m_updateIndex - m_introTotal - m_levelStartFrames) * this->getDt();
 
         // When the level is done. A macro that is playing back may hold this
         // for a moment, as Silicate's renderer does: inputs it still has at or

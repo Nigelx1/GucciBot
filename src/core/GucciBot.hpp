@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-20-a (Editor levels: with safe mode off, a run with a cheat or the bot verifies them again, as before Nov 10)"
+    "2026-11-20-b (Renders start on the level's first frame (0.00%))"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

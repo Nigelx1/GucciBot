@@ -1223,6 +1223,21 @@ class $modify(GB7CCDirector, CCDirector) {
                 gb->updater.runFrozenTick();
                 return;
             }
+            // Then, once, the level's starting frame (frame 0, 0.00%), also
+            // with the game held still -- only for a render that began at
+            // the level's start (SLRenderer::levelStartDue). anticroom's
+            // markers and HUD are drawn on each tick (tickSettledWork), and
+            // none has run yet at frame 0, so they're drawn for it here: the
+            // video's first frame has them, as every frame after it does.
+            if (sl->levelStartDue(pl)) {
+                ::Bot::get()->frameWindow().render(pl);
+                sl->captureLevelStart();
+                sl->displayPreview();
+                ++m_uTotalFrames;  // as the intro's frame above
+                this->m_pobOpenGLView->swapBuffers();
+                gb->updater.runFrozenTick();
+                return;
+            }
             if (!m_bPaused)
                 m_pScheduler->update(dt);
             if (m_pNextScene)
