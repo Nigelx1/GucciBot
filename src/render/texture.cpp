@@ -95,7 +95,17 @@ namespace gucci {
 
         glBindVertexArray(0);
 
-        glBindTexture(GL_TEXTURE_2D, 0);
+        // Leave GL as cocos2d expects it. Its sprites draw from arrays in
+        // memory, so a vertex buffer left bound here turned the next sprite's
+        // vertices into offsets into the quad's buffer: with "Start from the
+        // beginning" this setup runs mid-frame right before frame 0 is taken,
+        // and the background (the first sprite drawn) came out black (test
+        // copy 2026-11-20: frame 0 black, frame 1 right; "Render the next
+        // level I open" sets up during the level's loading, so other drawing
+        // put the binding back first). The texture goes through cocos2d's
+        // bind, so its cache of what's bound stays true.
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        ccGLBindTexture2D(0);
         glBindFramebuffer(GL_FRAMEBUFFER, m_old_fbo);
 
 #ifdef SILICATE_PROTECT

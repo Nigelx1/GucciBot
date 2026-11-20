@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-20-f (Sound sliders explain themselves on hover, Showcase size note fixed)"
+    "2026-11-20-g (Start from the beginning renders: no black frame 0)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
