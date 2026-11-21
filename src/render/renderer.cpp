@@ -1453,6 +1453,19 @@ namespace gucci {
     }
 
     void SLRenderer::captureLevelStart() {
+        // Sounds GD started before the render did ring on into it at full
+        // volume: the game-sound volume (0% in Showcase) is applied as a
+        // sound starts (audio_hook.cpp), so it never reached them. Opening a
+        // level through its Play button left that button's whoosh in the
+        // first second of the render (Nigel, 2026-11-20). At the level's
+        // start nothing of the level's own is playing yet (its music is on
+        // its own channel, which this leaves alone), so stopping every sound
+        // effect here only takes those leftovers: the whoosh, or the last
+        // attempt's death sound after Start from the beginning. A render
+        // begun mid-level doesn't come here, and keeps its sounds.
+        if (m_collectAudio)
+            if (auto* fmod = FMODAudioEngine::sharedEngine())
+                fmod->stopAllEffects();
         m_levelStartFrames = 1;
         m_time = 0.0;
         // The fade-in at level time 0 (update()'s formula with m_time 0 and
