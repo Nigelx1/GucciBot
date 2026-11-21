@@ -15,7 +15,7 @@ The newest release is **2.0.0**. It comes as **two files on the same release**, 
 | Your game | Your Geode | Download | Runs on |
 |---|---|---|---|
 | **GD 2.2081** | **Geode 5.10.1** or a later 5.x | `nigelx1.guccibot2208.geode` | Windows, Mac (Apple silicon and Intel), iPhone, iPad and Android (32- and 64-bit) |
-| **GD 2.2091** | **Geode 6.0.0-alpha.2**, exactly that version | `nigelx1.guccibot2209.geode` (preview) | Windows only, for now |
+| **GD 2.2091** | **Geode 6.0.0-beta.1** or a later Geode 6 | `nigelx1.guccibot2209.geode` (preview) | Windows only, for now |
 
 The number in each name is the GD version it's for: **2208** is GD 2.2081, **2209** is GD 2.2091. Each file is about 250 MB, since the renderer, the music and the JMF Trainer's video ride along.
 
@@ -25,10 +25,10 @@ Geode tells you both.
 
 - **Your Geode:** open Geode's mod list. Geode itself is in the list of installed mods, with its version under its name.
   - **Geode 5** (5.10.1 or later) means GD 2.2081: take the **2208** file (`nigelx1.guccibot2208.geode`).
-  - **Geode 6.0.0-alpha.2** means GD 2.2091: take the **2209** file (`nigelx1.guccibot2209.geode`).
-  - Any other Geode 6 version: the preview won't load on it yet. It's built for alpha.2 only, and a new file follows when Geode 6 moves on.
+  - **Geode 6** (6.0.0-beta.1 or later) means GD 2.2091: take the **2209** file (`nigelx1.guccibot2209.geode`).
+  - A Geode 6 alpha: the preview won't load on it. Update Geode to the newest Geode 6 first.
 - **Your GD:** open the `geode/logs` folder in the game's folder (next to `geode/mods`) and open the newest log. Near the top, Geode writes a line like `Running Geode v5.10.1 in Geometry Dash v2.2081 on Windows`. The number after "Geometry Dash v" is your GD version.
-- **If that line says "forward compatibility mode"**, your game updated to 2.2091 but your Geode is still Geode 5. Neither GucciBot file loads like that. Install [Geode 6.0.0-alpha.2](https://github.com/geode-sdk/geode/releases/tag/v6.0.0-alpha.2) (its Windows installer is on that page) and take the 2209 file, or play on GD 2.2081 with Geode 5 and take the 2208 file.
+- **If that line says "forward compatibility mode"**, your game updated to 2.2091 but your Geode is still Geode 5. Neither GucciBot file loads like that. Install [Geode 6](https://github.com/geode-sdk/geode/releases) (6.0.0-beta.1 or newer; the Windows installer is on its release page) and take the 2209 file, or play on GD 2.2081 with Geode 5 and take the 2208 file.
 
 ### Install
 
