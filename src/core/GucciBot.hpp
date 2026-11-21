@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-20-g (Start from the beginning renders: no black frame 0)"
+    "2026-11-20-h (2.2091 file built for Geode 6.0.0-beta.1)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

@@ -17,8 +17,8 @@ name: GD 2.2091 build (Geode 6, Windows preview)
 #   as the 2.2081 workflow (master pinned those in 2026-11-17-c;
 #   docs/CI_2209.md).
 #
-# The bindings come from CMakeLists.txt (commit 7a670e9, the one Geode
-# 6.0.0-alpha.2 came out with, plus patches/bindings-g6-copyable-renames.patch).
+# The bindings come from CMakeLists.txt (commit 78d5bb4, the one Geode
+# 6.0.0-beta.1 came out with, plus patches/bindings-g6-copyable-renames.patch).
 # No bindings-ref here on purpose: with one, the action checks out unpatched
 # bindings and sets GEODE_BINDINGS_REPO_PATH, which skips the patch.
 
@@ -88,13 +88,15 @@ jobs:
           rm -f msvc-check.cpp msvc-check.obj
 
       # Pinned: build-geode-mod at 61a56c6 (2026-11-03, main on 2026-11-16),
-      # Geode SDK 6.0.0-alpha.2 (the tag), Geode CLI v4.0.1 (Geode 6 needs
-      # CLI 4). The action still pulls geode-sdk/cli's setup action at @main
-      # inside itself; that one can't be pinned from here.
+      # Geode SDK 6.0.0-beta.1 (the tag; alpha.2 until 2026-11-20, but a beta
+      # loader refuses a mod built for an alpha, while a build for beta.1
+      # loads on later betas and on 6.0.0 itself), Geode CLI v4.0.1 (Geode 6
+      # needs CLI 4). The action still pulls geode-sdk/cli's setup action at
+      # @main inside itself; that one can't be pinned from here.
       - uses: geode-sdk/build-geode-mod@61a56c697aea9655e3f31c6c1b83870431f30434
         id: build
         with:
-          sdk: 6.0.0-alpha.2
+          sdk: 6.0.0-beta.1
           cli: v4.0.1
           target: Win64
 
@@ -116,7 +118,7 @@ jobs:
           fi
 
       # The package has to be complete and say what it's for before anyone
-      # gets it: the binary, the seven DLLs, mod.json for Geode 6.0.0-alpha.2
+      # gets it: the binary, the seven DLLs, mod.json for Geode 6.0.0-beta.1
       # and GD 2.2091 on Windows only, and an about.md that doesn't claim
       # 2.2081. Then it's renamed nigelx1.guccibot2209.geode, the release file's name.
       - name: Check and name the package
@@ -145,8 +147,8 @@ jobs:
           if other:
               sys.exit("a Windows-only package holds other platforms' binaries: " + ", ".join(other))
           mod = json.loads(z.read("mod.json"))
-          if mod.get("geode") != "6.0.0-alpha.2":
-              sys.exit(f"mod.json says geode {mod.get('geode')!r}, not 6.0.0-alpha.2")
+          if mod.get("geode") != "6.0.0-beta.1":
+              sys.exit(f"mod.json says geode {mod.get('geode')!r}, not 6.0.0-beta.1")
           if mod.get("gd") != {"win": "2.2091"}:
               sys.exit(f"mod.json says gd {mod.get('gd')!r}, not {{'win': '2.2091'}}")
           about = z.read("about.md").decode("utf-8")

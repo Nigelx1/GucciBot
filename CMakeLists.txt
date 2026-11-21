@@ -55,8 +55,10 @@ if(GB_GEODE_MAJOR GREATER_EQUAL 6)
     if(NOT WIN32)
         message(FATAL_ERROR "GucciBot's Geode 6 (GD 2.2091) build is Windows only for now")
     endif()
-    # The bindings commit Geode 6.0.0-alpha.2 came out with (2026-11-14).
-    set(GB_BINDINGS_COMMIT 7a670e953f63de379722215b8d2fa4d95e1e3f75)
+    # The bindings commit Geode 6.0.0-beta.1 came out with: the last on main
+    # before its release (2026-11-20 23:03 UTC). It was alpha.2's 7a670e9
+    # until then; Geode's beta loader refuses a mod built for an alpha.
+    set(GB_BINDINGS_COMMIT 78d5bb4eb0732dd636ae16d4dcf6e5ce84ec1221)
     # Its codegen keeps a renamed member's old name as a union with the new
     # one, and a union holding a CCPoint can't be copied, so GJGameState
     # couldn't be either (practice checkpoints and the path preview copy it).
