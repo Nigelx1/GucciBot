@@ -3234,18 +3234,42 @@ namespace gucci::ui {
             }
             kit::EndCard();
 
-            // The theme is picked on the Themes page (this card had a second
-            // picker for it), or here while disguised: GBot takes the Themes
-            // page out of the sidebar. Its cards go between these, never inside
-            // one, under an id of their own: the editor has a "Look" card too.
-            if (disguised()) {
-                ImGui::PushID("themes");
-                pages::themes();
-                ImGui::PopID();
-            }
             // Saved as they change, as everything else here is: they were only
             // saved when the menu closed, so a crash before that lost them.
             kit::BeginCard("Look", nullptr);
+            // The theme is picked on the Themes page, or here while disguised:
+            // GBot takes the Themes page out of the sidebar. A plain dropdown
+            // here (Nigel, 2026-11-22: the whole Themes page drawn here was too
+            // much for GBot's plain look); picking works as a tile's click
+            // does (pages/themes.cpp). Custom themes are made and edited on the
+            // Themes page, back in the sidebar with any other theme.
+            if (disguised()) {
+                auto const& builtinList = themes::builtins();
+                auto const& customList = themes::customs();
+                std::vector<const char*> names;
+                names.reserve(builtinList.size() + customList.size());
+                int current = 0;
+                for (auto const& t : builtinList) {
+                    if (themes::activeId() == t.id)
+                        current = static_cast<int>(names.size());
+                    names.push_back(t.name.c_str());
+                }
+                for (auto const& t : customList) {
+                    if (themes::activeId() == kCustomThemeId && themes::activeCustomName() == t.name)
+                        current = static_cast<int>(names.size());
+                    names.push_back(t.name.c_str());
+                }
+                int pick = current;
+                if (kit::DropdownRow("Theme", nullptr, &pick, names.data(), static_cast<int>(names.size())) &&
+                    pick != current) {
+                    endTestTheme();
+                    if (pick < static_cast<int>(builtinList.size()))
+                        themes::setActive(builtinList[static_cast<size_t>(pick)].id);
+                    else
+                        themes::setActiveCustom(customList[static_cast<size_t>(pick) - builtinList.size()].name);
+                    saveSettings();
+                }
+            }
             if (kit::SliderRow("Text size", nullptr, &look().textScale, 0.8f, 1.4f, "%.2fx"))
                 saveSettings();
             {

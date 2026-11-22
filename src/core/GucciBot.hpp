@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-22-a (Explicit content switch, off by default)"
+    "2026-11-22-b (GBot picks its theme from a plain dropdown)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
