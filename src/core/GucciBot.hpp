@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-22-e (slope log stops at 50 MB a launch)"
+    "2026-11-22-f (Calculate keeps the level name when you leave mid-run)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

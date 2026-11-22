@@ -1708,6 +1708,9 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     // input again replaces it, with what it saw itself (finish).
     m_gdIgnoreDamage = gdIgnoreDamage;
     m_gdIgnoreDamageSeen = false;
+    m_runLevelName.clear();
+    if (auto* pl = PlayLayer::get(); pl && pl->m_level)
+        m_runLevelName = pl->m_level->m_levelName;
 
     m_sweep = std::clamp(m_sweepRange->inner(), 1, MAX_SWEEP);
     m_maxWin = std::max(0, m_maxWindow->inner());
@@ -8101,6 +8104,8 @@ bool FrameWindowAnalyzer::writeResults(std::filesystem::path const& path,
 
     if (auto* pl = PlayLayer::get(); pl && pl->m_level)
         out.level = pl->m_level->m_levelName;
+    else
+        out.level = m_runLevelName;  // stopped by leaving the level: the one it ran in
     out.replay = Bot::get()->replaySystem().m_replayName;
 
     out.marks.reserve(marks.size());

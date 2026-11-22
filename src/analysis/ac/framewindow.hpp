@@ -1132,6 +1132,10 @@ class FrameWindowAnalyzer {
     bool m_olderP2Count = false;          // see olderP2Count()
     bool m_gdIgnoreDamage = false;        // see gdIgnoreDamage()
     bool m_gdIgnoreDamageSeen = false;    // Ignore Damage seen by the running run
+    // The level the running run started in (GucciBot, 2026-11-22): a run
+    // stopped by leaving the level writes its results after the level is
+    // gone, and its .fwac had no level name.
+    std::string m_runLevelName;
     // This run counts every input again from some point on: a whole run, or
     // a Continue past a recountFrom mark (m_recountOld is its old windows).
     bool m_recounting = false;
