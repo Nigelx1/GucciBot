@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-22-c (Icon hack toggle)"
+    "2026-11-22-d (Trainer Classic bar: 2-player presses count only on their own player)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
@@ -1090,11 +1090,15 @@ namespace gucci {
         // signed frame delta (negative = early) for display, or nullopt if
         // every interval of the requested kind is already answered (a real
         // miss with nothing left to compare against).
+        // flag2 (one per interval, or null): in a 2-player level only the
+        // intervals whose stored player flag is wantFlag2 can answer.
         std::optional<int> scoreRealClick(const std::vector<std::pair<double, double>>& intervals,
                                           ClickIndicatorScore& score,
                                           double clickTimeSec,
                                           bool isPress,
-                                          double tps);
+                                          double tps,
+                                          const std::vector<uint8_t>* flag2 = nullptr,
+                                          bool wantFlag2 = false);
 
         bool layoutMode = false;
         bool noMirrorEffect = false;

@@ -1082,15 +1082,21 @@ namespace gucci {
                                                    ClickIndicatorScore& score,
                                                    double clickTimeSec,
                                                    bool isPress,
-                                                   double tps) {
+                                                   double tps,
+                                                   const std::vector<uint8_t>* flag2,
+                                                   bool wantFlag2) {
         if (score.answeredPress.size() != intervals.size())
             score.reset(intervals.size());
 
         auto& answered = isPress ? score.answeredPress : score.answeredRelease;
+        bool const perPlayer = flag2 && flag2->size() == intervals.size();
         double best = 0.0;
         int bestIdx = -1;
         for (size_t i = 0; i < intervals.size(); i++) {
             if (answered[i])
+                continue;
+            // The other player's click (2-player level; trainer_core's record).
+            if (perPlayer && ((*flag2)[i] != 0) != wantFlag2)
                 continue;
             double target = isPress ? intervals[i].first : intervals[i].second;
             double d = clickTimeSec - target;

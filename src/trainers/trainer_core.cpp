@@ -128,8 +128,28 @@ namespace gucci::trainers {
         void record(Kind k, bool down, double atSec, double tps, bool player2 = false) {
             auto s = state(k);
             (down ? s.myPresses : s.myReleases).push_back(atSec);
-            if (!s.macro.clickIntervalsSec.empty())
-                GucciEngine::get()->scoreRealClick(s.macro.clickIntervalsSec, s.score, atSec, down, tps);
+            if (!s.macro.clickIntervalsSec.empty()) {
+                // GucciBot (2026-11-22): in a 2-player level the Classic bar's
+                // tally matches a press only to its own player's clicks, as the
+                // lane does since 2026-11-19-a (lane.cpp onInput): each player
+                // was scored on the other's clicks. `player2` is the player the
+                // click moved; a click's stored flag names its player, flipped
+                // in a 2-player platformer with Flip 2-Player Controls on
+                // (flagMovesPlayer2). A 1-player level, and the bar away from
+                // the level, match any click, as before.
+                std::vector<uint8_t> flag2;
+                bool wantFlag2 = false;
+                auto* pl = followsLevel(k) ? PlayLayer::get() : nullptr;
+                bool const twoPlayer = pl && pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+                if (twoPlayer && s.macro.clicks.size() == s.macro.clickIntervalsSec.size()) {
+                    flag2.reserve(s.macro.clicks.size());
+                    for (auto const& c : s.macro.clicks)
+                        flag2.push_back(c.player2 ? 1 : 0);
+                    wantFlag2 = player2 != GucciEngine::get()->replay.flagMovesPlayer2(pl, false);
+                }
+                GucciEngine::get()->scoreRealClick(s.macro.clickIntervalsSec, s.score, atSec, down, tps,
+                                                   flag2.empty() ? nullptr : &flag2, wantFlag2);
+            }
             // The lane judges it too, against the note it answers (trainers/lane.hpp).
             lane::onInput(k, down, atSec, tps, player2);
         }
