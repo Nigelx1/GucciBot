@@ -198,6 +198,7 @@ namespace gucci::testset {
                                         [e]() -> float& { return e()->hackAutoRetryDelay; }));
                 v.push_back(engineBool("hack_hide_percentage", [e]() -> bool& { return e()->hackHidePercentage; }));
                 v.push_back(engineBool("hack_no_flash", [e]() -> bool& { return e()->hackNoSpikeFlash; }));
+                v.push_back(engineBool("hack_icon_hack", [e]() -> bool& { return e()->hackIconHack; }));
                 v.push_back(engineBool("ind_enabled", [e]() -> bool& { return e()->survivalIndicator; }));
                 // RNG lock and its seed, saved by their rows since 2026-11-15.
                 v.push_back(engineBool("hack_rng_lock", [e]() -> bool& { return e()->rngLocked; }));

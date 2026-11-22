@@ -123,6 +123,7 @@ namespace gucci::ui {
             {"hack_hide_attempts", &GucciEngine::hackHideAttempts},
             {"hack_hide_percentage", &GucciEngine::hackHidePercentage},
             {"hack_no_flash", &GucciEngine::hackNoSpikeFlash},
+            {"hack_icon_hack", &GucciEngine::hackIconHack},
             {"hack_auto_retry", &GucciEngine::hackAutoRetry},
             {"hack_respawn_instant", &GucciEngine::hackRespawnInstant},
             {"hack_safe_mode", &GucciEngine::protectedMode},
@@ -2211,6 +2212,11 @@ namespace gucci::ui {
             engineSwitch("Hide attempts", nullptr, &gb->hackHideAttempts, "hack_hide_attempts");
             engineSwitch("Hide percentage", nullptr, &gb->hackHidePercentage, "hack_hide_percentage");
             engineSwitch("No death flash", nullptr, &gb->hackNoSpikeFlash, "hack_no_flash");
+            // Only looks, so engineSwitch, not cheatSwitch (Nigel, 2026-11-21).
+            engineSwitch("Icon hack",
+                         "Every icon, color, trail, death effect and ship fire is yours to pick while it's on. Only "
+                         "looks: nothing else unlocks",
+                         &gb->hackIconHack, "hack_icon_hack");
             cheatSwitch("Practice range", "Shows the loaded macro's clicks near you in the level",
                         &gb->practiceRangeEnabled, "practice_range");
             cheatSwitch("Macro path", "Draws the loaded macro's path and its clicks in the level", &gb->showMacroPath,

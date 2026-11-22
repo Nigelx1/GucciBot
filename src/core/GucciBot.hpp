@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-22-b (GBot picks its theme from a plain dropdown)"
+    "2026-11-22-c (Icon hack toggle)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
@@ -866,6 +866,9 @@ namespace gucci {
         bool hackHideAttempts = false;
         bool hackHidePercentage = false;
         bool hackNoSpikeFlash = false;
+        // Icon hack (hacks/icon_hack.cpp): every icon, color and garage item
+        // usable while on. Only looks, so not a cheat.
+        bool hackIconHack = false;
         bool hackAutoRetry = false;
         float hackAutoRetryDelay = 0.5f;
         bool hackRespawnInstant = false;
