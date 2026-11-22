@@ -490,6 +490,28 @@ namespace gucci::ui {
         return themes::audio(themes::active());
     }
 
+    // Read every frame (themes::builtins), so kept here once read; saved the
+    // moment it changes.
+    static int g_explicitContent = -1;  // -1: not read yet
+    bool explicitContent() {
+        if (g_explicitContent < 0)
+            g_explicitContent = Mod::get()->getSavedValue<bool>("explicit_content", false) ? 1 : 0;
+        return g_explicitContent == 1;
+    }
+
+    void setExplicitContent(bool on) {
+        g_explicitContent = on ? 1 : 0;
+        Mod::get()->setSavedValue("explicit_content", on);
+        // A drop that's playing starts over, so it picks its song again: off,
+        // a theme's own song stops, and a track the user put in the BIG BRRRR
+        // folder keeps playing (start() finds nothing else and switches off).
+        auto* brrr = BigBrrrManager::get();
+        if (brrr->enabled) {
+            brrr->setEnabled(false);
+            brrr->setEnabled(true);
+        }
+    }
+
     namespace detail {
         int* captureTarget() {
             return g_captureTarget;
@@ -3261,6 +3283,17 @@ namespace gucci::ui {
                                              "SolarBot's Janet glows, BrrrBot's snow falls",
                                &look().effects))
                 saveSettings();
+            // Explicit content (Nigel, 2026-11-22), off by default: the themes'
+            // songs and their few explicit lines (ui.hpp). Not shown while
+            // disguised: GBot has no songs and names no themes.
+            if (!disguised()) {
+                bool explicitOn = explicitContent();
+                if (kit::SwitchRow("Explicit content",
+                                   "Turns on the themes' songs, which have explicit lyrics, and their suggestive "
+                                   "jokes and quotes. Words and music only, nothing graphic",
+                                   &explicitOn))
+                    setExplicitContent(explicitOn);
+            }
             bool compact = g_compact;
             if (kit::SwitchRow("Compact mode", "A small quick-controls window instead of this one", &compact))
                 setCompactMode(compact);
@@ -3380,7 +3413,13 @@ namespace gucci::ui {
             } else {
                 auto* brrr = BigBrrrManager::get();
                 bool brrrOn = brrr->enabled;
-                if (kit::SwitchRow("BIG BRRRR", nullptr, &brrrOn))
+                // With Explicit content off no theme's own song plays (bigbrrr.cpp
+                // start), so the switch says why nothing does.
+                if (kit::SwitchRow("BIG BRRRR",
+                                   explicitContent() ? nullptr
+                                                     : "The themes' songs play with Explicit content on (Look, above). A "
+                                                       "track in the BIG BRRRR folder plays either way",
+                                   &brrrOn))
                     brrr->setEnabled(brrrOn);
                 // GucciBot (2026-10-23): Shake and Flicker are saved (they reset at
                 // every launch); the switch itself stays per launch, as it starts

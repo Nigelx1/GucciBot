@@ -171,6 +171,8 @@ Real click-timing feedback, and a synced video-review overlay on both trainers:
 
 ## Themes
 
+**Explicit content (off by default).** Some themes come with songs that have explicit lyrics, plus jokes and quotes to match. All of it stays off until you turn on **Explicit content** in Settings. It's suggestive lyrics and material, nothing graphic.
+
 | Theme | Extension | Colors |
 |---|---|---|
 | GucciBot | `.brrr` | Gold |

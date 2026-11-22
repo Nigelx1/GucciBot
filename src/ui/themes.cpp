@@ -576,6 +576,20 @@ namespace gucci::ui::themes {
         return theme.quotes[static_cast<size_t>(slot)];
     }
 
+    // While Explicit content is off (the default; Nigel, 2026-11-22) these
+    // read clean. The 2026-11-22 sweep of every theme's words found only
+    // BamBot's "BITCH IM KOBE" (subtitle, badge, credits quote) and SexyyBot's
+    // "Pound Town" badge; Nigel picked the swaps.
+    static void cleanWords(std::string& s) {
+        static constexpr std::pair<std::string_view, std::string_view> kSwaps[] = {
+            {"BITCH IM KOBE", "I'M KOBE"},
+            {"Pound Town", "Goes Stupid"},
+        };
+        for (auto const& [from, to] : kSwaps)
+            for (size_t at = s.find(from); at != std::string::npos; at = s.find(from, at + to.size()))
+                s.replace(at, from.size(), to);
+    }
+
     const std::vector<Theme>& builtins() {
         static const std::vector<Theme> s_builtins = [] {
             std::vector<Theme> list;
@@ -585,7 +599,20 @@ namespace gucci::ui::themes {
                 list.push_back(fromTables(id));
             return list;
         }();
-        return s_builtins;
+        // The clean copy. Both lists live for the whole run, so a theme handed
+        // out before the switch changed is still there afterwards.
+        static const std::vector<Theme> s_clean = [] {
+            std::vector<Theme> list = s_builtins;
+            for (Theme& t : list) {
+                cleanWords(t.subtitle);
+                cleanWords(t.brand);
+                cleanWords(t.badge);
+                for (Quote& q : t.quotes)
+                    cleanWords(q.text);
+            }
+            return list;
+        }();
+        return gucci::ui::explicitContent() ? s_builtins : s_clean;
     }
 
     const Theme* builtin(int id) {

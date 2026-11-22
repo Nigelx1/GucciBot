@@ -113,8 +113,11 @@ namespace gucci {
                 if (std::filesystem::exists(customPath, ec))
                     path = customPath;
             }
-            if (path.empty()) {
-                // The active theme's own track, as its Themes page shows it.
+            // The active theme's own track, as its Themes page shows it. Every
+            // bundled song has explicit lyrics (Nigel, 2026-11-22), so none
+            // plays while Explicit content is off; a track the user added (the
+            // folder above, a custom theme's own) still does.
+            if (path.empty() && ui::explicitContent()) {
                 std::string themeTrack = ui::activeThemeAudio().file;
                 if (themeTrack.empty())
                     themeTrack = "big_brrr.mp3";

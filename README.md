@@ -110,6 +110,8 @@ Everything below is new in 2.0. Not all of it has been tested on every platform:
 
 Pick one on the **Themes** page, or build your own there: **New custom theme** opens a full editor (colors, identity, quotes, your own BIG BRRRR track) for exactly this occasion.
 
+**Explicit content (off by default).** Some themes come with songs that have explicit lyrics, plus jokes and quotes to match. All of it stays off until you turn on **Explicit content** in Settings. It's suggestive lyrics and material, nothing graphic.
+
 <details>
 <summary>The full roster: 24 themes</summary>
 

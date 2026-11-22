@@ -114,6 +114,13 @@ namespace gucci::ui {
     };
     ThemeAudio activeThemeAudio();
 
+    // Explicit content (Nigel, 2026-11-22), off by default. Off, no bundled
+    // theme song plays (every one has explicit lyrics) and the built-in
+    // themes' few explicit or suggestive lines read clean. A song the user
+    // adds (the BIG BRRRR folder, a custom theme's own) plays either way.
+    bool explicitContent();
+    void setExplicitContent(bool on);
+
     // ---- the GBot disguise
     //
     // GBot is a plain look with a plain name (Nigel, 2026-10-31): while it is
