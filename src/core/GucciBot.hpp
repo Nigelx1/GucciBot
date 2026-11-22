@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-22-d (Trainer Classic bar: 2-player presses count only on their own player)"
+    "2026-11-22-e (slope log stops at 50 MB a launch)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

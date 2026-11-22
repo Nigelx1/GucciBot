@@ -41,7 +41,16 @@ using namespace geode::prelude;
 using namespace gucci;
 
 static std::ofstream g_slopeLog;
+// At most 50 MB a launch, as the frame-window and Assistant Access logs:
+// during playback and rendering every tick writes a line, and one 2-hour
+// launch grew it to 18.8 MB (2026-11-18). Past the cap a last line says so
+// and nothing more is written until the next launch starts the file over.
+static constexpr uint64_t kSlopeLogCap = 50ull * 1024 * 1024;
+static uint64_t g_slopeLogBytes = 0;
+static bool g_slopeLogCapped = false;
 static void slopeLog(const std::string& line) {
+    if (g_slopeLogCapped)
+        return;
     if (!g_slopeLog.is_open()) {
         auto path = gucci::stdPath(Mod::get()->getSaveDir()) / "guccibot_slope.log";
         g_slopeLog.open(path, std::ios::out | std::ios::trunc);
@@ -50,7 +59,15 @@ static void slopeLog(const std::string& line) {
     // The file only: during playback and rendering this runs every tick,
     // and copying each line into Geode's log flooded it.
     if (g_slopeLog.is_open()) {
+        if (g_slopeLogBytes + line.size() + 1 > kSlopeLogCap) {
+            g_slopeLog << "--- 50 MB reached: nothing more is written this launch ---\n";
+            g_slopeLog.flush();
+            g_slopeLogCapped = true;
+            log::info("[SLOPE] log reached 50 MB; it stops here until the next launch");
+            return;
+        }
         g_slopeLog << line << '\n';
+        g_slopeLogBytes += line.size() + 1;
         g_slopeLog.flush();
     }
 }
