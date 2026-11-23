@@ -1,4 +1,4 @@
-# GucciBot 2.0: release notes (draft)
+# GucciBot 2.0: release notes
 
 > Every item under "Since 2.0.0-beta.5" was checked against beta.5's source: "New" means beta.5 didn't have it, "Changed" means beta.5 had it and it works differently now, and "Fixes" were bugs in beta.5. "Not tested yet" means nobody has tried it in the game. "Checked in a test game" means Claude tried it in a test copy of the game through Assistant Access, but no player has yet.
 
@@ -6,7 +6,7 @@
 
 ## Coming from 1.8?
 
-1.8 is the last stable release, and 2.0 is a big jump from it. In short:
+1.8 was the stable release before this one, and 2.0 is a big jump from it. In short:
 
 - **A new engine.** The record and playback engine is a port of Silicate's, matched to it function by function. Practice checkpoints are saved whole, and Random triggers, plain and Advanced, pick the same groups on every replay of a macro.
 - **GBR6**, a new macro format: about 2 bytes an input. 1.x's old `.brrr` macros convert in the game.
@@ -259,7 +259,7 @@ One download covers Windows, macOS, iOS and Android (32 and 64-bit). Windows is 
 
 ### GD 2.2091 preview
 
-2.0 comes as two files. `nigelx1.guccibot2208.geode` is GucciBot 2.0 for GD 2.2081 with Geode 5, on every platform. `nigelx1.guccibot2209.geode` is a preview for **GD 2.2091 on Windows**, with Geode 6.0.0-beta.1 or a later Geode 6. Both are built from the same code. Keep only one GucciBot file in your mods folder. Every GD 2.2091 test result in these notes ran on earlier builds of the preview, made for Geode 6.0.0-alpha.2.
+2.0 comes as two files. `nigelx1.guccibot2208.geode` is GucciBot 2.0 for GD 2.2081 with Geode 5, on every platform. `nigelx1.guccibot2209.geode` is a preview for **GD 2.2091 on Windows**, with Geode 6.0.0-beta.1 or a later Geode 6 (Geode 6.0.0-beta.2 passes Geode's own version check for it, but the preview hasn't been run on beta.2 yet). Both are built from the same code. Keep only one GucciBot file in your mods folder. The GD 2.2091 test results below ran on earlier builds of the preview, made for Geode 6.0.0-alpha.2. *2.0.0's own GD 2.2091 file was checked in test games too, on Geode 6.0.0-beta.1 (November 22): it loads with no errors, passes its own self-check and closes without a crash; a macro records, saves, loads and plays back exactly at 240 TPS; the Pathfinder page shows its note; the safety checks pass; and a death and respawn at a platformer checkpoint on The Tower work.*
 
 - **Tick rates:** 240 TPS and any rate from 162 TPS up work: on those earlier builds they recorded and replayed to exactly the same end. A macro made under 162 TPS plays at 240 instead, with a notice, so it won't end the same way. *Checked in a test game at 162, 240, 360 and 480 TPS, and with a 60 TPS macro.*
 - **What worked on 2.2091 in those tests:** recording and playback, practice checkpoints, Calculate, the trainers, rendering, the macro converter, themes, hitboxes and hitborders, and keeping a held click through a restart.
@@ -268,8 +268,8 @@ One download covers Windows, macOS, iOS and Android (32 and 64-bit). Windows is 
 - **A macro from the other GD version gets a gentler notice.** Loading, checking or merging one now says it should play the same, and to double-check frame-perfect slope parts. It's still only a notice. *Checked in test games on both versions (the load notice, the Macro card, Check macro); the merge note by the offline tests.*
 - **Safe mode covers 2.209's new systems.** When the bot or a cheat was on, deaths stay out of GD's death tracker and its upload, and playtime and practice attempts don't count. GD's own speed setting and its Ignore Damage both count as cheats. *Checked in a test game.* A platformer attempt with the bot or a cheat on saves no progress and sends no leaderboard time. A full restart with every cheat off saves again; a respawn at a checkpoint doesn't, and neither does a restart with a cheat still on. A checkpoint reached while the bot or a cheat was on is never saved. *Checked in a test game on The Tower: when the save is held and when it goes through. GD keeps no platformer save for RobTop's own levels, so a save to disk wasn't tried, and no test got as far as a leaderboard time to hold back.*
 - **Calculate warns when GD's Ignore Damage was on** while it counted (Ignore Damage only exists in editor levels). Deaths don't count then, so those windows aren't legit. The Calculate page and its box over the level say so, and Share my windows marks its picture "NOT LEGIT". The mark stays with the windows until a whole Calculate run counts every input again with it off. *Checked in a test game on GD 2.2091: set by a run, kept through a canceled run, cleared by a clean whole run; the page, the box and the picture seen.*
-- **Not in the preview yet:** the Pathfinder (and its AI engine), tick rates under 162 TPS, TPS changes inside a macro, High TPS precision, and macOS and Android on 2.2091. They're planned for 2.0.1. iOS on 2.2091 comes later, once Geode's iOS bindings for 2.2091 have what GucciBot needs. Geode 6 itself is still in beta.
-- *Checked on those earlier builds, in a signed-out test copy of GD 2.2091, on main levels only. Not tested by players yet.*
+- **Not in the preview yet:** the Pathfinder (and its AI engine), tick rates under 162 TPS, TPS changes inside a macro, High TPS precision, and macOS and Android on 2.2091. They're planned for 2.0.1. iOS on 2.2091 comes later, once Geode's iOS bindings for 2.2091 have what GucciBot needs. Geode 6 itself is still in beta. The look-aheads (Show Trajectory, Frame extrapolation, Prevent death's look-ahead, Best tick, the Survival Indicator, Possible positions and the sub-tick preview) run without the trigger model in the preview, as they do on a Mac: moving objects keep their current speed.
+- *Checked on those earlier builds, in a signed-out test copy of GD 2.2091, on main levels only. Not tested by players yet, apart from Nigel's keyboard checks above.*
 
 ### Credits
 

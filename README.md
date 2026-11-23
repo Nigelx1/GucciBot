@@ -19,14 +19,21 @@ The newest release is **2.0.0**. It comes as **two files on the same release**, 
 
 The number in each name is the GD version it's for: **2208** is GD 2.2081, **2209** is GD 2.2091. The 2208 file is about 227 MB and the 2209 file about 228 MB, since the renderer, the music and the JMF Trainer's video ride along.
 
+| File | SHA-256 | VirusTotal |
+|---|---|---|
+| `nigelx1.guccibot2208.geode` | `acb0b0c145bde82f6d45068bad6cd1b702fed93b041666cfd3d42fb6f3d9a586` | [0 of 62 engines](https://www.virustotal.com/gui/file/acb0b0c145bde82f6d45068bad6cd1b702fed93b041666cfd3d42fb6f3d9a586) |
+| `nigelx1.guccibot2209.geode` | `3bd29a9afc4fd905ad6a6c31695154e3231bea0b9f65ea02c333001523aeed64` | [0 of 65 engines](https://www.virustotal.com/gui/file/3bd29a9afc4fd905ad6a6c31695154e3231bea0b9f65ea02c333001523aeed64) |
+
+Check your copy: `certutil -hashfile nigelx1.guccibot2208.geode SHA256` on Windows, `shasum -a 256 nigelx1.guccibot2208.geode` on a Mac (use the other file's name for the 2209 file).
+
 ### Which GD and Geode do I have?
 
 Geode tells you both.
 
 - **Your Geode:** open Geode's mod list. Geode itself is in the list of installed mods, with its version under its name.
   - **Geode 5** (5.10.1 or later) means GD 2.2081: take the **2208** file (`nigelx1.guccibot2208.geode`).
-  - **Geode 6** (6.0.0-beta.1 or later) means GD 2.2091: take the **2209** file (`nigelx1.guccibot2209.geode`).
-  - A Geode 6 alpha: the preview won't load on it. Update Geode to the newest Geode 6 first.
+  - **Geode 6** (6.0.0-beta.1 or later) means GD 2.2091: take the **2209** file (`nigelx1.guccibot2209.geode`). Geode 6.0.0-beta.2 passes Geode's own version check for it, but we haven't run the preview on beta.2 yet.
+  - A Geode 6 alpha: the preview won't load on it. Update Geode to 6.0.0-beta.1 or later first.
 - **Your GD:** open the `geode/logs` folder in the game's folder (next to `geode/mods`) and open the newest log. Near the top, Geode writes a line like `Running Geode v5.10.1 in Geometry Dash v2.2081 on Windows`. The number after "Geometry Dash v" is your GD version.
 - **If that line says "forward compatibility mode"**, your game updated to 2.2091 but your Geode is still Geode 5. Neither GucciBot file loads like that. Install [Geode 6](https://github.com/geode-sdk/geode/releases) (6.0.0-beta.1 or newer; the Windows installer is on its release page) and take the 2209 file, or play on GD 2.2081 with Geode 5 and take the 2208 file.
 
@@ -35,7 +42,7 @@ Geode tells you both.
 1. Download the file for your GD from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
 2. In the game, open Geode's mod list, press the gear for Geode's settings, press **Install From File** and pick the file. (Geode saves it in the mods folder as `nigelx1.guccibot.geode`, whichever file it was.)
 3. If GucciBot is already installed, Geode asks whether to replace it. Press **Replace** to update.
-   **But if Geode first says the mod "can not be installed"**, you picked the other GD's file. Press **OK**, then **Cancel** on the next box. **Replace** there would delete your working GucciBot and put in one that won't load.
+   **But if Geode first says the mod "can not be installed"**, you picked the other GD's file. Press **OK**, then **Cancel** on the next box. **Replace** there would delete your working GucciBot and put in one that won't load. If GucciBot wasn't installed yet, Geode 6 may install the wrong file anyway after **OK**; it then shows as Outdated: delete it from the mods folder and install the right one.
 4. Restart the game.
 5. Open GucciBot:
    - **Windows:** press **Left Alt**. You can change the key in Settings > Keybinds.
@@ -47,7 +54,7 @@ Geode tells you both.
 Both files are the same mod (`nigelx1.guccibot`), built for two different games. Your mods folder holds exactly one of them.
 
 - **The wrong one doesn't load.** Geode marks it **Outdated** in the mod list, with the GD or Geode version it was built for (for example "Outdated (GD 2.2091)" on a 2.2081 game).
-- **Two at once conflict.** Geode loads one and lists the other as invalid. GucciBot's setup check points out the extra file.
+- **Two at once conflict.** Geode takes one and lists the other as invalid. If the one it took is the other GD's file, it shows as Outdated and GucciBot doesn't start at all; otherwise GucciBot's setup check points out the extra file. Either way, delete the file that isn't for your GD.
 - **Putting a file in the mods folder yourself** (**Open Mods Folder**, next to Install From File)? Delete the old GucciBot file first, whatever its name: `nigelx1.guccibot.geode`, `nigelx1.guccibot2208.geode` and `nigelx1.guccibot2209.geode` all count.
 - **Playing both GD versions?** Keep each version's file in that game's own mods folder, never both in one.
 
@@ -62,8 +69,8 @@ Windows is home, and gets the most testing. macOS, iOS and Android are newer: th
 The preview is the same GucciBot, built from the same code for GD 2.2091 and Geode 6. It's **Windows only** for now, and it has everything in 2.0 except:
 
 - **The Pathfinder.** Its page says it isn't on GD 2.2091 yet. It comes in **2.0.1**.
-- **Some tick rates.** 240 TPS and any rate from 162 TPS up work: in our tests on earlier builds of the preview, they recorded and replayed to exactly the same end. Tick rates under 162 TPS, TPS changes inside a macro, and High TPS precision come in **2.0.1**. A macro made under 162 TPS plays at 240 instead, with a notice.
-- **The trigger model behind the look-aheads.** Show Trajectory, Frame extrapolation, Prevent death's look-ahead, Best tick, the Survival Indicator and the sub-tick preview work as they do on a Mac: moving objects keep their current speed.
+- **Some tick rates.** 240 TPS and any rate from 162 TPS up work: in our tests on earlier builds of the preview, they recorded and replayed to exactly the same end. Tick rates under 162 TPS, TPS changes inside a macro, and High TPS precision come in **2.0.1**. A macro made under 162 TPS plays at 240 instead, with a notice, so it won't play back the same.
+- **The trigger model behind the look-aheads.** Show Trajectory, Frame extrapolation, Prevent death's look-ahead, Best tick, the Survival Indicator, Possible positions and the sub-tick preview work as they do on a Mac: moving objects keep their current speed.
 - **Mac, Android, iPhone and iPad on 2.2091.** Mac and Android come in **2.0.1**. iPhone and iPad come later, once Geode's iOS bindings for 2.2091 have what GucciBot needs. Until then, those platforms have GucciBot on GD 2.2081 only.
 
 Macros use the same file format on both versions, and in our tests on earlier builds of the preview they carried over: 13 macros, across every game mode, ended the same way on GD 2.2081 and on 2.2091. On slopes the two can differ by far less than a pixel, so a frame-perfect slope part is worth one check. A macro made on the other GD version says so when you load it.
@@ -161,7 +168,7 @@ What's tested and what isn't, plainly:
 
 - **Windows on GD 2.2081** is home and gets the most testing.
 - **Mac, iPhone and iPad** have had little testing, and **Android** has run on a phone. The Mac build runs on Intel Macs too, but nobody has run it on one yet. Rendering and Video Mode on a Mac, and the Pathfinder off Windows, haven't been tried on a device.
-- **The GD 2.2091 preview** is Windows only, without the Pathfinder or tick rates under 162 TPS ([the details](#gd-22091-the-windows-preview)).
+- **The GD 2.2091 preview** is Windows only, without the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro or High TPS precision until 2.0.1 ([the details](#gd-22091-the-windows-preview)).
 - **The Pathfinder's AI engine** is early and weak: a small network that comes with the mod and beats very few levels. The search engine, the default, is the strong one.
 
 Next up is **2.0.1**: the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro and High TPS precision on the 2.2091 preview, and Mac and Android files for GD 2.2091. Anything on `master` still waiting on its in-game test says so in its commit message.
