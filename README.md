@@ -17,7 +17,7 @@ The newest release is **2.0.0**. It comes as **two files on the same release**, 
 | **GD 2.2081** | **Geode 5.10.1** or a later 5.x | `nigelx1.guccibot2208.geode` | Windows, Mac (Apple silicon and Intel), iPhone, iPad and Android (32- and 64-bit) |
 | **GD 2.2091** | **Geode 6.0.0-beta.1** or a later Geode 6 | `nigelx1.guccibot2209.geode` (preview) | Windows only, for now |
 
-The number in each name is the GD version it's for: **2208** is GD 2.2081, **2209** is GD 2.2091. Each file is about 250 MB, since the renderer, the music and the JMF Trainer's video ride along.
+The number in each name is the GD version it's for: **2208** is GD 2.2081, **2209** is GD 2.2091. The 2208 file is about 227 MB and the 2209 file about 228 MB, since the renderer, the music and the JMF Trainer's video ride along.
 
 ### Which GD and Geode do I have?
 
@@ -62,11 +62,11 @@ Windows is home, and gets the most testing. macOS, iOS and Android are newer: th
 The preview is the same GucciBot, built from the same code for GD 2.2091 and Geode 6. It's **Windows only** for now, and it has everything in 2.0 except:
 
 - **The Pathfinder.** Its page says it isn't on GD 2.2091 yet. It comes in **2.0.1**.
-- **Some tick rates.** 240 TPS and any rate from 162 TPS up work: they record and replay to exactly the same end. Tick rates under 162 TPS, TPS changes inside a macro, and High TPS precision come in **2.0.1**. A macro made under 162 TPS plays at 240 instead, with a notice.
-- **The trigger model behind the look-aheads.** Show Trajectory, Frame extrapolation, Prevent death's look-ahead, Best tick and the sub-tick preview work as they do on a Mac: moving objects keep their current speed.
-- **Mac, Android, iPhone and iPad on 2.2091.** Later. Until then, those platforms have GucciBot on GD 2.2081 only.
+- **Some tick rates.** 240 TPS and any rate from 162 TPS up work: in our tests on earlier builds of the preview, they recorded and replayed to exactly the same end. Tick rates under 162 TPS, TPS changes inside a macro, and High TPS precision come in **2.0.1**. A macro made under 162 TPS plays at 240 instead, with a notice.
+- **The trigger model behind the look-aheads.** Show Trajectory, Frame extrapolation, Prevent death's look-ahead, Best tick, the Survival Indicator and the sub-tick preview work as they do on a Mac: moving objects keep their current speed.
+- **Mac, Android, iPhone and iPad on 2.2091.** Mac and Android come in **2.0.1**. iPhone and iPad come later, once Geode's iOS bindings for 2.2091 have what GucciBot needs. Until then, those platforms have GucciBot on GD 2.2081 only.
 
-Macros use the same file format on both versions, and in our tests they carried over: 13 macros, across every game mode, ended the same way on GD 2.2081 and on 2.2091. On slopes the two can differ by far less than a pixel, so a frame-perfect slope part is worth one check. A macro made on the other GD version says so when you load it.
+Macros use the same file format on both versions, and in our tests on earlier builds of the preview they carried over: 13 macros, across every game mode, ended the same way on GD 2.2081 and on 2.2091. On slopes the two can differ by far less than a pixel, so a frame-perfect slope part is worth one check. A macro made on the other GD version says so when you load it.
 
 Stuck, or got a question? Ask in [the Discord](https://discord.gg/m95NUPdbpJ). Found a bug? [Open an issue](https://github.com/Nigelx1/GucciBot/issues/new/choose).
 
@@ -77,12 +77,12 @@ Stuck, or got a question? Ask in [the Discord](https://discord.gg/m95NUPdbpJ). F
 - **Other bots' macros, in the game.** 27 formats read, among them GDR and GDR2, Silicate .slc, TcBot, ToastyReplay .ttr3, yBot, xdBot, Mega Hack, Echo and GucciBot 1.x's old .brrr, and 21 written back out with **Export as**. Drop one in the replays folder and it converts in one press; the original is kept. The full list is in [about.md](about.md#other-bots-macros).
 - **Calculate, the frame-window analyzer.** For every click, how many frames you actually had, measured against the real game engine, not a guess. It runs on anticroom's Silicate analyzer: Time-Based and Recovery Range, windows finer than a single frame, color bands with their own marker shapes, images, pulses and sounds, and an in-level legend. **Share my windows** saves a picture of a macro's windows, bands and L* to show off, plus a .zip of the macro and its windows that anyone can load with Import a macro. **Windows by hand** lets you type any input's window yourself, and a tight click right after another input also gets Juice's Alignment-Independent count, "my suggestion is x frames", flagged in the Frame Editor. The whole frame-window trend started with NaN GD, and the L* precision number GucciBot puts on a macro comes from his formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). He's careful to say frame windows alone don't determine difficulty, and GucciBot says the same. Hitborders and their possible-positions band were NaN GD's ideas too; he isn't involved.
 - **Pathfinder: it makes the macro for you.** Open a level with nothing recorded and start it: it plays the level itself until it reaches the end, then saves the run as a macro named after the level. The default engine is Absent's, from Absense, ported in whole: before each input it runs copies of the player ahead through the real level, and it goes back when it hits a dead end. While it thinks, **Show the search** draws the paths it's trying, with the best one brighter. GucciBot's own Classic search is still there too. Planning tools come with the search: **Show the level map** draws every gap, choice and moving part, **Show the planned route** draws its way through the whole level, and **Follow the planned route** has it take that route. The **AI** engine is new and early: a small network that comes with the mod decides each click. It's weak, and the search is the strong one. **Rotate triggers** (experimental, off by default, Windows only for now) has the search's copy of the level turn blocks exactly like the game's rotate triggers do; it can make the search slower on some levels. Off Windows it runs without the trigger model (not tested on a device yet).
-- **Trainers.** Nigel's Jupiter My Favourite Trainer, and a second Trainer for any macro you pick: a click bar with your own presses next to the macro's (or an osu!taiko-style lane that judges every press), ghosts of the macro and of your best attempt, segments to name and loop, stats with a death heatmap, synced music, and **Video Mode** to review a run against a video (Windows). Plus **Click Indicators**: the macro's clicks coming at you over the level, with every option of Bogdaner09's free mod, scored Perfect / OK / Miss.
+- **Trainers.** Nigel's Jupiter My Favourite Trainer, and a second Trainer for any macro you pick: a click bar with your own presses next to the macro's (or an osu!taiko-style lane that judges every press), ghosts of the macro and of your best attempt, segments to name and loop, stats with a death heatmap, synced music, and **Video Mode** to review a run against a video (Windows and Mac). Plus **Click Indicators**: the macro's clicks coming at you over the level, with every option of Bogdaner09's free mod, scored Perfect / OK / Miss.
 - **Practice tools.** The **Survival Indicator** (does clicking right now survive?), Show Trajectory, Prevent Death and Find Best Tick, noclip with an accuracy readout, hitboxes, the macro's path drawn in the level, and an autoclicker with its own hold, release and clicks per hold for each player.
 - **Macro tools.** The **Frame Editor** (drag, stretch or shorten every press, with undo), **Check Macro** (lists anything that would desync playback), a diff viewer, trim and merge, TPS changes mid-macro, bot settings presets, and autosave at level end.
-- **Rendering** (Windows). Gameplay straight to a video file, no recorder needed: a hardware encoder picked for your graphics card, anticroom's intro card, four separate audio tracks if you want them, the frame-window markers and cues baked in, fades at both ends, and presets (**Showcase** sets up 8K60 lossless in one press). It runs on FFmpeg 8.0.1 (GPL v3), bundled in the package; where those DLLs come from and their source: [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files).
+- **Rendering** (Windows and Mac). Gameplay straight to a video file, no recorder needed: a hardware encoder picked for your graphics card, anticroom's intro card, four separate audio tracks if you want them, the frame-window markers and cues baked in, fades at both ends, and presets (**Showcase** sets up 8K60 lossless in one press, and **Basic** an everyday 1080p60 render). It runs on FFmpeg 8.0.1 (GPL v3), bundled in the package; where those DLLs come from and their source: [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files).
 - **Auto safe mode**, on by default: while a cheat is on (a macro playing, noclip, speedhack, Click Indicators and the rest), an attempt doesn't count. No completion, no new best, nothing sent to the servers. A **setup check** warns about the settings that break the engine, and the **Disable bot** switch takes GucciBot out of the game without a restart.
-- **And the rest.** A **search box** for the whole menu (type noclip and it takes you to the switch; Ctrl+F), a **Windows layout** with every card in its own window, click sounds (the built-in Clickbot pack or your own), a HUD with CPS, 20 hotkeys, **Compact Mode** to keep the bot at hand while you play, editor tools, an update check, and **Assistant Access**, an optional local server an AI assistant on your computer can read and drive the bot through (off by default).
+- **And the rest.** A **search box** for the whole menu (type noclip and it takes you to the switch; Ctrl+F), a **Windows layout** with every card in its own window, click sounds (the built-in Clickbot pack or your own), an **Icon hack** (every icon, color, trail, death effect and ship fire yours to pick; it only changes how you look), a HUD with CPS, 20 hotkeys, **Compact Mode** to keep the bot at hand while you play, editor tools, an update check, and **Assistant Access**, an optional local server an AI assistant on your computer can read and drive the bot through (off by default).
 - **Themes.** 24 built-in ones, each saving macros under its own extension, a full editor for your own, and BIG BRRRR. The roster is [below](#themes).
 
 Every feature and setting is in [about.md](about.md), the page Geode shows for the mod, and on [guccibot.net](https://guccibot.net).
@@ -92,6 +92,7 @@ Every feature and setting is in [about.md](about.md), the page Geode shows for t
 Everything below is new in 2.0. Not all of it has been tested on every platform: see [GD 2.2081: every platform](#gd-22081-every-platform).
 
 - Four more themes: **RondoBot**, **SolarBot**, **JupiterBot** and **GBot**, a disguise.
+- **Explicit content** (Settings > Look), off by default: until it's on, no theme song plays (a song you add to the BIG BRRRR folder or a custom theme still does), and the themes' few suggestive lines read clean. More under [Themes](#themes).
 - **Legit only** (Hacks > Gameplay): one switch that turns off everything that counts as a cheat and gives it all back when you turn it off. While it's on, no macro plays, so turn it off to render one.
 - Safe mode's cheat list now follows the Demonlist's rules for allowed mods: recording a macro, hitboxes shown while you play, Layout mode, No Mirror while it applies, the Survival Indicator, the HUD's Touching orbs and Time warp, a trainer's click bar or Video Mode over its own level, and the Pathfinder's level map, planned route and next gate count as cheats. The cheat mark shows on the end screen too, and renders never show it. In plain play, with no macro recording or playing, GD keeps its own random.
 - GucciBot stands down while anticroom's Antic's Counter is enabled, as it does for ToastyReplay Lite and Silicate.
@@ -104,6 +105,7 @@ Everything below is new in 2.0. Not all of it has been tested on every platform:
 - **Share my windows** on the Calculate card: a picture of the macro's frame windows (bands, the tightest clicks, L*) in your theme's colors, saved to the `shares` folder, with a .zip of the macro and its windows beside it that Import a macro loads, so someone else sees the same windows.
 - **A Windows layout** (Settings > Look > Layout): a bar across the top and every card in a window of its own, tiled into columns, dragged and collapsed as you like, and kept after a restart. Pages stays the default.
 - The setup check names a second GucciBot file in the mods folder, which Geode lists as invalid, and says which one to delete.
+- **Icon hack** (Hacks > Visual): every icon, color, trail, death effect and ship fire is yours to pick while it's on. It only changes how you look, so safe mode and Legit only don't count it as a cheat, and nothing else unlocks.
 - **Block inputs during playback** (on by default, as in Silicate), an intro card with every line yours to edit, BrrrBot's snow, Intel Macs (in the package, but nobody has run it on an Intel Mac yet), BIG BRRRR switching to the new theme's song when you pick one mid-drop, and fixes: a release and a press in one tick are recorded once (beta.5 could record extra presses there), reopening a level with random triggers no longer crashes, and the Safe mode switch works.
 
 ## Themes
@@ -141,11 +143,13 @@ Pick one on the **Themes** page, or build your own there: **New custom theme** o
 | GBot | `.gbot` | Charcoal + Steel Blue, to hide true greatness from da opps |
 | *Yours* | — | Whatever you want. That's the point. |
 
-SolarBot, JupiterBot and GBot have no BIG BRRRR; it comes back with any other theme, as you left it. GBot moves in silence: the menu answers to GBot, the Themes picker ducks into Settings, and the JMF Trainer and Credits pages, the BIG BRRRR card and the macro list's theme tags lie low until you switch back. New macros save as `.gbot`. Geode's mod list still knows the real name, so don't let anyone scroll that far.
+SolarBot, JupiterBot and GBot have no BIG BRRRR; it comes back with any other theme, as you left it. GBot moves in silence: the menu answers to GBot, the theme picker ducks into a plain dropdown in Settings > Look, and the JMF Trainer and Credits pages, the BIG BRRRR card and the macro list's theme tags lie low until you switch back. New macros save as `.gbot`. Geode's mod list still knows the real name, so don't let anyone scroll that far.
 
 GucciBot's own color is gold, for the record. Yellow everything this time, you know what I'm talking about? Yellow rims. Yellow big booty yellowbones, ha. Yellow Lambs, yellow MPs, yellow watch. Yellow charm ring, chain. Yellow living room set.
 
 Also in Settings: **BIG BRRRR**, a core feature of this mod, with **Shake** and **Flicker** to make the whole menu react to the track's actual bass in real time. You'll know it when you feel it.
+
+The themes' songs play with **Explicit content** on (Settings > Look), and a track in the BIG BRRRR folder plays either way.
 
 </details>
 
@@ -160,7 +164,7 @@ What's tested and what isn't, plainly:
 - **The GD 2.2091 preview** is Windows only, without the Pathfinder or tick rates under 162 TPS ([the details](#gd-22091-the-windows-preview)).
 - **The Pathfinder's AI engine** is early and weak: a small network that comes with the mod and beats very few levels. The search engine, the default, is the strong one.
 
-Next up is **2.0.1**: the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro and High TPS precision on the 2.2091 preview. Anything on `master` still waiting on its in-game test says so in its commit message.
+Next up is **2.0.1**: the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro and High TPS precision on the 2.2091 preview, and Mac and Android files for GD 2.2091. Anything on `master` still waiting on its in-game test says so in its commit message.
 
 ## Help and contact
 
@@ -222,7 +226,7 @@ It's built on [Silicate](https://git.puppy.lgbt/silicate/silicate) by peony, whi
   ```
   and the offline tests: `.\run_tests.bat`.
 - Every build bumps `GB_BUILD_LABEL` in `src/core/GucciBot.hpp` — check it before assuming which binary is actually running. This project got burned by testing a stale build exactly once, and once was enough. Trap or die, basically.
-- A clone is about 260 MB: the BIG BRRRR tracks and the JMF Trainer's video live in the repo. The plans and audits behind the work are in [docs/](docs).
+- A clone is about 260 MB: the BIG BRRRR tracks and the JMF Trainer's video live in the repo. [docs/](docs) has the how-to and the 2.0 release notes.
 
 ---
 

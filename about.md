@@ -23,7 +23,7 @@ What still needs Windows:
 - **Rendering** and **Video Mode** on iOS and Android: GucciBot doesn't ship FFmpeg for phones yet. Since 2.0 they work on Windows and Mac (the Mac with its own FFmpeg libraries, encoding with Apple's VideoToolbox by default; not tested on a Mac yet).
 - Tick rates under 162 TPS, and **High TPS Precision**.
 - The trigger model behind the look-aheads. Elsewhere, Show Trajectory, Frame Extrapolation, Prevent Death's look-ahead, Find Best Tick and the Survival Indicator carry moving objects at the speed they have, without the triggers that change them later.
-- Seeded random teleports and screen shake, so a macro through a random teleport may not replay off Windows.
+- Seeded screen shake: off Windows, screen shake uses GD's own random, not the macro's seed. Random teleports are seeded on Mac and phones too since 2.0, so a macro through one should replay there (not tested on a device yet).
 
 ---
 
@@ -105,7 +105,7 @@ Pick the engine at the top of the Pathfinder page. **Search** is the default, an
 - **Death is the signal** — it runs until GD's own collision kills it, then looks back from there for the press that gets further, skipping stretches where no input could have mattered.
 - **Real backtracking** — every option it tries at a decision point is ruled out there for good; dead ends restore a real checkpoint further back.
 - **Proves its own answer** — a solution only counts once it plays from the very start of the level on its own.
-- **Agency Map** — an optional overlay showing, as you play, which frames an input could actually change.
+- **Agency Map** — an optional overlay showing, during a search (with Hide the search off), which frames an input could actually change.
 - Strongest on Cube-style sections.
 
 ## Nigel's Jupiter My Favourite Trainer
@@ -157,7 +157,7 @@ Real click-timing feedback, and a synced video-review overlay on both trainers:
 
 ## Rendering
 
-- Full gameplay capture to video via FFmpeg — configurable resolution, FPS, bitrate, codec (left blank, it picks a hardware encoder for your graphics card, and falls back to libx264 if that one won't open), and output extension.
+- Full gameplay capture to video via FFmpeg — configurable resolution, FPS, bitrate (0 lets the encoder pick the quality), codec (left blank, it picks a hardware encoder for your graphics card, and falls back to libx264 if that one won't open), and output extension.
 - Audio captured straight from the game's own mix, with music, the game's own sound effects, and the level's SFX-trigger audio each at their own volume for the render — so a showcase can keep the sound a creator built into the level while dropping the death and orb noise the run makes.
 - **Separate audio tracks** — optional 4-track output (combined mix, plus music, SFX, and frame-window cues each isolated) instead of one merged track.
 - Frame-window markers and cues render into the video too, matching your live tier setup.
@@ -167,7 +167,7 @@ Real click-timing feedback, and a synced video-review overlay on both trainers:
 - **Intro card** — an optional title card before the level, inspired by NaN GD: its name, your own lines, and your frame-window bands in their colors, fading in and out over black. Every line is yours to edit (Render > Intro card; a blank field hides that line), and a long level name shrinks so it clears the legend.
 - **Hear it while it renders** — optionally plays the render's audio through your speakers as it records.
 - **Render the next level I open**, and **leave the level when it finishes** — queue a render from the menu and walk away.
-- **Presets** — save your render settings by name; **Showcase** sets up an 8K60 lossless render in one press. A popup says when a render is done, the pixel format is yours to pick, and if FFmpeg is missing the Render page says so with a button to its folder.
+- **Presets** — save your render settings by name; **Showcase** sets up an 8K60 lossless render in one press, and **Basic** an everyday 1080p60 one, both saved as .mp4. A popup says when a render is done, the pixel format is yours to pick, and if FFmpeg is missing the Render page says so with a button to its folder.
 
 ## Themes
 
@@ -200,7 +200,7 @@ Real click-timing feedback, and a synced video-review overlay on both trainers:
 | JupiterBot | `.jupiter` | JMF Yellow + Night Blue: the JMF Trainer's star chart at night, moon dial and skyline, on every page |
 | GBot | `.gbot` | Charcoal + Steel Blue, to hide true greatness from da opps |
 
-SolarBot, JupiterBot and GBot have no BIG BRRRR; it comes back with any other theme, as you left it. GBot moves in silence: the menu answers to GBot, the Themes picker ducks into Settings, and the JMF Trainer and Credits pages, the BIG BRRRR card and the macro list's theme tags lie low until you switch back. New macros save as `.gbot`. Geode's mod list still knows the real name, so don't let anyone scroll that far.
+SolarBot, JupiterBot and GBot have no BIG BRRRR; it comes back with any other theme, as you left it. GBot moves in silence: the menu answers to GBot, the theme picker ducks into a plain dropdown in Settings > Look, and the JMF Trainer and Credits pages, the BIG BRRRR card and the macro list's theme tags lie low until you switch back. New macros save as `.gbot`. Geode's mod list still knows the real name, so don't let anyone scroll that far.
 
 **Make your own** — a full theme editor (Themes page > **New custom theme**), not just a color picker: name, your own file extension, the complete color palette (accent, background, card, both text colors), corner radius and opacity, a pulsing accent and BrrrBot's snow if you want them, custom subtitle and brand tag, three quotes of your own that take turns under the page titles, and an optional Big Brrr track with its own BPM and drop offset. Saved and switchable right alongside the built-in themes.
 
@@ -217,15 +217,15 @@ SolarBot, JupiterBot and GBot have no BIG BRRRR; it comes back with any other th
 - **Layout** (Settings > Look) — **Pages**, the default, is one window with the pages down its side. **Windows** puts a bar across the top of the screen (the search box, a button per page to show or hide its cards, Pages and Close) and every card in a window of its own, tiled into columns. Drag a window by its title bar or collapse it with its arrow; what doesn't fit shows as a title bar until you open it. Where they are comes back after a restart, and **Tile them again** puts them all back. Not on phones.
 - **Status bar** — under every page's title: what the bot is doing (recording, playing, calculating, pathfinding, rendering) with the frame, TPS, speed and inputs.
 - **Saved macros** — each macro's "..." menu (a right click opens it too) loads, Calculates, renames, deletes or exports it, or moves it to plain .brrr; the list follows the replays folder on its own and tags each macro with the theme it was saved under. **Open folder** is one press away.
-- **Hacks** (Hacks page) — Noclip, with a flash when it saves you and a Noclip accuracy readout that can let you die below a percentage you set; Instant Respawn or your own respawn delay (Auto retry); Force Platformer (a cheat); Layout mode (a cheat); No Mirror, optionally only while recording (a cheat while it applies); Hide attempts and Hide percentage; Input FPS (clicks land on only that many ticks a second); **Macro path** (the loaded macro's path and clicks, drawn in the level: by default only up to a little past the farthest you've gotten with it, and all of it with **Only up to your best** off) and **Practice range** (just its clicks near you), both cheats.
+- **Hacks** (Hacks page) — Noclip, with a flash when it saves you and a Noclip accuracy readout that can let you die below a percentage you set; Instant Respawn or your own respawn delay (Auto retry); Force Platformer (a cheat); Layout mode (a cheat); No Mirror, optionally only while recording (a cheat while it applies); Hide attempts and Hide percentage; **Icon hack** (every icon, color, trail, death effect and ship fire yours to pick while it's on; it only changes how you look, so it isn't a cheat, and nothing else unlocks); Input FPS (clicks land on only that many ticks a second); **Macro path** (the loaded macro's path and clicks, drawn in the level: by default only up to a little past the farthest you've gotten with it, and all of it with **Only up to your best** off) and **Practice range** (just its clicks near you), both cheats.
 - **Hitboxes** (Macro page) — collision boxes for players, blocks, hazards, orbs and portals, optionally only once you die, with a trail and your own color for each part. Shown while you play, they count as a cheat; shown only once you die, they don't. **Show Trajectory**, right under Show hitboxes, draws lines ahead of the player: green if you hold, red if you let go (a cheat).
 - **Hitborders** (Macro page, under Hitboxes) — every hitbox grown by the size of yours, so you can think of yourself as a point: what's drawn is exactly the room your center has, worked out from Geometry Dash's own collision rules for your mode, size and gravity right now (both players in dual). Red is where your center dies, blue where your box touches something solid (a block's red core is the only part of it that kills: there, the small box inside your icon touches it), green orbs, pads and portals (ones you've used stay drawn, or hide them); the ground and ceiling too. Your path is a thin white line behind you, half as thick as the outlines, with a dot where you pressed and a ring where you let go; a dot for yourself is optional. The level is darkened under the borders so they stand out (with a darkness slider, or off), only while they show. Overlapping borders share one outline. It's drawn the way NaN GD draws his. Optionally only once you die. Like hitboxes, it counts as a cheat while it shows as you play, and not when it shows only once you die. **Possible positions** (off by default) draws NaN GD's yellow band while a macro plays: where your center could go if one click at a time landed anywhere in its frame window (Calculate's window when the macro has one, otherwise 4 frames either way), with every other click kept where it is, so two clicks off at once can take you outside it. It's an estimate from hidden copies of your player, not the real game; player 1 only, not in platformer yet, and a cheat while it's on.
 - **Keybinds** (Settings) — 20 actions on keys of your choosing (with a keyboard; not on iOS): the menu, pause / frame advance, step forward and back, start/stop playback, noclip, safe mode, hitboxes, hitborders, Show Trajectory, the autoclicker, an intentional death, Prevent Death, mirror inputs, RNG lock, Compact Mode and more. Click a key, then press the new one; right-click unbinds. A setting you switch by key stays switched after a restart, the same as from its menu switch.
-- **Look** (Settings) — text size, a cycling accent color, and animations on or off (switches slide, accents pulse, the JMF page's sky turns, BrrrBot's snow falls), saved as you change them.
+- **Look** (Settings) — text size, how solid the menu is (Menu opacity), a cycling accent color, animations on or off (switches slide, accents pulse, the JMF page's sky turns, BrrrBot's snow falls), and **Explicit content** (off by default: see Themes), saved as you change them.
 - **Update check** — once a launch, from the main menu, against GucciBot's GitHub releases (Settings, with pre-releases optional). If a check ever fails to finish, it switches itself off.
 - **Editor tools** — Macro Buffing (lays a macro's path into the level as objects) and Replace All (swap every object of one id for another, undoable).
 - **Compact Mode** — a small window instead of the full tabbed one, so the bot stays usable while you're actually playing (Settings > Look, or a key you bind): Off / Rec / Play, a saved macro to load, its name, Save (which keeps a backup of the old file, as the full menu's does, while backups are on) and Calculate, the tick rate and game speed, Pause and step back / forward while a level is open, and a button back to the full menu.
-- **BIG BRRRR** — a joke toggle in Settings, with most themes' own song (pick another theme mid-drop and the new one's song takes over). You'll know it when you see it.
+- **BIG BRRRR** — a joke toggle in Settings, with most themes' own song (pick another theme mid-drop and the new one's song takes over). You'll know it when you see it. The themes' songs play with **Explicit content** on; a track in the BIG BRRRR folder plays either way.
 
 ---
 

@@ -164,7 +164,7 @@ Go to **Macro > Saved macros**, to the part called **From other bots**. Then eit
 
 **Import one file from anywhere**
 1. Press **Import a macro** and pick the file.
-2. GucciBot converts it right away and loads it. Play it like any other macro.
+2. GucciBot converts it right away, and it shows in **Saved macros**. Click its name to load it, then play it like any other macro.
 
 The file you picked stays where it was. A dated copy is kept in `replays/imported`. **Import a macro** also takes GucciBot macros, and the `.zip` that **Share my windows** saves (see section 6) **(new in 2.0)**.
 
@@ -256,9 +256,6 @@ In a test on Stereo Madness it took about 2 minutes. Harder levels can take much
 
 How good is it? In Claude's test runs it beat all 22 of RobTop's main levels from scratch, Geometrical Dominator included (Deadlocked on an online copy of it, because RobTop's own needs 30 secret coins the test saves don't have), plus The Nightmare, Bloodbath, Slaughterhouse, GRIEF, Forest Temple and Stalemate. It can't beat everything yet: LIMBO, ORBIT and Heliopolis are still out of reach. A Pathfinder run counts as a cheat.
 
-![The Pathfinder page](images/howto/pathfinder.png)
-*The Pathfinder page, set to Search and Absense, ready to Start.*
-
 ### Queue: leave it running on a list of levels (new in 2.0)
 
 Juice's idea: give it a list of levels, leave your PC on, and come back to macros. The **Queue** card is under the Pathfinder card (Windows with GD 2.2081 only for now; elsewhere the card says it isn't available yet).
@@ -308,6 +305,8 @@ GucciBot comes with 24 themes, and you can make your own.
 - A theme also sets the file ending your new macros save with (for example `.brrr` for GucciBot). Macros saved under another theme still show in **Saved macros**, tagged with that theme's name.
 - **New custom theme** makes your own: colors, corners, snow, its own music and more.
 - **Settings > Look** has **Text size**, **Cycle the accent color** and **Animations** (switch it off to keep the menu still).
+- **Explicit content (new in 2.0):** some themes come with songs that have explicit lyrics, plus jokes and quotes to match. All of it stays off until you turn on **Settings > Look > Explicit content**. It's suggestive lyrics and material, nothing graphic. While it's off, **BIG BRRRR** (Settings) plays only a track you added yourself: one in the BIG BRRRR folder, or a custom theme's own.
+- **GBot** is a disguise **(new in 2.0)**: it takes the Themes page out of the menu. To switch back, pick another theme in **Settings > Look > Theme**.
 
 ---
 
