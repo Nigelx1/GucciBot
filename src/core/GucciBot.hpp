@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-f (Calculate on Android and Mac no longer stalls: the menu and its tick keep going during a run)"
+    "2026-11-24-g (GD 2.2091: no level flip in the editor through update's inlined check)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

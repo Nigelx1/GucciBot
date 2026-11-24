@@ -134,6 +134,19 @@ namespace gucci::gdaddr {
         inline const GuardedSite kTeleportRandom{
             0x316053, {0x66, 0x0f, 0x6e, 0xc8, 0x0f, 0x5b, 0xc9}, "teleportRandomOverride"};
 
+        // PlayerObject::update (0x4e6fc0) +0x945: one of update's two
+        // levelFlipping() checks, inlined by 2.209 (`cmp byte [r15+0x7ec],
+        // r12b`, then GD's level flip progress against two constants), so
+        // GucciBot's levelFlipping hook, which says no flip in the editor
+        // (hooks/hook_playerobject.cpp), never sees it. 2.2081's update calls
+        // levelFlipping (0x39b4f0) both times (0x3896b8, 0x3897a9); 2.2091's
+        // calls it (0x4f97c0) once, at 0x4e7a5d. In the editor the handler
+        // goes on at kInlinedLevelFlippingNo, where GD's own "not flipping"
+        // `je` (+0x94c) lands. Silicate 1.1.2, src/hooks/PlayerObject.cpp.
+        inline const GuardedSite kInlinedLevelFlipping{
+            0x4e7905, {0x45, 0x38, 0xa7, 0xec, 0x07, 0x00, 0x00}, "inlinedLevelFlipping"};
+        inline constexpr uintptr_t kInlinedLevelFlippingNo = 0x4e7970;
+
         // ---- Known but NOT placed on 2.2091 (reasons in each comment)
 
         // PlayerObject::tryPlaceCheckpoint (0x501880) +0x3f1: its call to
@@ -298,7 +311,7 @@ namespace gucci::gdaddr {
 #endif  // GB_GEODE6 (Lane B)
 
         // What the launch self-check expects placed on 2.2091 (core/engine_core.cpp).
-        inline constexpr int kExpectedMidhooks = 6;  // 4 shake + teleport + speed keys
+        inline constexpr int kExpectedMidhooks = 7;  // 4 shake + teleport + speed keys + the editor's level flip
         inline constexpr int kExpectedPatches = 9;
 
     } // namespace v2091

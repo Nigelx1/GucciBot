@@ -3282,8 +3282,9 @@ namespace gucci {
         // and 1 in hook_playerobject.cpp. A literal, not midhookSites().size():
         // a site registers itself as it's placed, so one whose $execute never
         // ran would shrink both counts and still pass.
-        // GD 2.2091 (Geode 6) places fewer: 6 midhooks (shake, teleport, GD's
-        // speed keys) and 9 patches (core/gd_addresses.hpp).
+        // GD 2.2091 (Geode 6) places fewer: 7 midhooks (shake, teleport, GD's
+        // speed keys, the editor's level flip) and 9 patches
+        // (core/gd_addresses.hpp).
         bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_RAW_SITES;
 #if GB_GD2091_SITES
         int const wantMidhooks = gdaddr::v2091::kExpectedMidhooks;

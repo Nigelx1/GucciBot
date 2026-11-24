@@ -3,6 +3,7 @@
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/trajectory.hpp"
 #include "hooks/util_midhook.hpp"
+#include "core/gd_addresses.hpp"
 #include "absense/compat/bot.hpp"
 #include "absense/trajectory/trajectory.hpp"
 #include "mcp/tickprobe.hpp"
@@ -67,6 +68,25 @@ static void yVelocityRoundMidhook(SafetyHookContext& ctx) {
 #if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 $execute {
     util_midhook(geode::base::get() + 0x38c315, "yVelocityRound", yVelocityRoundMidhook);
+}
+#endif
+
+#if GB_GD2091_SITES
+// GD 2.2091 (Geode 6): 2.209 inlined one of PlayerObject::update's two
+// levelFlipping() checks, so the levelFlipping hook below (no level flip in
+// the editor) only covers the other one. Silicate 1.1.2's guarded midhook at
+// the inlined check (src/hooks/PlayerObject.cpp; GPL-3, credit peony): in the
+// editor, go on where GD's own "not flipping" branch goes. Placed only if
+// GD's code there is what Silicate found (core/gd_addresses.hpp).
+static void inlinedLevelFlippingMidhook(SafetyHookContext& ctx) {
+    if (LevelEditorLayer::get())
+        ctx.rip = geode::base::get() + gucci::gdaddr::v2091::kInlinedLevelFlippingNo;
+}
+
+$execute {
+    using namespace gucci::gdaddr::v2091;
+    util_guarded_midhook(geode::base::get() + kInlinedLevelFlipping.offset, kInlinedLevelFlipping.expect,
+                         kInlinedLevelFlipping.name, inlinedLevelFlippingMidhook);
 }
 #endif
 
@@ -390,7 +410,8 @@ class $modify(GB7PlayerObject, PlayerObject) {
 
 #ifndef GEODE_IS_IOS // inlined there: nothing to hook
     // Level flipping is a gameplay effect; in the editor it fights the
-    // editor's own camera handling.
+    // editor's own camera handling. On GD 2.2091 one of update's two calls
+    // is inlined; the midhook above covers that one.
     bool levelFlipping() {
         if (LevelEditorLayer::get())
             return false;
