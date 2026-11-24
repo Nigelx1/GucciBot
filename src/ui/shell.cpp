@@ -207,6 +207,7 @@ namespace gucci::ui {
             gb->rngSeedVal = static_cast<uint32_t>(mod->getSavedValue<int64_t>("hack_rng_seed", gb->rngSeedVal));
             auto* brrr = BigBrrrManager::get();
             brrr->shakeEnabled = mod->getSavedValue<bool>("brrr_shake", brrr->shakeEnabled);
+            brrr->startAtDrop = mod->getSavedValue<bool>("brrr_start_at_drop", brrr->startAtDrop);
             brrr->flickerIntensity = std::clamp(
                 static_cast<float>(mod->getSavedValue<double>("brrr_flicker", brrr->flickerIntensity)), 0.f, 1.f);
             g_settingsLoaded = true;
@@ -3170,7 +3171,8 @@ namespace gucci::ui {
         // where it was once the drop stops.
         ImVec2 g_brrrOffset{0.f, 0.f};
         bool g_brrrWasOn = false;
-        double g_brrrStart = 0.0; // ImGui time the drop started
+        double g_brrrStart = 0.0; // ImGui time the song started
+        unsigned g_brrrStarts = 0; // BigBrrrManager::starts() then
 
         // The gap the menu keeps from the game window's edges (drawMain, and
         // the Windows layout's bar, which every platform compiles).
@@ -3472,6 +3474,25 @@ namespace gucci::ui {
                                                        "track in the BIG BRRRR folder plays either way",
                                    &brrrOn))
                     brrr->setEnabled(brrrOn);
+                // Start at the drop (Nigel, 2026-11-23), on by default and saved
+                // like Shake and Flicker. It seeks whatever plays to the active
+                // theme's drop, a track in the BIG BRRRR folder too (bigbrrr.cpp
+                // start), so the hint says how far in that is. A drop that's
+                // playing starts over, from the drop or from the start.
+                {
+                    double const drop = activeThemeAudio().dropOffsetSec;
+                    std::string const dropHint =
+                        drop > 0.0 ? fmt::format("Off, songs play from the start. On, a track in the BIG BRRRR folder "
+                                                 "starts {:.1f} s in too, where this theme's drop is",
+                                                 drop)
+                                   : std::string("This theme's drop is at the start of its song, so songs play from "
+                                                 "the start either way");
+                    if (kit::SwitchRow("Start at the drop", dropHint.c_str(), &brrr->startAtDrop)) {
+                        saveEngineSwitch("brrr_start_at_drop", brrr->startAtDrop);
+                        if (brrr->enabled)
+                            brrr->setEnabled(true);
+                    }
+                }
                 // GucciBot (2026-10-23): Shake and Flicker are saved (they reset at
                 // every launch); the switch itself stays per launch, as it starts
                 // the music.
@@ -3713,7 +3734,7 @@ namespace gucci::ui {
             }
             std::string file = activeThemeAudio().file;
             if (std::exchange(g_brrrHeld, false) || (!g_brrrFile.empty() && file != g_brrrFile))
-                brrr->setEnabled(true);  // this theme's track, from its drop
+                brrr->setEnabled(true);  // this theme's track, from its drop (or its start: Start at the drop)
             g_brrrFile = brrr->enabled ? std::move(file) : std::string();
         }
 
@@ -3958,17 +3979,23 @@ namespace gucci::ui {
             ImVec2 offset{0.f, 0.f};
             if (brrr->enabled) {
                 double const t = ImGui::GetTime();
-                if (!g_brrrWasOn)
+                // Counted again whenever the song starts over while it stays
+                // on (a new theme's song, Start at the drop switched).
+                if (!g_brrrWasOn || brrr->starts() != g_brrrStarts) {
                     g_brrrStart = t;
+                    g_brrrStarts = brrr->starts();
+                }
                 if (brrr->shakeEnabled) {
                     offset.x += bass * 14.f * static_cast<float>(std::sin(t * 91.0));
                     offset.y += bass * 14.f * static_cast<float>(std::cos(t * 73.0));
                 } else {
                     // Without the shake, the bob: a hop between beats that
-                    // lands on each one, counted from when the drop started
-                    // (playback starts at the drop).
+                    // lands on each one, counted from the drop. Playback
+                    // starts there, or (Start at the drop off) the drop's
+                    // time before it, at the song's start.
                     constexpr double kPi = 3.14159265358979323846;
-                    double const beats = (t - g_brrrStart) * BigBrrrManager::kBpm() / 60.0;
+                    double const sinceDrop = (t - g_brrrStart) + brrr->startedAtSec() - BigBrrrManager::kStartOffsetSec();
+                    double const beats = sinceDrop * BigBrrrManager::kBpm() / 60.0;
                     offset.y -= (10.f + 8.f * bass) * static_cast<float>(std::abs(std::sin(kPi * beats)));
                 }
             }

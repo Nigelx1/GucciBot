@@ -225,7 +225,7 @@ SolarBot, JupiterBot and GBot have no BIG BRRRR; it comes back with any other th
 - **Update check** — once a launch, from the main menu, against GucciBot's GitHub releases (Settings, with pre-releases optional). If a check ever fails to finish, it switches itself off.
 - **Editor tools** — Macro Buffing (lays a macro's path into the level as objects) and Replace All (swap every object of one id for another, undoable).
 - **Compact Mode** — a small window instead of the full tabbed one, so the bot stays usable while you're actually playing (Settings > Look, or a key you bind): Off / Rec / Play, a saved macro to load, its name, Save (which keeps a backup of the old file, as the full menu's does, while backups are on) and Calculate, the tick rate and game speed, Pause and step back / forward while a level is open, and a button back to the full menu.
-- **BIG BRRRR** — a joke toggle in Settings, with most themes' own song (pick another theme mid-drop and the new one's song takes over). You'll know it when you see it. The themes' songs play with **Explicit content** on; a track in the BIG BRRRR folder plays either way.
+- **BIG BRRRR** — a joke toggle in Settings, with most themes' own song (pick another theme mid-drop and the new one's song takes over). You'll know it when you see it. The themes' songs play with **Explicit content** on; a track in the BIG BRRRR folder plays either way. **Start at the drop** (on by default) starts the song at the theme's drop, and a track in the BIG BRRRR folder that far in too; off, songs play from the start.
 
 ---
 

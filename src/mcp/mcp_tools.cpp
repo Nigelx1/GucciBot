@@ -460,6 +460,11 @@ namespace gucci::mcp {
                     big["playing"] = brrr->playing();
                     big["track"] = brrr->trackFile();
                     big["holds_game_audio"] = brrr->holdsGameAudio();
+                    // Start at the drop (2026-11-23): the switch, where the
+                    // playing song started and where it is now (-1: nothing).
+                    big["start_at_drop"] = brrr->startAtDrop;
+                    big["started_at_sec"] = brrr->startedAtSec();
+                    big["position_sec"] = brrr->songSeconds();
                     audio["bigbrrr"] = big;
                     if (auto* fmod = FMODAudioEngine::sharedEngine()) {
                         FMOD::ChannelGroup* master = nullptr;

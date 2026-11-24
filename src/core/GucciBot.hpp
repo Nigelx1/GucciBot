@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-k (GD 2.2091: a comment says why seeded Advanced Random triggers need no spawn-abuse check)"
+    "2026-11-24-l (BIG BRRRR gets a Start at the drop switch, on by default; off, songs play from their start)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

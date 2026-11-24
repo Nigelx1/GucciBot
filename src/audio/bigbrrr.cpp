@@ -152,7 +152,15 @@ namespace gucci {
         if (channel) {
             track = gucci::pathToString(path.filename());
             channel->setVolume(1.f);
-            channel->setPosition((unsigned int)(kStartOffsetSec() * 1000.0), FMOD_TIMEUNIT_MS);
+            // From the theme's drop, or with Start at the drop off from the
+            // song's start. FMOD refuses a place past the track's end, and it
+            // plays from the start then.
+            startedAt = 0.0;
+            double const drop = kStartOffsetSec();
+            if (startAtDrop && drop > 0.0 &&
+                channel->setPosition((unsigned int)(drop * 1000.0), FMOD_TIMEUNIT_MS) == FMOD_OK)
+                startedAt = drop;
+            ++startCount;
             GameAudioMute::acquire();
             audioMuteHeld = true;
 
@@ -196,6 +204,13 @@ namespace gucci {
     bool BigBrrrManager::playing() const {
         bool on = false;
         return channel && channel->isPlaying(&on) == FMOD_OK && on;
+    }
+
+    double BigBrrrManager::songSeconds() const {
+        unsigned int ms = 0;
+        if (!channel || channel->getPosition(&ms, FMOD_TIMEUNIT_MS) != FMOD_OK)
+            return -1.0;
+        return ms / 1000.0;
     }
 
 } // namespace gucci
