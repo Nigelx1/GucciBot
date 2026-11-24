@@ -56,8 +56,18 @@ namespace scbf {
 
         void passThrough(gd::vector<PlayerButtonCommand>& queue);
 
-        void notePlaced() { m_placed++; }
-        void noteAligned(size_t count = 1) { m_aligned += static_cast<uint32_t>(count); }
+        // anticroom's count of this attempt's inputs, clicks only (Nigel's D12,
+        // 2026-11-22): a press placed inside its tick, or one left on the
+        // tick's edge. Releases are placed the same way but not counted, so 5
+        // clicks count 5 (it was 10).
+        void notePlaced(PlayerButtonCommand const& cmd) {
+            if (cmd.m_isPush)
+                m_placed++;
+        }
+        void noteAligned(PlayerButtonCommand const& cmd) {
+            if (cmd.m_isPush)
+                m_aligned++;
+        }
 
         void reset();
 

@@ -1886,8 +1886,9 @@ namespace gucci::ui {
                 // nobody has checked on a phone or a Mac yet: if they disagree,
                 // every click records on the tick's edge. The count below
                 // shows which.
-                // (The count is of inputs, releases too: 5 clicks are 10.)
-                kit::Note("Untested on " GB_HERE ". If the count below says every input landed on the edge, it "
+                // (The count is of clicks only since Nigel's D12, 2026-11-22:
+                // releases are placed the same way but not counted.)
+                kit::Note("Untested on " GB_HERE ". If the count below says every click landed on the edge, it "
                           "isn't working here yet.",
                           Tone::Warn);
 #endif
@@ -1902,9 +1903,9 @@ namespace gucci::ui {
                               "it's on.",
                               Tone::Warn);
                 // anticroom's count, which starts over at each respawn
-                // (replay/scbf_input.hpp).
+                // (replay/scbf_input.hpp): clicks only, not releases (D12).
                 else if (auto const& live = scbf::LiveRecorder::get(); live.recording())
-                    kit::Hint(fmt::format("This attempt: {} placed in the tick, {} on the edge{}", live.placed(),
+                    kit::Hint(fmt::format("Clicks this attempt: {} placed in the tick, {} on the edge{}", live.placed(),
                                           live.aligned(), live.splitting() ? "" : " (splitting is off)")
                                   .c_str());
             }

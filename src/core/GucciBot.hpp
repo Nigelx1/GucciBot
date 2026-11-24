@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-q (The AI engine saves its furthest run as a macro when it stops without beating the level)"
+    "2026-11-24-r (The sub-tick counter counts clicks, not releases (D12))"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

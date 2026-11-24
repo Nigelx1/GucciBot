@@ -450,7 +450,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         for (auto const& due : live.takeDue(frame)) {
             if (due.offset <= 0.0) {
                 m_queuedButtons.push_back(due.cmd);
-                live.noteAligned();
+                live.noteAligned(due.cmd);
                 continue;
             }
 
@@ -462,7 +462,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                               due.cmd.m_isPush,
                               due.cmd.m_isPlayer2)) {
                 m_queuedButtons.push_back(due.cmd);
-                live.noteAligned();
+                live.noteAligned(due.cmd);
                 continue;
             }
 
@@ -470,7 +470,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             this->addInputToReplay(due.cmd);
             if (actions.length() > before)
                 scbf::setOffset(actions.m_actions.back(), split);
-            live.notePlaced();
+            live.notePlaced(due.cmd);
         }
     }
 

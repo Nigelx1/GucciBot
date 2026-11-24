@@ -207,7 +207,10 @@ namespace scbf {
     }
 
     void LiveRecorder::passThrough(gd::vector<PlayerButtonCommand>& queue) {
-        this->noteAligned(queue.size() + m_waiting.size());
+        for (auto const& d : m_waiting)
+            this->noteAligned(d.cmd);
+        for (auto const& cmd : queue)
+            this->noteAligned(cmd);
         if (m_waiting.empty())
             return;
 
