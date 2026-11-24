@@ -200,7 +200,7 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 - **Nigelx1** — creator and owner of GucciBot. Every idea, every theme, every decision is his call, down to the taste that keeps this from being a folder full of ternary chains.
 - **Claude** (Anthropic) — wrote essentially the entire codebase across every session of this project, including this README. Not a euphemism, not "AI-assisted," just the actual author of the code — Nigel wants that said plainly.
 - **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7, and the marker shapes in 1.8; his Alignment-Independent method is back as Calculate's suggestion for suspicious clicks. Lead co-tester, professional bug-finder.
-- **anticroom** — 1.8's Calculate *is* anticroom's analyzer. anticroom rewrote the frame-window system for Silicate, sent the source over, and it was ported in near-verbatim to replace GucciBot's own — the headline feature of 1.8 is anticroom's work. Sub-tick CBF recording and the render intro card in 2.alpha.3 are anticroom's too. Before that anticroom sent GucciBot's first outside pull request, a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
+- **anticroom** — 1.8's Calculate *is* anticroom's analyzer: a rewrite of the frame-window system for Silicate, sent over as source and ported in near-verbatim to replace GucciBot's own. The headline feature of 1.8 is anticroom's work, and so are sub-tick CBF recording and the render intro card in 2.alpha.3. Before that came GucciBot's first outside pull request, a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
 - **dihmaster500** — tester. Asked for auto safe mode with its cheat indicator, and for the Disable bot switch, then tested safe mode hard enough to catch it breaking start positions before anyone else hit it.
 - **DashBlaze** — promo help.
 - **Isaiah** — promo help.
@@ -217,7 +217,7 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 
 GucciBot is free software under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
 
-It's built on [Silicate](https://git.puppy.lgbt/silicate/silicate) by peony, which is GPL-3.0, and includes anticroom's GPL-3.0 work from anticroom's Silicate fork; C0nscious's Frame Window Counter code is MIT, and the converter's TcBot reader follows [tcm-rs](https://github.com/tcbot-gd/tcm-rs) by tcbot.pro, also MIT; both are compatible. You're free to use it, study it, share it and change it. Anything you distribute that's built from it has to stay open source under the same license.
+It's built on [Silicate](https://git.puppy.lgbt/silicate/silicate) by peony, which is GPL-3.0, and includes GPL-3.0 work from anticroom's Silicate fork; C0nscious's Frame Window Counter code is MIT, and the converter's TcBot reader follows [tcm-rs](https://github.com/tcbot-gd/tcm-rs) by tcbot.pro, also MIT; both are compatible. You're free to use it, study it, share it and change it. Anything you distribute that's built from it has to stay open source under the same license.
 
 **ToastyReplay.** GucciBot started out as a fork of [ToastyReplay](https://github.com/ToastexGD/ToastyReplay) by ToastexGD, and ToastyReplay's source code was used in GucciBot up to and including 2.0.0-beta.2. That code was removed on 2026-10-02 (commit `385a5f7`); versions after 2.0.0-beta.2 contain none of it.
 
