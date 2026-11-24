@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-d (Edit exits from the pause menu and the end screen run the whole quit cleanup, as Silicate does, and turn frame advance off last)"
+    "2026-11-24-e (A test-only key, pf_agency_map, switches the Agency map in a hidden test launch)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

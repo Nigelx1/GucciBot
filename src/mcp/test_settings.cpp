@@ -391,6 +391,15 @@ namespace gucci::testset {
                                  }});
                 }
                 v.push_back(engineBool("pf_hide_search", [] () -> bool& { return Pathfinder::get()->hideSearch; }));
+                // The Classic search's Agency map switch. Never saved; its row
+                // shows only while the Classic search is chosen, which is
+                // saved, so a test switches it here (the Edit-exit test,
+                // 2026-11-23: the map's nodes after an exit without a quit).
+                v.push_back({"pf_agency_map", "bool", Store::Memory,
+                             [] { return matjson::Value(gb()->pfAgencyDebug); },
+                             [](matjson::Value const& val, bool) {
+                                 gb()->pfAgencyDebug = wantBool("pf_agency_map", val);
+                             }});
                 // The Pathfinder page's Exact start flags and Remember
                 // solutions: a search reads both from the container when it
                 // starts (absense/compat/bot.cpp). Exact start flags go
