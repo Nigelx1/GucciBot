@@ -176,6 +176,7 @@ namespace gucci::testset {
                 "hack_force_platformer", "hack_no_mirror",   "ind_enabled",         "hack_hitboxes",
                 "hack_hitborders",       "show_macro_path",  "autoclicker_enabled", "ci_enabled",
                 "trainer_any_ghost",     "trainer_any_best_ghost", "hitborder_positions",
+                "hack_layout_mode",
             };
             for (auto k : kSwitches)
                 if (name == k)
@@ -193,6 +194,9 @@ namespace gucci::testset {
                 v.push_back(engineBool("hack_no_mirror", [e]() -> bool& { return e()->noMirrorEffect; }));
                 v.push_back(engineBool("hack_no_mirror_recording_only",
                                        [e]() -> bool& { return e()->noMirrorRecordingOnly; }));
+                // Layout mode (Hacks > Visual): most of it acts as a level
+                // loads, so a test sets it before opening one.
+                v.push_back(engineBool("hack_layout_mode", [e]() -> bool& { return e()->layoutMode; }));
                 v.push_back(engineBool("hack_respawn_instant", [e]() -> bool& { return e()->hackRespawnInstant; }));
                 v.push_back(engineBool("hack_auto_retry", [e]() -> bool& { return e()->hackAutoRetry; }));
                 v.push_back(engineFloat("hack_auto_retry_delay", 0.0, 10.0,
