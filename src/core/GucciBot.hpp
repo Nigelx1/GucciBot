@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-ab (A test-only tool, gucci_layout_census, says what Layout mode did to the open level)"
+    "2026-11-24-ac (the GD 2.2091 file is built for Geode 6.0.0, the first stable Geode 6, instead of 6.0.0-beta.1)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

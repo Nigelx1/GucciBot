@@ -88,15 +88,18 @@ jobs:
           rm -f msvc-check.cpp msvc-check.obj
 
       # Pinned: build-geode-mod at 61a56c6 (2026-11-03, main on 2026-11-16),
-      # Geode SDK 6.0.0-beta.1 (the tag; alpha.2 until 2026-11-20, but a beta
-      # loader refuses a mod built for an alpha, while a build for beta.1
-      # loads on later betas and on 6.0.0 itself), Geode CLI v4.0.1 (Geode 6
-      # needs CLI 4). The action still pulls geode-sdk/cli's setup action at
+      # Geode SDK 6.0.0 (the tag: the first stable Geode 6, 2026-11-24; it was
+      # 6.0.0-beta.1 from 2026-11-20 and alpha.2 before that), Geode CLI v4.0.1
+      # (Geode 6 needs CLI 4). Geode's version check
+      # (loader/src/utils/VersionInfo.cpp) lets a stable loader load a mod
+      # built for a Geode 6 beta, but never lets a beta or alpha loader load
+      # one built for a stable release, so this file needs Geode 6.0.0 or a
+      # later 6.x. The action still pulls geode-sdk/cli's setup action at
       # @main inside itself; that one can't be pinned from here.
       - uses: geode-sdk/build-geode-mod@61a56c697aea9655e3f31c6c1b83870431f30434
         id: build
         with:
-          sdk: 6.0.0-beta.1
+          sdk: 6.0.0
           cli: v4.0.1
           target: Win64
 
@@ -118,7 +121,7 @@ jobs:
           fi
 
       # The package has to be complete and say what it's for before anyone
-      # gets it: the binary, the seven DLLs, mod.json for Geode 6.0.0-beta.1
+      # gets it: the binary, the seven DLLs, mod.json for Geode 6.0.0
       # and GD 2.2091 on Windows only, and an about.md that doesn't claim
       # 2.2081. Then it's renamed nigelx1.guccibot2209.geode, the release file's name.
       - name: Check and name the package
@@ -147,8 +150,8 @@ jobs:
           if other:
               sys.exit("a Windows-only package holds other platforms' binaries: " + ", ".join(other))
           mod = json.loads(z.read("mod.json"))
-          if mod.get("geode") != "6.0.0-beta.1":
-              sys.exit(f"mod.json says geode {mod.get('geode')!r}, not 6.0.0-beta.1")
+          if mod.get("geode") != "6.0.0":
+              sys.exit(f"mod.json says geode {mod.get('geode')!r}, not 6.0.0")
           if mod.get("gd") != {"win": "2.2091"}:
               sys.exit(f"mod.json says gd {mod.get('gd')!r}, not {{'win': '2.2091'}}")
           about = z.read("about.md").decode("utf-8")
