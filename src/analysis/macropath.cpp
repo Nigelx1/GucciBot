@@ -1,6 +1,7 @@
 #include "core/GucciBot.hpp"
 #include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 #include "core/action_types.hpp"
+#include "core/level_nodes.hpp"
 
 #include <limits>
 
@@ -29,34 +30,40 @@ public:
         return &inst;
     }
 
+    // Both nodes hang in this level. The nodes are held, not only pointed at,
+    // and used only while they're in the current level: GD's Edit exits close
+    // a level without PlayLayer::onQuit (core/level_nodes.hpp).
+    bool attachedTo(PlayLayer* pl) const {
+        return levelnodes::inLevel(m_lineNode, pl) && levelnodes::inLevel(m_markerNode, pl);
+    }
+
+    // Made in every level, and again whenever the ones held aren't in this
+    // level (those are dropped first, as the missed quit would have).
     void attach(PlayLayer* pl) {
-        if (m_lineNode || !pl || !pl->m_objectLayer)
+        if (!pl || !pl->m_objectLayer || attachedTo(pl))
             return;
+        if (m_lineNode || m_markerNode)
+            levelnodes::noteStale("Macro path", m_staleLogged);
+        detach();
 
         auto* lineNode = CCDrawNode::create();
+        lineNode->setID("macro-path-line"_spr);
         lineNode->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
         lineNode->m_bUseArea = false;
-        pl->m_objectLayer->addChild(lineNode, 1600);
-        m_lineNode = lineNode;
+        m_lineNode = levelnodes::hold(lineNode, pl->m_objectLayer, 1600);
 
         auto* markerNode = CCDrawNode::create();
+        markerNode->setID("macro-path-markers"_spr);
         markerNode->setBlendFunc({GL_ONE_MINUS_DST_COLOR, GL_ZERO});
         markerNode->m_bUseArea = false;
-        pl->m_objectLayer->addChild(markerNode, 1601);
-        m_markerNode = markerNode;
+        m_markerNode = levelnodes::hold(markerNode, pl->m_objectLayer, 1601);
 
         m_builtForCount = SIZE_MAX;
     }
 
     void detach() {
-        if (m_lineNode) {
-            m_lineNode->removeFromParent();
-            m_lineNode = nullptr;
-        }
-        if (m_markerNode) {
-            m_markerNode->removeFromParent();
-            m_markerNode = nullptr;
-        }
+        levelnodes::drop(m_lineNode);
+        levelnodes::drop(m_markerNode);
         m_builtForCount = SIZE_MAX;
         m_builtForName.clear();
         m_builtForRevealX = -1.f;
@@ -66,9 +73,9 @@ public:
         auto* gb = GucciEngine::get();
         if (!pl)
             return;
-        if (!m_lineNode) {
+        if (!attachedTo(pl)) {
             attach(pl);
-            if (!m_lineNode)
+            if (!attachedTo(pl))
                 return;
         }
 
@@ -177,8 +184,9 @@ private:
         }
     }
 
-    CCDrawNode* m_lineNode = nullptr;
-    CCDrawNode* m_markerNode = nullptr;
+    CCDrawNode* m_lineNode = nullptr;    // held (retained) while set
+    CCDrawNode* m_markerNode = nullptr;  // held (retained) while set
+    int m_staleLogged = 0;
     size_t m_builtForCount = SIZE_MAX;
     std::string m_builtForName;
     float m_builtForRevealX = -1.f;

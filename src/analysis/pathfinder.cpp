@@ -1,5 +1,6 @@
 #include "core/platform.hpp"
 #include "core/geode_compat.hpp" // gucci::stdPath
+#include "core/level_nodes.hpp"
 #include "analysis/pathfinder.hpp"
 
 #include "analysis/trajectory.hpp"
@@ -1695,63 +1696,64 @@ namespace {
             bool matters;
         };
 
+        // Both held (retained) while set: the trail in the object layer, the
+        // readout in the UI layer.
         cocos2d::CCDrawNode* m_trail = nullptr;
         cocos2d::CCLabelBMFont* m_readout = nullptr;
-        PlayLayer* m_attachedTo = nullptr;
         std::vector<Sample> m_samples;
         uint32_t m_lastFrame = UINT32_MAX;
         bool m_needsRedraw = false;
+        int m_staleLogged = 0;
 
-        // Same lesson as the 1.7 overlay crash: drop cached child pointers
-        // without touching them once the PlayLayer they belonged to is gone.
-        void forgetStaleNodes() {
-            m_trail = nullptr;
-            m_readout = nullptr;
-            m_attachedTo = nullptr;
+        // Both nodes hang in this level. They are held and used only while
+        // they're in the current level: GD's Edit exits close a level without
+        // PlayLayer::onQuit (core/level_nodes.hpp). This used to compare the
+        // PlayLayer's address with the one they were made in, which a new
+        // level allocated where the old one was passes, and then detach()
+        // (Agency map switched off) removed the freed nodes.
+        bool attachedTo(PlayLayer* pl) const {
+            return levelnodes::inLevel(m_trail, pl) && levelnodes::inLevel(m_readout, pl);
+        }
+
+        void detach() {
+            levelnodes::drop(m_trail);
+            levelnodes::drop(m_readout);
             m_samples.clear();
             m_lastFrame = UINT32_MAX;
         }
 
-        void detach() {
-            if (m_trail)
-                m_trail->removeFromParent();
-            if (m_readout)
-                m_readout->removeFromParent();
-            forgetStaleNodes();
-        }
-
         void attach(PlayLayer* pl) {
-            if (m_trail || !pl || !pl->m_objectLayer || !pl->m_uiLayer)
+            if (!pl || !pl->m_objectLayer || !pl->m_uiLayer || attachedTo(pl))
                 return;
-            m_attachedTo = pl;
+            if (m_trail || m_readout)
+                levelnodes::noteStale("Agency map", m_staleLogged);
+            detach();
 
-            m_trail = cocos2d::CCDrawNode::create();
-            m_trail->setZOrder(9000);
-            pl->m_objectLayer->addChild(m_trail);
+            auto* trail = cocos2d::CCDrawNode::create();
+            trail->setID("agency-trail"_spr);
+            m_trail = levelnodes::hold(trail, pl->m_objectLayer, 9000);
 
-            m_readout = cocos2d::CCLabelBMFont::create("", "bigFont.fnt");
-            m_readout->setScale(0.32f);
-            m_readout->setAnchorPoint({0.f, 0.5f});
-            m_readout->setZOrder(9000);
+            auto* readout = cocos2d::CCLabelBMFont::create("", "bigFont.fnt");
+            readout->setID("agency-readout"_spr);
+            readout->setScale(0.32f);
+            readout->setAnchorPoint({0.f, 0.5f});
             auto win = cocos2d::CCDirector::sharedDirector()->getWinSize();
-            m_readout->setPosition({14.f, win.height - 26.f});
-            pl->m_uiLayer->addChild(m_readout);
+            readout->setPosition({14.f, win.height - 26.f});
+            m_readout = levelnodes::hold(readout, pl->m_uiLayer, 9000);
         }
 
         void render(PlayLayer* pl) {
             auto* gb = GucciEngine::get();
             if (!gb->pfAgencyDebug) {
-                if (m_trail)
+                if (m_trail || m_readout)
                     detach();
                 return;
             }
             if (!pl || !pl->m_player1)
                 return;
-            if (pl != m_attachedTo)
-                forgetStaleNodes();
-            if (!m_trail) {
+            if (!attachedTo(pl)) {
                 attach(pl);
-                if (!m_trail)
+                if (!attachedTo(pl))
                     return;
             }
 

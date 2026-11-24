@@ -390,6 +390,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // render started then (the Render page's Start) is refused.
         gucci::SLRenderer::get()->m_quittingLayer = this;
         TrajectoryPredictionService::get().updatePreview(nullptr);
+        // The agency map's nodes go with the level, as the other overlays'
+        // do in their own onQuit hooks (it never had one).
+        gbpf::detachAgencyDebug();
         PlayLayer::onQuit();
         gb->practiceFix.clearStoredFrames();
         gb->practiceFix.clearPlatformer(true);

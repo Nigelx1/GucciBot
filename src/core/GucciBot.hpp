@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-a (In-game text: the Credits page, Calculate and the Hitborders card name anticroom, Absent and NaN GD instead of he or his)"
+    "2026-11-24-b (Overlays hold their level nodes and make new ones after an Edit exit, for the Edit-exit crash on iPhone and Mac)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

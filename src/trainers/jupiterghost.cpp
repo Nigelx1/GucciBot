@@ -1,6 +1,7 @@
 #include "trainers/jupiterghost.hpp"
 #include "core/geode_compat.hpp" // gucci::pathToString
 #include "core/GucciBot.hpp"
+#include "core/level_nodes.hpp"
 #include "audio/gameaudiomute.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
@@ -139,24 +140,30 @@ public:
         return &inst;
     }
 
+    // The node hangs in this level. It is held, not only pointed at, and used
+    // only while it's in the current level: GD's Edit exits close a level
+    // without PlayLayer::onQuit (core/level_nodes.hpp).
+    bool attachedTo(PlayLayer* pl) const {
+        return levelnodes::inLevel(m_node, pl);
+    }
+
+    // Made in every level, and again whenever the one held isn't in this
+    // level (that one is dropped first, as the missed quit would have).
     void attach(PlayLayer* pl) {
-        if (m_node || !pl)
+        if (!pl || !pl->m_objectLayer || attachedTo(pl))
             return;
-        auto* anchor = pl->m_objectLayer;
-        if (!anchor)
-            return;
+        if (m_node)
+            levelnodes::noteStale("JMF Trainer ghosts", m_staleLogged);
+        detach();
         auto* node = CCDrawNode::create();
+        node->setID("jupiter-ghost"_spr);
         node->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
         node->m_bUseArea = false;
-        anchor->addChild(node, 1403);
-        m_node = node;
+        m_node = levelnodes::hold(node, pl->m_objectLayer, 1403);
     }
 
     void detach() {
-        if (m_node) {
-            m_node->removeFromParent();
-            m_node = nullptr;
-        }
+        levelnodes::drop(m_node);
         m_liveAttemptPath.clear();
     }
 
@@ -164,9 +171,9 @@ public:
         auto* gb = GucciEngine::get();
         if (!gb || !pl)
             return;
-        if (!m_node) {
+        if (!attachedTo(pl)) {
             attach(pl);
-            if (!m_node)
+            if (!attachedTo(pl))
                 return;
         }
         m_node->clear();
@@ -254,7 +261,8 @@ private:
         m_node->drawDot(CCPoint(x, y), 9.f, col);
     }
 
-    CCDrawNode* m_node = nullptr;
+    CCDrawNode* m_node = nullptr;  // held (retained) while set
+    int m_staleLogged = 0;
     std::vector<std::pair<float, float>> m_liveAttemptPath;
     std::vector<std::pair<float, float>> m_bestAttemptPath;
     float m_bestReachX = 0.f;

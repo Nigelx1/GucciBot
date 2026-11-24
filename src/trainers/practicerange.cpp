@@ -2,6 +2,7 @@
 #include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 #include <Geode/modify/PlayLayer.hpp>
 #include "core/GucciBot.hpp"
+#include "core/level_nodes.hpp"
 
 using namespace geode::prelude;
 
@@ -14,24 +15,30 @@ public:
         return &inst;
     }
 
+    // The node hangs in this level. It is held, not only pointed at, and used
+    // only while it's in the current level: GD's Edit exits close a level
+    // without PlayLayer::onQuit (core/level_nodes.hpp).
+    bool attachedTo(PlayLayer* pl) const {
+        return levelnodes::inLevel(m_node, pl);
+    }
+
+    // Made in every level, and again whenever the one held isn't in this
+    // level (that one is dropped first, as the missed quit would have).
     void attach(PlayLayer* pl) {
-        if (m_node || !pl)
+        if (!pl || !pl->m_objectLayer || attachedTo(pl))
             return;
-        auto* anchor = pl->m_objectLayer;
-        if (!anchor)
-            return;
+        if (m_node)
+            levelnodes::noteStale("Practice Range", m_staleLogged);
+        detach();
         auto* node = CCDrawNode::create();
+        node->setID("practice-range"_spr);
         node->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
         node->m_bUseArea = false;
-        anchor->addChild(node, 1402);
-        m_node = node;
+        m_node = levelnodes::hold(node, pl->m_objectLayer, 1402);
     }
 
     void detach() {
-        if (m_node) {
-            m_node->removeFromParent();
-            m_node = nullptr;
-        }
+        levelnodes::drop(m_node);
         m_clicks.clear();
         m_macroSig = 0;
         m_speedInit = false;
@@ -41,9 +48,9 @@ public:
         auto* gb = GucciEngine::get();
         if (!gb || !pl)
             return;
-        if (!m_node) {
+        if (!attachedTo(pl)) {
             attach(pl);
-            if (!m_node)
+            if (!attachedTo(pl))
                 return;
         }
 
@@ -151,7 +158,8 @@ private:
         }
     }
 
-    CCDrawNode* m_node = nullptr;
+    CCDrawNode* m_node = nullptr;  // held (retained) while set
+    int m_staleLogged = 0;
     std::vector<Click> m_clicks;
     size_t m_macroSig = 0;
     uint32_t m_lastFrame = 0;
