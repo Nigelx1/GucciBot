@@ -173,6 +173,12 @@ namespace gucci::ui {
     // even when the pick is the one the test put on, so theirs is saved. True
     // when a test's theme was on.
     bool endTestTheme();
+    // A test's move of the menu window (the Pages layout's): its top-left
+    // corner goes to (x, y), in the game window's pixels, at its next draw, as
+    // a drag that ended there would (a hidden test game has no mouse to drag
+    // it with). False, and nothing moves, on a phone (the menu fills the
+    // screen) or in the Windows layout (gucci_layout moves those windows).
+    bool moveMenu(float x, float y);
 
     // ---- what the menu shows, as words (Assistant Access reads these)
 

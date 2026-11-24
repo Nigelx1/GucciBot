@@ -95,7 +95,7 @@ Every page has a **Search the menu** box at the end of its title line.
 
 **Settings > Look > Layout** has two choices:
 
-- **Pages** (the default): one page at a time, as in the picture above.
+- **Pages** (the default): one page at a time, as in the picture above. Dragged it off to one side? **Center the menu**, under Layout, puts it back in the middle of the game's window.
 - **Windows**: a bar across the top (the search box, a button for each page, **Pages** and **Close**), and every card of the pages you pick in a window of its own. Drag a window by its title bar, and collapse it with its arrow. Where you put them is remembered. **Tile them again** puts them back in neat columns.
 
 Phones always use Pages, because the windows need a mouse.

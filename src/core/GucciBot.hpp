@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-g (GD 2.2091: no level flip in the editor through update's inlined check)"
+    "2026-11-24-h (Settings gets a Center the menu button)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

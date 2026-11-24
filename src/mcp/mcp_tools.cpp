@@ -1084,14 +1084,18 @@ namespace gucci::mcp {
             "built-in or custom, as a test that is never saved: theme \"\" puts the "
             "user's own theme and Animations back, and so does a restart; `effects` "
             "sets the Animations switch the same way (off holds the moving backdrops "
-            "and a pulsing accent still, so shots compare). Returns open, page, pages (the sidebar's, in "
+            "and a pulsing accent still, so shots compare); `move` {x, y} puts the menu "
+            "window's top-left corner there at its next draw, as a drag that ended there "
+            "(the Pages layout, not on a phone; gucci_ui's windows give its rect a frame "
+            "later). Returns open, page, pages (the sidebar's, in "
             "order), theme {id, name, custom}, themes (every name), effects, test "
             "{theme, effects} and compact (with Compact mode on, its small window "
             "shows instead of the pages).",
             schemaOf({{"open", "boolean", "show (true) or hide (false) the menu"},
                       {"page", "string", "a page's title as the sidebar shows it"},
                       {"theme", "string", "a theme's name, built-in or custom; \"\" puts the user's own back"},
-                      {"effects", "boolean", "the Animations switch, for this test only"}}),
+                      {"effects", "boolean", "the Animations switch, for this test only"},
+                      {"move", "object", "{x, y}: the menu window's top-left corner, in the game window's pixels"}}),
             [](matjson::Value const& a) {
                 auto list = [](std::vector<std::string> const& names) {
                     std::string out;
@@ -1106,6 +1110,10 @@ namespace gucci::mcp {
                 for (char const* key : {"page", "theme"})
                     if (a.contains(key) && !a[key].isString())
                         throw ToolError(std::string(key) + " is a name (a string)");
+                if (a.contains("move") &&
+                    !(a["move"].isObject() && a["move"].contains("x") && a["move"]["x"].isNumber() &&
+                      a["move"].contains("y") && a["move"]["y"].isNumber()))
+                    throw ToolError("move is {x, y}: two numbers");
                 // As the menu key: the menu stays shut while GucciBot stands down.
                 if (argBool(a, "open", false) && GucciEngine::get()->standingDown)
                     throw ToolError("GucciBot is standing down (another bot is enabled), so its menu stays shut");
@@ -1128,6 +1136,13 @@ namespace gucci::mcp {
                         throw ToolError("no page called \"" + title + "\" in the sidebar. Pages: " +
                                         list(ui::pageTitlesWith(themeAsked)));
                 }
+                // The move first too: refused, it leaves the rest as it was. It
+                // lands at the menu's next draw either way.
+                if (a.contains("move") &&
+                    !ui::moveMenu(static_cast<float>(a["move"]["x"].asDouble().unwrapOr(0.0)),
+                                  static_cast<float>(a["move"]["y"].asDouble().unwrapOr(0.0))))
+                    throw ToolError("the menu window doesn't move here: a phone's fills the screen, and the Windows "
+                                    "layout's windows move with gucci_layout");
 
                 if (themeName)
                     ui::setTestTheme(*themeName);

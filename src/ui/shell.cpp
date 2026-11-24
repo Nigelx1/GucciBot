@@ -3176,6 +3176,14 @@ namespace gucci::ui {
 #if !defined(GEODE_IS_MOBILE)
         // The window size the menu (drawMain) last made sure it fits.
         ImVec2 g_menuFitFor{0.f, 0.f};
+        // Settings > Look's Center the menu (Nigel, 2026-11-23): the menu goes
+        // back to the middle of the game's window at its next draw, once. On
+        // its own it's centered only the first time it opens in a launch, and
+        // a drag is kept after that.
+        bool g_centerMenu = false;
+        // A test's move (gucci_menu's move: a hidden test game has no mouse to
+        // drag it with): its top-left corner goes here at the next draw, once.
+        std::optional<ImVec2> g_menuMoveTo;
 #endif
 
         void pageSettings() {
@@ -3342,6 +3350,17 @@ namespace gucci::ui {
                         layout::resetPlaces();
                     kit::RowEnd();
                 }
+#if !defined(GEODE_IS_MOBILE)
+                else {
+                    // Pages: this window, back in the middle of the game's
+                    // window (drawMain). A phone's fills the screen, and has
+                    // no Layout choice to get here.
+                    kit::RowBegin("Menu position", "Puts this window back in the middle of the game's window");
+                    if (kit::Button("Center the menu", Tone::Plain))
+                        g_centerMenu = true;
+                    kit::RowEnd();
+                }
+#endif
             } else {
                 kit::RowBegin("Layout", "Phones keep Pages: the windows need a mouse");
                 kit::Label("Pages", Tone::Muted);
@@ -3884,8 +3903,21 @@ namespace gucci::ui {
                               std::max(1.f, io.DisplaySize.y - 2.f * kMenuMargin));
             ImVec2 const least(std::min(520.f, room.x), std::min(360.f, room.y));
             ImGui::SetNextWindowSize(ImVec2(std::min(720.f, room.x), std::min(500.f, room.y)), ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver,
-                                    ImVec2(0.5f, 0.5f));
+            // In the middle the first time, and again once after Center the
+            // menu (Settings > Look); a test's move puts it where it's told.
+            // BIG BRRRR's shake rides on top of either, as on a drag.
+            if (g_menuMoveTo) {
+                ImGui::SetNextWindowPos(ImVec2(g_menuMoveTo->x + g_brrrOffset.x, g_menuMoveTo->y + g_brrrOffset.y),
+                                        ImGuiCond_Always);
+                g_menuMoveTo.reset();
+            } else if (std::exchange(g_centerMenu, false)) {
+                ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f + g_brrrOffset.x,
+                                               io.DisplaySize.y * 0.5f + g_brrrOffset.y),
+                                        ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            } else {
+                ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver,
+                                        ImVec2(0.5f, 0.5f));
+            }
             ImGui::SetNextWindowSizeConstraints(least, room);
             ImGuiWindowFlags const fit = ImGuiWindowFlags_None;
 #endif
@@ -4865,6 +4897,19 @@ namespace gucci::ui {
 
     bool endTestTheme() {
         return std::exchange(g_test.theme, false);
+    }
+
+    bool moveMenu(float x, float y) {
+#if defined(GEODE_IS_MOBILE)
+        (void)x;
+        (void)y;
+        return false;
+#else
+        if (layout::windows())
+            return false;
+        g_menuMoveTo = ImVec2(x, y);
+        return true;
+#endif
     }
 
     MenuState menuState() {
