@@ -152,8 +152,10 @@ namespace gucci::fwstore {
             {"fwac_hud_scale", &FW::hudScale, 0.1f, 2.f},
             {"fwac_lstar_hud_scale", &FW::lstarHudScale, 0.1f, 2.f},
             {"fwac_label_cbf", &FW::labelCbf, 0.f, static_cast<float>(kBandWindowMax)},
-            // The plain ring's line (Ring thickness, Calculate > Overlay).
-            {"fwac_ring_width", &FW::ringWidth, 0.5f, 8.f, true},
+            // The plain ring's line (Ring thickness, Calculate > Overlay). Up
+            // to 5 (Nigel's D11, 2026-11-22: at 6 or more the ring is nearly
+            // a filled disc); a saved value over 5 loads as 5.
+            {"fwac_ring_width", &FW::ringWidth, 0.5f, 5.f, true},
         };
 
         constexpr char const* kTiersKey = "fwac_tiers";

@@ -8783,10 +8783,11 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
         // A band can carry one of Juice's shapes. Without one this is the plain
         // ring anticroom draws (drawMarkerShape), two passes so the marker
         // reads against a bright background as well as a dark one. Ring
-        // thickness (2026-11-16) sets its line; 2 is the one it always had.
+        // thickness (2026-11-16) sets its line; 2 is the one it always had,
+        // 5 the most (fw_settings_store.cpp, Nigel's D11).
         std::optional<gbshape::Style> const style =
             tier ? std::optional<gbshape::Style>(tier->style) : std::nullopt;
-        float const line = std::clamp(fwcfg.ringWidth, 0.5f, 8.f);
+        float const line = std::clamp(fwcfg.ringWidth, 0.5f, 5.f);
         CCDrawNode* circle = nullptr;
         if (!shapeNode) {
             // (a picture, when there is one, stands in for it)
