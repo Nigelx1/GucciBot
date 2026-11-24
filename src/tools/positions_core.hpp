@@ -1,6 +1,6 @@
 #pragma once
 
-// Possible positions (hitborders' yellow band; NaN GD's idea, he isn't
+// Possible positions (hitborders' yellow band; an idea from NaN GD, who isn't
 // involved): the math, with nothing of the game in it, so the offline suite
 // (tools/run_positions_tests.cpp) can check it. hacks/positions.cpp runs the
 // copies and hands their paths here; hacks/hitborders.cpp draws what comes

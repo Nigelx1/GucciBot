@@ -7,10 +7,10 @@
 // while it plays, and the video and every audio track get the same length of
 // lead-in, so the level lines up after it.
 //
-// Changes from his:
+// Changes from the original:
 //  - GucciBot's settings (saved values, loaded with the other render settings)
 //    instead of glaze.
-//  - GD's own bigFont.fnt is the default font. His ships PUSAB.ttf, whose
+//  - GD's own bigFont.fnt is the default font. The original ships PUSAB.ttf, whose
 //    embedded notice reads "All rights reserved" with no license, so it is
 //    not bundled here. bigFont is the same Pusab lettering and is in every GD
 //    install; a .ttf can still be named in the settings.

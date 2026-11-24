@@ -1,6 +1,6 @@
 #pragma once
 
-// Possible positions (Hitborders card; NaN GD's idea, he isn't involved): a
+// Possible positions (Hitborders card; an idea from NaN GD, who isn't involved): a
 // yellow band ahead of player 1 while a macro plays: where its center could
 // go if one click at a time landed anywhere in its frame window, with every
 // other click kept where the macro has it.

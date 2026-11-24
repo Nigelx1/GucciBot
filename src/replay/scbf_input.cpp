@@ -1,4 +1,4 @@
-// anticroom's SCBF live recorder, ported 2026-09-27. Logic is his; the changes
+// anticroom's SCBF live recorder, ported 2026-09-27. Logic is anticroom's; the changes
 // are GucciBot's settings and accessors in place of Silicate's. See the header.
 
 #include "replay/scbf_input.hpp"
@@ -99,7 +99,7 @@ namespace scbf {
     bool LiveRecorder::recording() const {
         auto* gb = gucci::GucciEngine::get();
         // Input FPS moves presses to whole input ticks, which is the opposite
-        // of what this does -- it wins when both are on, as in his.
+        // of what this does -- it wins when both are on, as in the original.
         return gb->replay.m_scbfRecording && gb->enabled && gb->isRecording() &&
                PlayLayer::get() && !::Bot::get()->frameWindow().running() &&
                !gb->updater.inputFpsActive();

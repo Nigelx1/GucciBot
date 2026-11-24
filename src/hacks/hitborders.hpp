@@ -7,7 +7,7 @@
 // pads, portals and touch triggers. The player's path and clicks are drawn in
 // white behind it (the player as a dot too, if asked; yellow until
 // 2026-11-19, when Nigel made them white like NaN GD's). Drawn the way NaN GD
-// draws his (2026-11-10, Nigel: "jus do it like him"): used orbs, pads and
+// draws hitborders (2026-11-10, Nigel: "jus do it like [NaN GD]"): used orbs, pads and
 // portals stay drawn, the path is half as thick as the outlines, no dot by
 // default, and the level darkened under the borders so they stand out.
 //

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-ac (the GD 2.2091 file is built for Geode 6.0.0, the first stable Geode 6, instead of 6.0.0-beta.1)"
+    "2026-11-24-ad (code comments name anticroom, Absent and NaN GD instead of he or his; comments only, nothing else changes)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
@@ -345,13 +345,13 @@ namespace gucci {
         bool m_ignoreInputs = true;
         // anticroom's SCBF (replay/scbf_input.hpp). CBF Recording places each
         // live press at the point in the tick it really arrived; Tick
-        // Splitting is his on/off for actually splitting the tick -- off
+        // Splitting is the on/off for actually splitting the tick -- off
         // records on the edge as usual, so it can be bound to a key and used
-        // only for the inputs that need it. Both his defaults.
+        // only for the inputs that need it. Both anticroom's defaults.
         bool m_scbfRecording = false;
         bool m_scbfTickSplit = true;
         // Sub-tick frame advance (replay/subtick_preview.hpp): stepping while
-        // paused moves through the tick in this many splits. His defaults.
+        // paused moves through the tick in this many splits. anticroom's defaults.
         bool m_subtickPreview = false;
         int m_subtickSplits = 24000;
         bool m_forceNextInput = false;

@@ -6843,7 +6843,7 @@ bool Trajectory::realPlayerHasActivated(PlayerObject* player,
 //
 // Ported from anticroom's Silicate fork (src/trajectory/trajectory.cpp:
 // cloneReal, splitStep, extrapolate, extrapolateBranch; GPL-3), onto these
-// copies and this file's set-up of them. His draws the branch straight into
+// copies and this file's set-up of them. The fork draws the branch straight into
 // the node it is given; here the points come back and GucciBot's sub-tick
 // preview draws them (replay/subtick_preview.cpp), so nothing here touches a
 // node. Hooks keep the copies' tick away from the real level while m_drawing

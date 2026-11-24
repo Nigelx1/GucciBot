@@ -1,10 +1,10 @@
 // The Calculate page: settings for anticroom's frame-window analyzer
 // (src/analysis/ac/), and a Run card for it. Written fresh for the 2026-10
 // menu. The grouping, labels and most help texts follow anticroom's own
-// Frame Windows tab in his Silicate fork (src/ui/manager.cpp) -- Overlay,
+// Frame Windows tab in the Silicate fork (src/ui/manager.cpp) -- Overlay,
 // Sound, Bands, Precision, Measurement, CBF Counting, Releases, Run -- with
-// the everyday settings first and his run-speed and debug options under
-// Advanced. Credit for those texts is his.
+// the everyday settings first and the run-speed and debug options under
+// Advanced. Credit for those texts goes to anticroom.
 //
 // Every control writes straight into SLSettings::get()->frameWindow, which the
 // analyzer reads live, and the page saves the lot through fwstore::save() at
@@ -291,14 +291,14 @@ namespace gucci::ui::pages {
             kit::BeginCard("Measurement", "How an input is judged.");
 
             // GucciBot (2026-10-23): presets, after anticroom's antics-counter (beta.4's Accuracy, beta.7's
-            // Absolute; he dropped Fast). Read off the settings every frame, so Custom when none matches.
+            // Absolute; Fast was dropped). Read off the settings every frame, so Custom when none matches.
             int preset = fwstore::matchingPreset();
             if (kit::ChoiceRow("Preset", presetHint(preset), &preset, fwstore::kPresetNames, fwstore::kPresetCount))
                 fwstore::applyPreset(preset);
 
             const char* algos[] = {"Time-Based", "Recovery Range"};
             // GucciBot (2026-10-23): the hint said "Stricter", from anticroom's old tooltip, but Recovery Range only
-            // ever rescues a shift, so it widens windows; his antics-counter beta.4 changelog says as much.
+            // ever rescues a shift, so it widens windows; the antics-counter beta.4 changelog says as much.
             if (kit::ChoiceRow("Algorithm",
                                "Time-Based counts a shift only if the macro survives it. Recovery Range also counts "
                                "one that dies if moving the next input up to the recovery window either way saves "

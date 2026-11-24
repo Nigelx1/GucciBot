@@ -1,5 +1,5 @@
 // anticroom's SubtickPreview, ported 2026-09-27. Stepping, the step stride,
-// the label and the "a press here steps the tick" rule are his; the drawing
+// the label and the "a press here steps the tick" rule are anticroom's; the drawing
 // runs on GucciBot's trajectory. See the header.
 
 #include "replay/subtick_preview.hpp"
@@ -27,7 +27,7 @@ namespace scbf {
         // Holding the step key crosses about a whole tick per this many
         // repeats, however fine the splits.
         constexpr double REPEATS_PER_TICK = 100.0;
-        // His keybind repeat rate default. GucciBot's step key repeats at the
+        // anticroom's keybind repeat rate default. GucciBot's step key repeats at the
         // OS rate and has no setting for it.
         constexpr double KEY_REPEAT_HZ = 30.0;
 
@@ -145,7 +145,7 @@ namespace scbf {
         }
 
         auto* gb = gucci::GucciEngine::get();
-        // His cbfInUse(): recording with CBF on, or a macro that has offsets.
+        // anticroom's cbfInUse(): recording with CBF on, or a macro that has offsets.
         // Worked out once per frame here -- the macro scan is linear.
         m_cbfInUse = gb->replay.m_scbfRecording ||
                      (gb->replay.m_subtickPreview && scbf::hasOffsets(gb->replay.m_actionAtom.m_actions));

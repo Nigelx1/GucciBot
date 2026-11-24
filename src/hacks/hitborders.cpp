@@ -211,8 +211,8 @@ namespace gucci {
             return layer && node && node->getParent() == layer->m_objectLayer;
         }
 
-        // NaN GD recolors the level's own objects black so his hitborders
-        // stand out (2026-11-10, from his videos' frames). Here, a black layer
+        // NaN GD recolors the level's own objects black so the hitborders
+        // stand out (2026-11-10, from frames of NaN GD's videos). Here, a black layer
         // over everything drawn so far (the background and the level under
         // the icon) and under the borders: one quad across the whole viewport,
         // the way drawMerged lays its texture, so it covers the window and
@@ -1167,7 +1167,7 @@ namespace gucci {
         std::vector<CCPoint> scratch;
         ccColor4F const clear{0.f, 0.f, 0.f, 0.f};
         // Green, then blue, then red: red ends up on top and blue over green, the
-        // way NaN GD draws his hitborders (2026-11-10, from his videos' frames: a
+        // way NaN GD draws hitborders (2026-11-10, from the videos' frames: a
         // block's blue band covers an orb's green square). It was blue, green, red.
         constexpr hb::Kind kOrder[] = {hb::Kind::Special, hb::Kind::Touch, hb::Kind::Lethal};
         for (hb::Kind const kind : kOrder) {

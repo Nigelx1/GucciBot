@@ -520,7 +520,7 @@ class FrameWindowAnalyzer {
     SLValuePtr<bool> m_showTiming = SLValue<bool>::create(
         "framewindow.show_timing", &SLSettings::get()->frameWindow.showTiming);
     // GucciBot: anticroom's precision readout and our L* HUD are the same
-    // feature. His toggle drives ours, so there is one switch and one readout.
+    // feature. anticroom's toggle drives ours, so there is one switch and one readout.
     SLValuePtr<bool> m_showPrecision = SLValue<bool>::create(
         "framewindow.show_precision",
         &SLSettings::get()->frameWindow.lstarHud);

@@ -3694,9 +3694,9 @@ namespace gucci {
         // Starting a run from behind an open pause menu crashes: the analyzer
         // immediately resets the level and steps physics, which GD does not
         // expect while a PauseLayer is up holding references into the scene.
-        // His start() checks six things but not this one. GucciBot's own
+        // anticroom's start() checks six things but not this one. GucciBot's own
         // analyzer dismissed the menu first, and that handling was removed
-        // along with it -- restored here, in front of his start(), so
+        // along with it -- restored here, in front of that start(), so
         // Calculate works from the pause menu the way it always did.
         if (auto* pause = findOpenPauseLayer()) {
             pause->onResume(nullptr);

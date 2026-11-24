@@ -123,7 +123,7 @@ class $modify(GB7PlayerObject, PlayerObject) {
     //
     // Only player 1 drives this; player 2 is stepped from inside the same
     // loop, and m_p2Handled tells the p2 update to stand down for that tick.
-    // anticroom's CBF split, as of his 2026-09-26 source drop.
+    // anticroom's CBF split, as of the 2026-09-26 source drop.
     //
     // The tick used to be carved into a queue of sub-steps that this function
     // popped one at a time. It is now split exactly once, at the fraction of
@@ -380,7 +380,7 @@ class $modify(GB7PlayerObject, PlayerObject) {
         PlayerObject::spawnCircle();
     }
 
-    // Macro Buffing's spider snaps (anticroom's caller, from his source
+    // Macro Buffing's spider snaps (a caller from anticroom's source
     // drop): the trail buffer records where the spider dashed from and to,
     // which the per-tick trail skips. saveSpiderDash takes only the real
     // players, so a trajectory copy's dash isn't recorded. Absense hooks this

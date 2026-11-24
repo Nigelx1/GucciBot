@@ -10,7 +10,7 @@
 // and Tick Splitting on, pressing at a split records the input at that point
 // in the tick.
 //
-// His draws with his trajectory's extrapolate/extrapolateBranch; GucciBot's
+// The original draws with its trajectory's extrapolate/extrapolateBranch; GucciBot's
 // trajectory is its own design, so those two are rebuilt on it
 // (TrajectoryPredictionService::extrapolateSubtick / traceSubtickBranch).
 

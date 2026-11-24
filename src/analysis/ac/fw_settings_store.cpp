@@ -1,6 +1,6 @@
 // See fw_settings_store.hpp. Written fresh for GucciBot (2026-10); the
-// limits are the ones anticroom's own settings tab clamps to (his Silicate
-// fork, src/ui/manager.cpp, the Frame Windows tab) wherever he set one.
+// limits are the ones anticroom's own settings tab clamps to (the Silicate
+// fork, src/ui/manager.cpp, the Frame Windows tab) wherever it sets one.
 
 #include "analysis/ac/fw_settings_store.hpp"
 
@@ -46,9 +46,9 @@ namespace gucci::fwstore {
         // Every bool the analyzer, the hooks or the renderer reads.
         //
         // Deliberately not stored, because nothing reads them: showLabels and
-        // showTotals (anticroom's struct carries them, his analyzer never
+        // showTotals (anticroom's struct carries them, the analyzer never
         // looks at them). And labelApply / labelTest, which are not settings
-        // at all: in his menu they are buttons wired through change-callbacks;
+        // at all: in anticroom's menu they are buttons wired through change-callbacks;
         // the Calculate page calls applyLabel() and testPlayhead() directly.
         constexpr Flag kFlags[] = {
             {"fwac_enabled", &FW::enabled},

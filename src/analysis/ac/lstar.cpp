@@ -2,19 +2,19 @@
 // the precision a player would need to clear the level inside a target
 // time, given every miss costs a restart. Higher is harder.
 //
-// The formula is NaN GD's, published at nandl.pages.dev/#formula -- he
+// The formula is NaN GD's, published at nandl.pages.dev/#formula, which
 // calls it a PRECISION rate in sigma/s, not a difficulty score, and says
 // plainly that frame windows alone do not determine difficulty. Worth
-// keeping that framing: every term here maps onto his page one-to-one
+// keeping that framing: every term here maps onto that page one-to-one
 // (s_i = 1/2 w_i L, the nerve/fatigue/cps multipliers, E[T_C] = E[T_A]/P(C),
 // and L* defined as the L solving E[T_C] = 24h).
 //
 // The C++ came via C0nscious's implementation of that formula in Frame
 // Window Counter (MIT, github.com/hyper-5/frame-window-counter,
 // src/Math/Calculator.cpp) -- a mod named after NaN's video series. This
-// is anticroom's port of it, which came across with the rest of his
+// is anticroom's port of it, which came across with the rest of the
 // analyzer; the readout that drives it lives in the GUI's Frame Windows
-// tab and is GucciBot's own, because he finished his after sending the
+// tab and is GucciBot's own, because anticroom finished that part after sending the
 // source. Upstream solves eight penalty combinations on eight threads and
 // picks between them; this solves the one combination the settings
 // select, which is the same math with the dead variants not computed.

@@ -6,7 +6,7 @@
 // GPL-3.0, the licence GucciBot is under too), replacing the stopgap that
 // stood in after the ToastyReplay-derived one was removed. Per player, as in
 // Silicate: on/off, hold and release lengths, extra clicks on each press tick
-// and swift clicks. Absent's black orb UFO loop (from Absense, his Silicate
+// and swift clicks. Absent's black orb UFO loop (from Absense, the Silicate
 // port) is in as well, and "only while holding" is GucciBot's own.
 //
 // Nothing here touches the game's buttons. engine_updater.cpp calls

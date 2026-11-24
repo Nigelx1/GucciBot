@@ -405,7 +405,7 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
     //
     // This matters most at hook_gjbasegamelayer.cpp's input dispatch, which
     // looks inputs up at frame+1 during normal playback and at frame during a
-    // simulation. Without this every input in one of his legs fired a frame
+    // simulation. Without this every input in one of the analyzer's legs fired a frame
     // late: the press on the click being measured had not happened yet on its
     // own frame, so the leg diverged from the capture by exactly one frame of
     // movement and the click was written off as desynced. Tight sections died
@@ -437,7 +437,7 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
     // seconds rather than minutes. Ported from Silicate's updater, and placed
     // where Silicate places it -- ahead of the normal step calculation, which
     // it deliberately bypasses. m_analysisBatch is only ever non-zero for the
-    // duration of one of his stepping calls, so nothing else sees this path.
+    // duration of one of the analyzer's stepping calls, so nothing else sees this path.
     // GD runs all m_analysisBatch ticks inside this one update: on Windows
     // through the physStepCount/restorePhysDt midhooks below, elsewhere
     // through the getModifiedDelta hook (hook_gjbasegamelayer.cpp) at GD's
@@ -688,7 +688,7 @@ static void physStepCountMidhook(SafetyHookContext& ctx) {
     if (!gb->enabled)
         return;
     auto& upd = gb->updater;
-    // m_analysisBatch bypass ported from anticroom's source 2026-09-21: his
+    // m_analysisBatch bypass ported from anticroom's source 2026-09-21: that
     // build has it on both of these and ours did not. While the analyzer is
     // running a batched step, GD must be left to do its own sub-stepping for
     // that multiplied dt rather than be forced to a single-step count.
@@ -706,7 +706,7 @@ static void restorePhysDtMidhook(SafetyHookContext& ctx) {
     if (!gb->enabled)
         return;
     auto& upd = gb->updater;
-    // m_analysisBatch bypass ported from anticroom's source 2026-09-21: his
+    // m_analysisBatch bypass ported from anticroom's source 2026-09-21: that
     // build has it on both of these and ours did not. While the analyzer is
     // running a batched step, GD must be left to do its own sub-stepping for
     // that multiplied dt rather than be forced to a single-step count.
@@ -1017,7 +1017,7 @@ static void tickSettledWork() {
     if (Pathfinder::get()->active)
         Pathfinder::get()->tick();
     // Draws anticroom's markers and HUD. Called every frame regardless of
-    // whether his analyzer is running, matching Silicate -- render() also
+    // whether the analyzer is running, matching Silicate -- render() also
     // tears its own nodes down when there is nothing to show. Its nodes have
     // their own IDs ("framewindow-markers"/"framewindow-hud"), so they do not
     // collide with GucciBot's own FrameWindowOverlay.

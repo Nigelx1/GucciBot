@@ -436,7 +436,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
     // really arrived in; a press that landed inside that tick is handed to the
     // CBF engine to fire that far into the step, and recorded with the offset.
     // One split point per tick: every press due this tick splits at the first
-    // one's offset, as in his.
+    // one's offset, as in anticroom's.
     void releaseLiveInputs() {
         auto* gb = GucciEngine::get();
         auto& live = scbf::LiveRecorder::get();
@@ -517,8 +517,8 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // Tell anticroom's analyzer the moment a press is actually applied,
         // and in what state the player was when it landed -- notably whether
         // the input could be split within the tick or had to be buffered,
-        // which is what his cube CBF investigation hangs on. Inert unless
-        // Calculate (his analyzer) is running.
+        // which is what anticroom's cube CBF investigation hangs on. Inert unless
+        // Calculate (the analyzer) is running.
         // Placed exactly where Silicate places it: after the button filter,
         // before the input is handed onward.
         if (auto& acfw = ::Bot::get()->frameWindow(); acfw.running()) {

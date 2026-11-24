@@ -7,7 +7,7 @@
 // new file in and re-apply rather than re-port. Everything it reaches for on
 // the Silicate side is defined below in GucciBot's terms: Bot::get() becomes
 // GucciEngine, SLValue becomes a pointer to a field of our own settings
-// struct, and slc::Action is gb::Action (same fields -- his analyzer was
+// struct, and slc::Action is gb::Action (same fields -- the analyzer was
 // ported out of GucciBot in the first place, which is why 14 of the 17
 // symbols it wants already matched by name).
 //
@@ -41,7 +41,7 @@ namespace slc {
 
 using gucci::SavedPlayerCheckpoint;
 
-// His SavedCheckpoint and our SavedCheckpointState are the same idea with the
+// anticroom's SavedCheckpoint and our SavedCheckpointState are the same idea with the
 // same two player halves; only the frame field is spelled differently
 // (m_frame vs m_frameOffset), which is renamed at the call sites.
 using SavedCheckpoint = gucci::SavedCheckpointState;
@@ -50,9 +50,9 @@ class FrameWindowAnalyzer;
 
 // --- sub-tick input offsets (anticroom's SCBF) -------------------------------
 
-// His macros carry a sub-tick offset per input -- where inside the frame it
+// SCBF macros carry a sub-tick offset per input -- where inside the frame it
 // landed -- bit-cast into slc::Action::m_seed. gb::Action has a real field for
-// it, m_subtick (2026-09-27), saved in GBR6's sub-tick section. These are his
+// it, m_subtick (2026-09-27), saved in GBR6's sub-tick section. These are anticroom's
 // helpers over that field, same contract: only player inputs carry one, and
 // anything outside (0, 1) reads as the tick edge.
 namespace scbf {
@@ -140,7 +140,7 @@ struct FrameWindowTier {
     std::string group = "";
 };
 
-// Copied field-for-field from anticroom's settings.hpp. Defaults are his --
+// Copied field-for-field from anticroom's settings.hpp. Defaults are anticroom's too --
 // with one deliberate exception noted at subframeProbe.
 struct FrameWindowSettings {
     bool enabled = true;
@@ -153,11 +153,11 @@ struct FrameWindowSettings {
     int maxFrames = 480;
     int slack = 2;
     // GucciBot (2026-10-23): 2, anticroom's own since antics-counter beta.4
-    // (his Accuracy preset turns Recovery Range on at 2); it was 8.
+    // (the Accuracy preset turns Recovery Range on at 2); it was 8.
     int recoveryRange = 2;
 
     // CBF sub-tick windows. On, at anticroom's own default, since 2026-09-20:
-    // he confirmed the cube bug fixed in this source. The fix is visible here
+    // anticroom confirmed the cube bug fixed in this source. The fix is visible here
     // -- a CBF leg is forced into Buffer mode, and bufferShiftValid() now
     // rejects a sub-tick shift that lands on or past a neighbouring input
     // (m_fineCrossedNeighbour), which is where dense cube inputs went wrong.
@@ -169,7 +169,7 @@ struct FrameWindowSettings {
     bool cbfTickGround = true;
     double lstarRespawn = 0.0;
     double lstarTarget = 86400.0;
-    // NaN GD's own coefficients, the same values his calculator ships with
+    // NaN GD's own coefficients, the same values the web calculator ships with
     // (nandl.pages.dev/calculator.js: kt/ku/kc) and the same ones C0nscious
     // hardcodes as DEFAULT_K_T/U/C. These were 0.0 here, which made the three
     // toggles inert -- switching one on multiplied by exp(0)=1 and changed
@@ -185,7 +185,7 @@ struct FrameWindowSettings {
     int subframeScanPercent = 5;
     // GucciBot (2026-10-23): Faster sub-tick search, from anticroom's
     // antics-counter beta.6 changelog ("Small CBF count speed optimization";
-    // his changelog only, so the search is ours): a sub-tick pass starts from
+    // the changelog only, so the search is ours): a sub-tick pass starts from
     // the edges the whole-frame count found instead of walking out from the
     // input. Off: today's count, while the two are compared.
     bool fastSubtick = false;
@@ -199,7 +199,7 @@ struct FrameWindowSettings {
     bool analysisVisuals = true;
     bool lockCamera = true;
     bool hideSpawnEffects = true;
-    // GucciBot (2026-10-23): the Leg Trail, anticroom's idea from his
+    // GucciBot (2026-10-23): the Leg Trail, anticroom's idea from the
     // antics-counter changelog (beta.5, improved in beta.6): every test run
     // drawn in the level while a run counts. It only draws, so it's off by
     // default and changes no count.
@@ -282,10 +282,10 @@ struct FrameWindowSettings {
 
     // Only the on/off switch is ours. The solver's own inputs -- lstarTarget,
     // lstarRespawn and the three penalty terms -- are anticroom's fields
-    // above, already here when his source came across; the readout is what
-    // did not, because he finished that part after sending it.
+    // above, already here when the source came across; the readout is what
+    // did not, because anticroom finished that part after sending it.
     bool lstarEnabled = true;
-    // In-level readout, bottom left -- where NaN puts it in his own videos
+    // In-level readout, bottom left -- where NaN's own videos put it
     // ("the number on the bottom left of my videos", nandl.pages.dev FAQ).
     // This is the showcase-facing half of L*: without it the number only
     // exists inside the mod menu, which is no use on a recording.
@@ -305,7 +305,7 @@ struct FrameWindowSettings {
     // --- anticroom's 2026-09-26 source drop ("slc count") -----------------
     // Dependent search: measures inputs whose window moves depending on where
     // the input before them landed, instead of treating every click alone.
-    // GucciBot (2026-10-23): reworked after his antics-counter beta.6
+    // GucciBot (2026-10-23): reworked after the antics-counter beta.6
     // changelog to tight inputs only, a few test runs each (framewindow.cpp,
     // above beginDependentPass). Still off by default.
     bool dependentSearch = false;
@@ -331,7 +331,7 @@ struct FrameWindowSettings {
     bool labelReleases = false;
     bool labelApply = false;
     bool labelTest = false;
-    // (His showPrecision toggle is NOT a field here -- framewindow.hpp points
+    // (anticroom's showPrecision toggle is NOT a field here -- framewindow.hpp points
     // it at lstarHud above, so the in-level L* readout has one switch, not two.)
 };
 
@@ -396,7 +396,7 @@ public:
 // Silicate's SLValue is a named, persisted handle onto a settings field. Here
 // it is just the pointer: persistence stays GucciBot's job, so the analyzer
 // reads and writes live settings and whatever saves them keeps working. The
-// key is retained because his UI and logs print it.
+// key is retained because anticroom's UI and logs print it.
 template <typename T>
 class SLValue {
 public:
@@ -423,7 +423,7 @@ using SLValuePtr = std::shared_ptr<SLValue<T>>;
 
 // --- the bot ----------------------------------------------------------------
 
-// His analyzer talks to Bot::get()->updater() / ->replaySystem(). Both are
+// The analyzer talks to Bot::get()->updater() / ->replaySystem(). Both are
 // plain members on GucciEngine, and the member names inside them already
 // match, so this is pure forwarding.
 class Bot {

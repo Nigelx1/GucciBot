@@ -1,5 +1,5 @@
 // Possible positions: see positions.hpp. Written fresh for GucciBot
-// (2026-11-19); the idea is NaN GD's (he isn't involved). The runs are the
+// (2026-11-19); the idea comes from NaN GD, who isn't involved. The runs are the
 // fork service's survivesScript (analysis/trajectory.cpp) on Absense's copies
 // of the player (Absent, GPL-3 via Silicate), asked exactly as the Survival
 // Indicator and the Classic pathfinder ask it.

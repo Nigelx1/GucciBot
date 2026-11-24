@@ -1077,12 +1077,12 @@ int64_t FrameWindowAnalyzer::legReach(size_t afterAi, int64_t from,
         }
     }
     // GucciBot (2026-11-09): one tick less, so a leg ends where anticroom's
-    // own ends for the same input. His analyzer runs in Silicate, which labels
+    // own ends for the same input. anticroom's analyzer runs in Silicate, which labels
     // an input with the frame it is applied at; GucciBot labels it one higher
     // (CLAUDE.md section 4; an analyzer run looks inputs up at frame + 1,
     // hook_gjbasegamelayer.cpp). Every caller ends its leg at `from + reach`
     // with `from` a GucciBot label, so without this each leg ran one physics
-    // tick further than his for the same Slack, MIN_HORIZON and Horizon.
+    // tick further than anticroom's for the same Slack, MIN_HORIZON and Horizon.
     // Antic's Counter vs Calculate on KOCMOC (2026-11-09): 21 inputs were one
     // or two frames narrower here; the sampled legs died in that extra tick,
     // and with this, a full run matched the counter on 395 of 400 (the rest:
@@ -3994,7 +3994,7 @@ bool FrameWindowAnalyzer::captureDiedInSpan() const {
 // ---- GucciBot (2026-10-23): Faster sub-tick search --------------------------
 //
 // From anticroom's antics-counter beta.6 changelog ("Small CBF count speed
-// optimization"). We have his changelog, not his code, so the search is ours.
+// optimization"). We have the changelog, not the code, so the search is ours.
 //
 // A sub-tick (CBF) pass searches each side out from the input's own timing in
 // steps of Search stride (5% of a tick), then bisects the step where a test
@@ -5952,12 +5952,12 @@ void FrameWindowAnalyzer::placeAt(size_t k, double pos) {
 
 // ---- The dependent pass ------------------------------------------------------
 //
-// anticroom's, from his 2026-09-26 "slc count" drop: an input whose window
+// anticroom's, from the 2026-09-26 "slc count" drop: an input whose window
 // depends on where the input before it landed is measured again with that
 // input moved across its own window, and its window becomes the average,
-// shown as ~N. Reworked 2026-10-23 after his antics-counter beta.6 changelog
+// shown as ~N. Reworked 2026-10-23 after the antics-counter beta.6 changelog
 // ("Dependent Pair Search improved: a lot faster and more accurate"). We have
-// the changelog, not his source, so the rework is ours, aimed at what was
+// the changelog, not the source, so the rework is ours, aimed at what was
 // wrong with our copy: it scanned the input across the whole search distance
 // at an eighth of a tick, at seven alignments, for nearly every input
 // (hundreds of test runs each); it measured whole-frame windows in sub-tick
@@ -6002,7 +6002,7 @@ bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
 
     // GucciBot (2026-10-23): only the pairs that can matter, from anticroom's
     // antics-counter beta.6 changelog ("Dependent Pair Search improved: a lot
-    // faster and more accurate"; his changelog, no source). It took every
+    // faster and more accurate"; the changelog, no source). It took every
     // input whose input before was within the Horizon, which is nearly every
     // input, at hundreds of test runs each. Now: a tight input (its window at
     // most the Tight threshold), whose input before is within the search
@@ -9765,8 +9765,8 @@ void FrameWindowAnalyzer::updateProgressOverlay(PlayLayer* pl) {
 // ---- GucciBot (2026-10-23): the Leg Trail -----------------------------------
 //
 // anticroom's antics-counter has one since beta.5 ("shows what the auto frame
-// window counter is doing during a run", improved in beta.6). We have his
-// changelog, not his code, so the look is ours. Each test run (a leg) is taken
+// window counter is doing during a run", improved in beta.6). We have the
+// changelog, not the code, so the look is ours. Each test run (a leg) is taken
 // tick by tick from the engine's settled point (noteLegTick), and drawn in the
 // level's object layer, as the macro path is: it sits on the level, zooms
 // with it, and turns with a mirror portal's flip, which a marker in the UI
@@ -10186,13 +10186,13 @@ void FrameWindowAnalyzer::render(PlayLayer* pl) {
 // GucciBot: anticroom's precision readout and our L* HUD are the same feature
 // -- bottom left, percentage stacked over the running value, the way NaN shows
 // it. Ours is the one Nigel has checked in-game and it has a scale setting, so
-// his call site drives ours rather than two readouts drawing over each other.
+// anticroom's call site drives ours rather than two readouts drawing over each other.
 //
-// Taken from his version: the solver is fed the TPS the results were MEASURED
+// Taken from anticroom's version: the solver is fed the TPS the results were MEASURED
 // at (resultsTps), not whatever TPS happens to be set now.
 //
-// Not taken: his percentage is (value/total)^2; ours is linear. NaN's formula
-// page does not define the in-level percentage (it comes from his videos), so
+// Not taken: anticroom's percentage is (value/total)^2; ours is linear. NaN's formula
+// page does not define the in-level percentage (it comes from NaN's videos), so
 // this stays as Nigel has seen it until someone checks it against a video.
 void FrameWindowAnalyzer::updatePrecisionReadout(PlayLayer* pl, uint32_t) {
     this->updateLStarHud(pl);
@@ -10829,7 +10829,7 @@ void FrameWindowAnalyzer::updateTripLabel(PlayLayer* pl) {
 }
 
 // anticroom registers change-callbacks on m_labelWindow / m_labelApply /
-// m_labelTest here, which is how HIS settings UI triggers a label or a test.
+// m_labelTest here, which is how anticroom's own settings UI triggers a label or a test.
 // GucciBot's menu is immediate-mode ImGui and calls applyLabel() and
 // testPlayhead() straight from its own buttons (ui/pages/calculate.cpp), so
 // there is nothing to register.

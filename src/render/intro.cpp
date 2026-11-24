@@ -1,5 +1,5 @@
 // Frame Window intro card -- ported from anticroom's Silicate fork ("slc
-// count", 2026-09-26). Layout, text substitution and band list are his; the
+// count", 2026-09-26). Layout, text substitution and band list are anticroom's; the
 // changes are listed at the top of intro.hpp.
 
 #include "intro.hpp"
