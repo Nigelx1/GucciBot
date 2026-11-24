@@ -98,7 +98,7 @@ struct FrameWindowTier {
     // GucciBot (2026-10-23): the edges can be decimals, like 0.3-0.5 for
     // sub-tick (CBF) windows (anticroom's antics-counter beta.5 changelog). A
     // band with two whole edges holds whole windows as it always did; see
-    // FrameWindowAnalyzer::bandHolds.
+    // analysis/ac/band_pick.hpp.
     float minWindow = 0.f;
     // GucciBot's bands top out at 10 -- past that a window is lenient enough
     // that the exact number stops mattering. anticroom's default is 999.

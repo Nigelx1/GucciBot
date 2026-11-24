@@ -5,6 +5,7 @@
 #include "hacks/safemode_2209.hpp"  // GB_SAFETY_2209: GD 2.2091's Ignore Damage (gdIgnoreDamage)
 #include "trailbuf/trailbuf.hpp"
 
+#include "band_pick.hpp"
 #include "cbf.hpp"
 #include "default_look.hpp"
 
@@ -7728,28 +7729,25 @@ std::string FrameWindowAnalyzer::formatWindow(int window) {
 // whose edges are both whole numbers holds whole windows, exactly as before:
 // `whole` is the caller's whole count. A band with a decimal edge holds
 // `value` itself, rounded to the places the marker prints, so two markers that
-// both read 0.50 land in the same band.
-bool FrameWindowAnalyzer::bandHolds(FrameWindowTier const& t, int whole,
-                                    double value) const {
-    if (t.minWindow == std::floor(t.minWindow) &&
-        t.maxWindow == std::floor(t.maxWindow)) {
-        double const w = whole;
-        return w >= t.minWindow && w <= t.maxWindow;
-    }
+// both read 0.50 land in the same band. The rules live in
+// analysis/ac/band_pick.hpp (2026-11-23), with Nigel's D13 for a sub-tick
+// value in a gap between two bands.
+double FrameWindowAnalyzer::shownValue(double value) const {
     double const scale =
         std::pow(10.0, std::clamp(m_subframeDecimals->inner(), 0, 4));
-    double const shown = std::round(value * scale) / scale;
-    // An edge is a float: 0.3 is stored a hair off 0.3, so allow a hair.
-    constexpr double EDGE_SLACK = 1e-5;
-    return shown >= t.minWindow - EDGE_SLACK &&
-           shown <= t.maxWindow + EDGE_SLACK;
+    return std::round(value * scale) / scale;
 }
 
 FrameWindowTier const* FrameWindowAnalyzer::tierForValue(int whole,
                                                          double value) const {
-    for (auto const& t : SLSettings::get()->frameWindow.tiers)
-        if (this->bandHolds(t, whole, value)) return &t;
-    return nullptr;
+    auto const& tiers = SLSettings::get()->frameWindow.tiers;
+    int const at = gucci::bandpick::pick(
+        tiers.size(),
+        [&](size_t i) {
+            return gucci::bandpick::Edges{tiers[i].minWindow, tiers[i].maxWindow};
+        },
+        whole, this->shownValue(value));
+    return at < 0 ? nullptr : &tiers[static_cast<size_t>(at)];
 }
 
 namespace fwstore {
@@ -8487,11 +8485,17 @@ std::string FrameWindowAnalyzer::describe() const {
         if (frac > 0.0) add(lo + 1, frac);
 
         // GucciBot (2026-10-23): a band with decimal edges takes the sub-tick
-        // value itself; whole bands still take it floored.
-        for (size_t b = 0; b < bands.size(); b++) {
-            if (this->bandHolds(bands[b], lo, in.m_frames)) {
-                grouped[b]++;
-                break;
+        // value itself; whole bands still take it floored. GucciBot
+        // (2026-11-23): picked as the markers, the legend and Share my
+        // windows pick it (tierForValue over every band, then only a band
+        // that's shown), so a value between two bands counts in the band
+        // below here too (Nigel's D13), and the counts are theirs.
+        if (auto const* tier = this->tierForValue(lo, in.m_frames); tier && tier->showInHud) {
+            for (size_t b = 0; b < bands.size(); b++) {
+                if (bands[b].id == tier->id) {
+                    grouped[b]++;
+                    break;
+                }
             }
         }
     }

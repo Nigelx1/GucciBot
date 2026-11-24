@@ -495,10 +495,13 @@ class FrameWindowAnalyzer {
     void dropMarkers();
 
     void resetDisplay();
-    // The first band holding a window: `whole` is its whole count, `value`
-    // the number the marker prints (a sub-tick or ~ value, else the same).
+    // The band a window goes in (analysis/ac/band_pick.hpp): the first band
+    // holding it, or for a sub-tick value in a gap between two bands the band
+    // below (Nigel's D13). `whole` is its whole count, `value` the number the
+    // marker prints (a sub-tick or ~ value, else the same).
     FrameWindowTier const* tierForValue(int whole, double value) const;
-    bool bandHolds(FrameWindowTier const& t, int whole, double value) const;
+    // `value` rounded to the places a marker prints (band_pick's `shown`).
+    double shownValue(double value) const;
     static std::string formatWindow(int window);
 
     SLValuePtr<bool> m_statePlayerDiff = SLValue<bool>::create(

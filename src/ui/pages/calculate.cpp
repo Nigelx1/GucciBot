@@ -734,10 +734,13 @@ namespace gucci::ui::pages {
             // GucciBot (2026-10-23): decimal edges, after anticroom's
             // antics-counter beta.5. The buttons still step whole frames, so a
             // whole band stays whole unless a decimal is typed.
+            // A sub-tick value in a gap between two bands counts in the band
+            // below (Nigel's D13, 2026-11-22; analysis/ac/band_pick.hpp).
             kit::RowBegin("Window", "Smallest and largest window in this band, in frames. Whole numbers hold whole "
                                     "windows (a sub-tick 1.3 counts as 1). A decimal edge, like 0.3 to 0.5, holds "
                                     "sub-tick (CBF) values as they're printed: on the markers when Whole numbers on "
-                                    "markers is off, and always in the top right readout and Copy info");
+                                    "markers is off, and always in the top right readout and Copy info. A sub-tick "
+                                    "value in a gap between two bands counts in the band below");
             float const half = (kit::Avail() - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
             ImGui::SetNextItemWidth(half);
             changed |= ImGui::InputFloat("##min", &t.minWindow, 1.f, 100.f, "%g");

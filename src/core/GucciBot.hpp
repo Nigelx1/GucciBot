@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-r (The sub-tick counter counts clicks, not releases (D12))"
+    "2026-11-24-s (Calculate counts a sub-tick value in a gap between two bands in the band below (D13))"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
