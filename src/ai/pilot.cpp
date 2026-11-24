@@ -13,6 +13,7 @@
 #include "core/GucciBot.hpp"
 #include "core/platform.hpp"
 #include "tools/macro_convert.hpp"
+#include "ui/ui.hpp"  // the theme's macro extension, for the furthest run's macro
 
 #include <Geode/Geode.hpp>
 
@@ -356,7 +357,12 @@ namespace gucci::ai::pilot {
                 if (!sim::open()) {
                     error = "the AI session was closed (the level was left?)";
                     m_start.release();
+                    adoptLive();
                     partialResult("cancelled");
+                    if (std::string const saved = saveFurthest(result); !saved.empty()) say(saved.substr(1));
+                    // As finish() does: the page's bar shows the best the line names.
+                    s_live.bestPercent = m_bestPercent;
+                    s_live.attempts = m_attempt;
                     return true;
                 }
                 sim::resume();
@@ -378,8 +384,14 @@ namespace gucci::ai::pilot {
             void cancel() override {
                 if (sim::open()) sim::end();
                 m_start.release();
+                adoptLive();
                 partialResult("cancelled");
-                say(fmt::format("Stopped after {} attempts; best {:.1f}%.", m_attempt, m_bestPercent));
+                std::string const saved = saveFurthest(result);
+                say(fmt::format("Stopped after {} attempts; best {:.1f}%.{}", m_attempt, m_bestPercent, saved));
+                // As finish() does: the page's bar shows the best this line names
+                // (adoptLive can make the attempt still playing the best one).
+                s_live.bestPercent = m_bestPercent;
+                s_live.attempts = m_attempt;
             }
 
         private:
@@ -441,6 +453,11 @@ namespace gucci::ai::pilot {
             float m_bestPercent = 0.0f;
             float m_bestX = 0.0f;
             int m_bestAttempt = 0;
+            // The best attempt's line (one decision a tick from the level's
+            // start), kept when it ends, for the furthest macro.
+            std::vector<uint8_t> m_bestD;
+            bool m_furthestSaved = false;  // once a run
+            bool m_completed = false;      // it beat the level: that run is the macro, not a furthest one
             std::vector<matjson::Value> m_deaths;  // the newest 200
             double m_obsUs = 0.0;
             double m_netUs = 0.0;
@@ -1116,6 +1133,7 @@ namespace gucci::ai::pilot {
                     m_bestX = x;
                     m_bestPercent = pct;
                     m_bestAttempt = m_attempt;
+                    m_bestD = m_d;  // ticks 0 to D: the attempt's whole line
                     if (!bestGuess) learnFrom(D + 1, x, false);  // self-training on this run (slice() runs it next)
                 }
                 if (!opt.practice) return freeDeath(st, D, x, pct, cause);
@@ -1477,8 +1495,99 @@ namespace gucci::ai::pilot {
                 else if (m_logError.empty()) m_logError = "could not write the practice log in " + utf8(dir);
             }
 
+            // The name a run's macro goes by: the one asked for, else "AI -
+            // <level name>".
+            std::string macroBase() const {
+                return opt.saveMacro.empty() ? "AI - " + m_levelName : opt.saveMacro;
+            }
+
+            // A line (one decision a tick from the level's start) as a GucciBot
+            // macro: tick t is frame F + 1 + t, and a hold still down at the end
+            // is let go on the frame after.
+            convert::Macro lineMacro(std::vector<uint8_t> const& d, std::string const& name) const {
+                convert::Macro m;
+                m.tps = m_tps;
+                m.levelName = m_levelName;
+                m.levelId = m_levelId;
+                m.name = name;
+                m.bot = "GucciBot AI pilot";
+                uint32_t const T = (uint32_t)d.size();
+                bool down = false;
+                for (uint32_t t = 0; t < T; t++) {
+                    bool const h = d[t] != 0;
+                    if (h == down) continue;
+                    convert::Input in;
+                    in.frame = frameOf(t);
+                    in.down = h;
+                    m.inputs.push_back(in);
+                    down = h;
+                }
+                if (down) {
+                    convert::Input in;
+                    in.frame = frameOf(T);
+                    in.down = false;
+                    m.inputs.push_back(in);
+                }
+                return m;
+            }
+
+            // The attempt playing when the run stops counts as the best if it got
+            // further than every attempt that ended (out of time mid-attempt, 20
+            // minutes alive, stopped by hand): its line is the furthest run.
+            void adoptLive() {
+                if (!m_running || m_completed || m_d.empty() || !(m_lastX > m_bestX)) return;
+                m_bestX = m_lastX;
+                m_bestPercent = percentOf(m_lastX);
+                m_bestAttempt = m_attempt;
+                m_bestD = m_d;
+            }
+
+            // GucciBot (2026-11-23, Juice's ask 11-22): a run that stops without
+            // beating the level saves its furthest run as a macro, as the Search
+            // saves "<level name> furthest" (absense/pathfinder/pathfinder.cpp,
+            // saveFurthest): "AI - <level name> furthest", numbered past a name a
+            // saved macro has already ("... furthest 2"), so an earlier run's file
+            // is never replaced. The file is the best attempt's own line, kept when
+            // it ended (m_bestD), not the last attempt's. It's in the theme's macro
+            // format, so the Saved macros list shows it. Once a run; its words for
+            // the stop's line, "" when nothing was saved.
+            std::string saveFurthest(matjson::Value& out) {
+                if (!opt.saveFurthest || m_furthestSaved || m_completed || m_bestD.empty()) return {};
+                m_furthestSaved = true;
+                auto* gb = GucciEngine::get();
+                std::string const base = fileSafe(macroBase()) + " furthest";
+                std::string name = base;
+                for (int n = 2; !gb->findMacroFile(name).empty(); n++) name = fmt::format("{} {}", base, n);
+                std::string const ext = gucci::ui::macroExtension();
+                convert::Macro const m = lineMacro(m_bestD, name);
+                auto const bytes = convert::toGucciBot(m);
+                auto const path = gb->getReplayDir() / u8path(name + ext);
+                std::error_code ec;
+                fs::create_directories(path.parent_path(), ec);
+                bool written;
+                {
+                    std::ofstream f(path, std::ios::binary | std::ios::trunc);
+                    f.write(reinterpret_cast<char const*>(bytes.data()), (std::streamsize)bytes.size());
+                    written = (bool)f;
+                }
+                if (!written) {
+                    fs::remove(path, ec);
+                    out["furthest_macro_error"] = "could not write " + utf8(path);
+                    return fmt::format(" Its furthest run couldn't be saved ({} couldn't be written).", name + ext);
+                }
+                gb->reloadMacroList();  // in Saved macros now, not at the next Refresh
+                out["furthest_macro"] = name;
+                out["furthest_macro_file"] = utf8(path);
+                out["furthest_macro_inputs"] = (int64_t)m.inputs.size();
+                out["furthest_macro_ticks"] = (int64_t)m_bestD.size();
+                out["furthest_macro_attempt"] = m_bestAttempt;
+                out["furthest_macro_percent"] = (double)m_bestPercent;
+                return fmt::format(" Its furthest run ({:.1f}%) is saved as \"{}\".", m_bestPercent, name);
+            }
+
             bool onComplete(sim::State const&) {
                 uint32_t const T = m_t;
+                m_completed = true;
                 writeLog(true, -1, 0.0f);
                 if (m_learn.on && m_checking) judgeCheck(m_levelLength);  // the trained network's best guess finished it
                 else if (m_attempt > 1) learnFrom(T, m_levelLength, true);  // the last round (slice() runs it after this)
@@ -1500,28 +1609,7 @@ namespace gucci::ai::pilot {
                 // Saved as a GucciBot macro (frame labels: tick t is frame F + 1 + t).
                 {
                     auto* gb = GucciEngine::get();
-                    convert::Macro m;
-                    m.tps = m_tps;
-                    m.levelName = m_levelName;
-                    m.levelId = m_levelId;
-                    m.name = opt.saveMacro.empty() ? "AI - " + m_levelName : opt.saveMacro;
-                    m.bot = "GucciBot AI pilot";
-                    bool down = false;
-                    for (uint32_t t = 0; t < T; t++) {
-                        bool const h = m_d[t] != 0;
-                        if (h == down) continue;
-                        convert::Input in;
-                        in.frame = frameOf(t);
-                        in.down = h;
-                        m.inputs.push_back(in);
-                        down = h;
-                    }
-                    if (down) {
-                        convert::Input in;
-                        in.frame = frameOf(T);
-                        in.down = false;
-                        m.inputs.push_back(in);
-                    }
+                    convert::Macro const m = lineMacro(m_d, macroBase());
                     auto const bytes = convert::toGucciBot(m);
                     auto const path = gb->getReplayDir() / u8path(fileSafe(m.name) + ".gbr6");
                     std::error_code ec;
@@ -1622,12 +1710,14 @@ namespace gucci::ai::pilot {
             bool finish(char const* stopped, std::string const& why) {
                 sim::end();
                 m_start.release();
+                adoptLive();
                 auto out = baseResult(stopped);
                 out["why"] = why;
+                std::string const saved = saveFurthest(out);
                 result = out;
                 progress = fmt::format("done: {}", stopped);
-                say(fmt::format("{} Best {:.1f}% (attempt {}), {} attempts.", why, m_bestPercent, m_bestAttempt,
-                                m_attempt));
+                say(fmt::format("{} Best {:.1f}% (attempt {}), {} attempts.{}", why, m_bestPercent, m_bestAttempt,
+                                m_attempt, saved));
                 s_live.bestPercent = m_bestPercent;
                 s_live.attempts = m_attempt;
                 return true;

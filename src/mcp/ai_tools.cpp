@@ -198,9 +198,14 @@ namespace gucci::mcp {
             "(saved as weights\\levels\\<level id>.gbnn) only if that gets further; a finished sampled run is kept "
             "once the network makes every decision of it. level_net "
             "(default true) plays that level's own trained network when one was trained from the loaded pilot. For "
-            "a cold exam pass self_train false (and level_net false for the loaded pilot alone). Returns {job}; the "
+            "a cold exam pass self_train false (and level_net false for the loaded pilot alone). save_furthest "
+            "(default false here; the page's Start always does it): a run that stops without finishing saves its "
+            "best attempt as the macro \"AI - <level> furthest\" (\"<save_macro> furthest\"), numbered past a name "
+            "already taken, in the theme's macro format. Returns {job}; the "
             "result (gucci_ai_status) is {completed, best_percent, attempts, ticks_simulated, deaths: [{tick, x, "
             "percent, cause, mistake_tick, mistake_was, fix, sentence}], macro_file?, judge?: {completed, died_x}, "
+            "furthest_macro?, furthest_macro_file?, furthest_macro_inputs?, furthest_macro_ticks?, "
+            "furthest_macro_attempt?, furthest_macro_percent?, "
             "level_net, self_training: {on, rounds, kept, steps, seconds, last_loss, last_decisions_differ, file}}.",
             schemaFor({{"max_attempts", "integer", "stop after this many attempts (default 50000)"},
                        {"max_seconds", "number", "stop after this many seconds (default 300)"},
@@ -210,7 +215,8 @@ namespace gucci::mcp {
                        {"practice", "boolean", "use the hand-written practice rules, like the page's Practice switch (default false here: the network alone; the page's switch is on by default)"},
                        {"temperature", "number", "network alone: sampling temperature of attempts after the first (default 1)"},
                        {"self_train", "boolean", "network alone: train the pilot on its best runs and keep it for the level when its best guess gets further (default true)"},
-                       {"level_net", "boolean", "play the level's own trained network when there is one (default true)"}}),
+                       {"level_net", "boolean", "play the level's own trained network when there is one (default true)"},
+                       {"save_furthest", "boolean", "a run that stops without finishing saves its furthest attempt as \"AI - <level> furthest\" (default false here; the page's Start does)"}}),
             [](matjson::Value const& a) {
                 requireNoOwner();
                 ai::pilot::PlayOptions o;
@@ -223,6 +229,8 @@ namespace gucci::mcp {
                 if (a.contains("save_macro")) o.saveMacro = a["save_macro"].asString().unwrapOr("");
                 if (a.contains("log_practice")) o.logPractice = a["log_practice"].asBool().unwrapOr(false);
                 if (a.contains("judge")) o.judge = a["judge"].asBool().unwrapOr(true);
+                // Off unless asked: test runs would fill the replays folder.
+                o.saveFurthest = a.contains("save_furthest") && a["save_furthest"].asBool().unwrapOr(false);
                 std::string why;
                 auto job = ai::pilot::makePlay(o, why);
                 if (!job) throw ToolError(why);

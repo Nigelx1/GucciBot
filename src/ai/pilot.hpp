@@ -82,6 +82,13 @@ namespace gucci::ai::pilot {
         // Play with the level's own trained network when there is one (from
         // the same pilot), before pilot.gbnn and the built-in one.
         bool levelNet = true;
+        // A run that stops without beating the level (stuck, out of attempts
+        // or time, stopped, the level left) saves its furthest attempt as a
+        // macro, "AI - <level name> furthest", numbered past one already
+        // there (Juice's ask, 2026-11-22). On for the Pathfinder page's
+        // Start; gucci_ai_play asks for it (save_furthest), so test runs don't
+        // fill the replays folder.
+        bool saveFurthest = true;
     };
     // Where a level's trained network is kept.
     std::filesystem::path levelNetPath(int64_t levelId);

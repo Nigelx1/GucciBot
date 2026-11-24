@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-p (Hotkeys: a comment says a key GD 2.209 also binds does both, as decided)"
+    "2026-11-24-q (The AI engine saves its furthest run as a macro when it stops without beating the level)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
