@@ -1178,10 +1178,11 @@ class $modify(GB7CCDirector, CCDirector) {
         if (auto* sl = SLRenderer::get(); sl->m_shouldQuit) {
             sl->m_shouldQuit = false;
             // Not a level that is already leaving (2.0.1): a render its quit
-            // stopped finishes during the quit's fade, while GD still answers
-            // PlayLayer::get() with that level, and GD's onQuit has no guard
-            // against running twice (2.2081 Windows, 0x3babb0), so the level
-            // could be quit a second time.
+            // (or an Edit exit, hooks/hook_edit_exit.cpp) stopped finishes
+            // during the fade, while GD still answers PlayLayer::get() with
+            // that level, and GD's onQuit has no guard against running twice
+            // (2.2081 Windows, 0x3babb0), so the level could be quit a second
+            // time, or on the way to the editor.
             if (auto* quitPl = PlayLayer::get(); quitPl && quitPl != sl->m_quittingLayer)
                 quitPl->onQuit();
         }

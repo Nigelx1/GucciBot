@@ -212,3 +212,10 @@ class $modify(MacroPathPlayLayer, PlayLayer) {
         PlayLayer::onQuit();
     }
 };
+
+namespace gucci::gbmp {
+    // An exit that skips PlayLayer::onQuit (hooks/hook_edit_exit.cpp).
+    void detachMacroPath() {
+        MacroPathOverlay::get()->detach();
+    }
+} // namespace gucci::gbmp

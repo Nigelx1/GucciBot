@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-c (Leave the level when the render is done no longer quits a level that is already leaving)"
+    "2026-11-24-d (Edit exits from the pause menu and the end screen run the whole quit cleanup, as Silicate does, and turn frame advance off last)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
@@ -1376,6 +1376,12 @@ namespace gucci {
         void detachAgencyDebug();
     }
 
+    // The macro path's nodes go (analysis/macropath.cpp): for an exit that
+    // skips PlayLayer::onQuit (hooks/hook_edit_exit.cpp).
+    namespace gbmp {
+        void detachMacroPath();
+    }
+
     namespace gbfw {
         void renderFrameWindows(PlayLayer* pl, bool isRecording);
         void playTierSound(int window);
@@ -1384,6 +1390,8 @@ namespace gucci {
 
     namespace gbpr {
         void renderPracticeRange(PlayLayer* pl);
+        // For an exit that skips PlayLayer::onQuit (hooks/hook_edit_exit.cpp).
+        void detachPracticeRange();
     }
 
 } // namespace gucci

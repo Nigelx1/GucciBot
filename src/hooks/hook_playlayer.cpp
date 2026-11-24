@@ -6,6 +6,7 @@
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
 #include "hooks/respawn.hpp"
+#include "hooks/level_exit.hpp"
 #include "analysis/pathfinder.hpp"
 #include "analysis/ac/cbf.hpp"
 #include "analysis/ac/framewindow.hpp"
@@ -181,6 +182,42 @@ namespace {
     }
 #endif
 } // namespace
+
+// The PlayLayer::onQuit hook's work, in its two halves (hooks/level_exit.hpp):
+// GD's Edit exits run them too (hook_edit_exit.cpp).
+namespace gucci::levelexit {
+
+    void beforeQuit(PlayLayer* pl) {
+        auto* gb = GucciEngine::get();
+        // Absense's pathfinder stops on its own terms (it saves what it has),
+        // and its look-ahead copies go before the PlayLayer does.
+        ::Bot::get()->pathfinder().onQuit();
+        ::Bot::get()->trajectory().uninit();
+        if (Pathfinder::get()->active)
+            Pathfinder::get()->cancel();
+        else if (gb->fwAnalyzing)
+            gb->cancelAnalysis();
+        if (gucci::SLRenderer::get()->isRecording())
+            gucci::SLRenderer::get()->flushAndStop("the level was closed");
+        // GD keeps this layer as PlayLayer::get() through the quit's fade: a
+        // render started then (the Render page's Start) is refused.
+        gucci::SLRenderer::get()->m_quittingLayer = pl;
+        TrajectoryPredictionService::get().updatePreview(nullptr);
+        // The agency map's nodes go with the level, as the other overlays'
+        // do in their own onQuit hooks (it never had one).
+        gbpf::detachAgencyDebug();
+    }
+
+    void afterQuit() {
+        auto* gb = GucciEngine::get();
+        gb->practiceFix.clearStoredFrames();
+        gb->practiceFix.clearPlatformer(true);
+        gb->practiceFix.removeAll();  // the level's objects are gone (see init)
+        gb->replay.onExit();
+        Autoclicker::get()->reset();
+    }
+
+} // namespace gucci::levelexit
 
 class $modify(GB7PlayLayer, PlayLayer) {
     struct Fields {
@@ -375,30 +412,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
     }
 
     void onQuit() {
-        auto* gb = GucciEngine::get();
-        // Absense's pathfinder stops on its own terms (it saves what it has),
-        // and its look-ahead copies go before the PlayLayer does.
-        ::Bot::get()->pathfinder().onQuit();
-        ::Bot::get()->trajectory().uninit();
-        if (Pathfinder::get()->active)
-            Pathfinder::get()->cancel();
-        else if (gb->fwAnalyzing)
-            gb->cancelAnalysis();
-        if (gucci::SLRenderer::get()->isRecording())
-            gucci::SLRenderer::get()->flushAndStop("the level was closed");
-        // GD keeps this layer as PlayLayer::get() through the quit's fade: a
-        // render started then (the Render page's Start) is refused.
-        gucci::SLRenderer::get()->m_quittingLayer = this;
-        TrajectoryPredictionService::get().updatePreview(nullptr);
-        // The agency map's nodes go with the level, as the other overlays'
-        // do in their own onQuit hooks (it never had one).
-        gbpf::detachAgencyDebug();
+        gucci::levelexit::beforeQuit(this);
         PlayLayer::onQuit();
-        gb->practiceFix.clearStoredFrames();
-        gb->practiceFix.clearPlatformer(true);
-        gb->practiceFix.removeAll();  // the level's objects are gone (see init)
-        gb->replay.onExit();
-        Autoclicker::get()->reset();
+        gucci::levelexit::afterQuit();
     }
 
     void delayedResetLevel() {

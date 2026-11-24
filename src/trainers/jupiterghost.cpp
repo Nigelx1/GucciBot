@@ -276,8 +276,7 @@ class $modify(JupiterGhostPlayLayer, PlayLayer) {
         return true;
     }
     void onQuit() {
-        JupiterGhostOverlay::get()->detach();
-        JupiterMusicSync::get()->stop();
+        gbju::leaveLevel();
         PlayLayer::onQuit();
     }
 };
@@ -296,6 +295,10 @@ namespace gucci::gbju {
         JupiterMusicSync::get()->syncPreview(active, paused, posSec);
     }
     void stopClickBarMusic() {
+        JupiterMusicSync::get()->stop();
+    }
+    void leaveLevel() {
+        JupiterGhostOverlay::get()->detach();
         JupiterMusicSync::get()->stop();
     }
 } // namespace gbju

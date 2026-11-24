@@ -185,4 +185,7 @@ namespace gucci::gbpr {
     void renderPracticeRange(PlayLayer* pl) {
         PracticeRangeOverlay::get()->render(pl);
     }
+    void detachPracticeRange() {
+        PracticeRangeOverlay::get()->detach();
+    }
 } // namespace gbpr

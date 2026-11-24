@@ -280,8 +280,7 @@ class $modify(TrainerGhostPlayLayer, PlayLayer) {
         return true;
     }
     void onQuit() {
-        TrainerGhostOverlay::get()->detach();
-        TrainerMusicSync::get()->stop();
+        gbtr::leaveLevel();
         PlayLayer::onQuit();
     }
 };
@@ -300,6 +299,10 @@ namespace gucci::gbtr {
         TrainerMusicSync::get()->syncPreview(active, paused, posSec);
     }
     void stopTrainerClickBarMusic() {
+        TrainerMusicSync::get()->stop();
+    }
+    void leaveLevel() {
+        TrainerGhostOverlay::get()->detach();
         TrainerMusicSync::get()->stop();
     }
 } // namespace gbtr
