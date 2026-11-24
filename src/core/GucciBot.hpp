@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-o (Juice's name on the Credits page plays his song)"
+    "2026-11-24-p (Hotkeys: a comment says a key GD 2.209 also binds does both, as decided)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

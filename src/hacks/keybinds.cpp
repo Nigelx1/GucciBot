@@ -350,7 +350,13 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
 
         // Every key goes on to the game as well, bound or not. (Whether one was
         // used only mattered to the autoclicker's old key tracking, which is
-        // gone: "only while holding" reads GD's UILayer now.)
+        // gone: "only while holding" reads GD's UILayer now.) GD 2.209's own
+        // keybinds (GJKeybindManager) get it after this too, so a hotkey on a
+        // key GD also uses does both: with Noclip's hotkey on R, R flips
+        // noclip and restarts the level. That's decision 15, Silicate's way
+        // (it hands keys on the same way). Checked on GD 2.2091 (11-24, a test
+        // copy): R did both, and while the menu's search box had the keyboard
+        // it did neither (gd-imgui-cocos keeps typed keys from the game).
         if (down && !repeat) {
 #ifdef GEODE_IS_MACOS
             runTogglesOnce(k);
