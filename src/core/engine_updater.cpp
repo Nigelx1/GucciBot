@@ -1177,7 +1177,12 @@ class $modify(GB7CCDirector, CCDirector) {
         // acts on it.
         if (auto* sl = SLRenderer::get(); sl->m_shouldQuit) {
             sl->m_shouldQuit = false;
-            if (auto* quitPl = PlayLayer::get())
+            // Not a level that is already leaving (2.0.1): a render its quit
+            // stopped finishes during the quit's fade, while GD still answers
+            // PlayLayer::get() with that level, and GD's onQuit has no guard
+            // against running twice (2.2081 Windows, 0x3babb0), so the level
+            // could be quit a second time.
+            if (auto* quitPl = PlayLayer::get(); quitPl && quitPl != sl->m_quittingLayer)
                 quitPl->onQuit();
         }
         // Pause/restore Click Between Frames around recording and playback.

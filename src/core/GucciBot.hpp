@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-b (Overlays hold their level nodes and make new ones after an Edit exit, for the Edit-exit crash on iPhone and Mac)"
+    "2026-11-24-c (Leave the level when the render is done no longer quits a level that is already leaving)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
