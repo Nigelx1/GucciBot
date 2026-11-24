@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-t (Calculate's Ring thickness tops out at 5 (D11))"
+    "2026-11-24-u (Macro path's Only up to your best starts off for a new install (D11))"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
@@ -921,7 +921,10 @@ namespace gucci {
         float macroPathMarkerSize = 8.f;
         float macroPathLineOpacity = 0.6f;
 
-        bool trainerRevealEnabled = true;
+        // Macro path's "Only up to your best" (Settings key trainer_reveal):
+        // off for a new install since 2.0.1 (Nigel's D11, 2026-11-22), so the
+        // whole path shows; a saved choice loads over this.
+        bool trainerRevealEnabled = false;
         float trainerRevealBuffer = 40.f;
 
         std::string jupiterNotes;
