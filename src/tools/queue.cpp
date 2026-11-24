@@ -363,9 +363,12 @@ namespace gucci::queue {
             } else if (r.targetId > 0) {
                 level = glm ? glm->getSavedLevel(r.targetId) : nullptr;
                 if (!level || std::string(level->m_levelString).empty()) {
-#if GB_NATIVE_ENGINE
+#if defined(GEODE_IS_WINDOWS)
                     // Not here yet: asked for, as the level's page asks (at
-                    // most every 15 s).
+                    // most every 15 s). Gated on Windows, not on the engine:
+                    // downloadLevel is a plain bindings call, so the GD 2.2091
+                    // file (Windows, no native engine) downloads as 2.2081's
+                    // does. Mac and phones keep the message below for now.
                     if (glm && (r.lastAsk == Clock::time_point{} || secondsSince(r.lastAsk) > 15.0)) {
                         r.lastAsk = Clock::now();
                         glm->downloadLevel(r.targetId, false, 0);
