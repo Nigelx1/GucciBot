@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-m (Update check: a release counts only if it has a file for this build's GD)"
+    "2026-11-24-n (Pausing Click Between Frames and Superb Input Precision says so when a switch is missing)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

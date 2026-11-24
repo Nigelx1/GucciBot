@@ -3550,19 +3550,51 @@ namespace gucci {
         bool const paused = self->getSavedValue<bool>("inputmods_paused", false);
 
         if (want && !paused) {
+            // Whether the mod has a switch (a bool setting) of that name.
+            // Geode's setSettingValue writes nothing when a mod has no setting
+            // of that name and type, and getSettingValue gives false for one
+            // it lacks (Mod.hpp, Geode 5.10.1 and 6.0.0-beta.1). So a Click
+            // Between Frames or Superb Input Precision build that renamed a
+            // switch would come out "paused" without being paused, with the
+            // log and the Trainer page saying it was. Now the log says which
+            // switch is missing, and a mod whose off switch is missing isn't
+            // called paused. Checked 2026-11-23: Superb Input Precision's
+            // Geode 6 build (1.0.0-prerelease.2) still has mod-enabled; Click
+            // Between Frames has no Geode 6 build yet.
+            auto const hasSwitch = [](Mod* mod, std::string_view key) {
+                using Bool = geode::SettingTypeForValueType<bool>::SettingType;
+                return geode::cast::typeinfo_pointer_cast<Bool>(mod->getSetting(key)) != nullptr;
+            };
             std::string what;
+            bool const cbfSoft = cbfMod && hasSwitch(cbfMod, "soft-toggle");
+            if (cbfMod && !cbfSoft)
+                log::warn("[GucciBot] Click Between Frames {} has no soft-toggle switch, so it isn't paused while "
+                          "recording/playing",
+                          cbfMod->getVersion().toVString());
+            else if (cbfMod && !hasSwitch(cbfMod, "physics-bypass"))
+                log::warn("[GucciBot] Click Between Frames {} has no physics-bypass switch: only its soft toggle "
+                          "is set while recording/playing",
+                          cbfMod->getVersion().toVString());
             if (cbfMod) {
+                // Both switches as they are now, saved even when they're left
+                // alone, so putting them back below gives each one its own
+                // value: a physics-bypass kept beside a missing soft toggle
+                // mustn't get what an earlier pause saved.
                 bool const soft = cbfMod->getSettingValue<bool>("soft-toggle");
                 bool const bypass = cbfMod->getSettingValue<bool>("physics-bypass");
                 self->setSavedValue("inputmods_cbf_soft", soft);
                 self->setSavedValue("inputmods_cbf_bypass", bypass);
-                if (!soft || bypass) {
+                if (cbfSoft && (!soft || bypass)) {
                     cbfMod->setSettingValue<bool>("soft-toggle", true);
                     cbfMod->setSettingValue<bool>("physics-bypass", false);
                     what = "Click Between Frames";
                 }
             }
-            if (sip) {
+            if (sip && !hasSwitch(sip, "mod-enabled")) {
+                log::warn("[GucciBot] Superb Input Precision {} has no mod-enabled switch, so it isn't paused "
+                          "while recording/playing",
+                          sip->getVersion().toVString());
+            } else if (sip) {
                 bool const on = sip->getSettingValue<bool>("mod-enabled");
                 self->setSavedValue("inputmods_sip_enabled", on);
                 if (on) {
