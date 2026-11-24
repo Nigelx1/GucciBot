@@ -92,6 +92,17 @@
 #define GB_FFMPEG 0
 #endif
 
+// GB_IMGUI_FROM_DRAWSCENE: gd-imgui-cocos draws its frame (GucciBot's menu, the
+// in-level boxes and Calculate's tick, all in gucci::ui::frame) from a
+// CCDirector::drawScene hook, after the original, on macOS and Android; from
+// CCEGLView::swapBuffers on Windows and iOS (gd-imgui-cocos src/hooks.cpp). A
+// drawScene hook that returns without calling through has to draw it itself.
+#if !defined(GEODE_IS_WINDOWS) && !defined(GEODE_IS_IOS)
+#define GB_IMGUI_FROM_DRAWSCENE 1
+#else
+#define GB_IMGUI_FROM_DRAWSCENE 0
+#endif
+
 // Geode's gnustl (GD's standard library on Android) has no move assignment for
 // gd::map, so a struct holding one, or a GJGameState, must not get an implicit
 // move assignment there: declaring the copy assignment makes moves copy. Other

@@ -32,6 +32,9 @@
 #if GB_NATIVE_ENGINE
 #include <safetyhook.hpp>
 #endif
+#if GB_IMGUI_FROM_DRAWSCENE
+#include <imgui-cocos.hpp>
+#endif
 #include <fstream>
 #include <chrono>
 #include <cmath>
@@ -1295,6 +1298,16 @@ class $modify(GB7CCDirector, CCDirector) {
             if (m_pRunningScene)
                 m_pRunningScene->visit();
             ++m_uTotalFrames;  // as the render's frames above
+#if GB_IMGUI_FROM_DRAWSCENE
+            // imgui-cocos's drawScene hook is inside this one and this branch
+            // never calls through: without this, on Android and macOS, the
+            // menu, the Calculate box and Calculate's tick (gucci::ui::frame)
+            // were skipped on every frame this branch took (a run, unpaused),
+            // so the capture "never started". Drawn where Windows and iOS
+            // draw it (swapBuffers): just before the swap.
+            if (ImGuiCocos::get().isInitialized())
+                ImGuiCocos::get().drawFrame();
+#endif
             this->m_pobOpenGLView->swapBuffers();
             gb->updater.runFrozenTick();
             return;

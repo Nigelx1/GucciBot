@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-e (A test-only key, pf_agency_map, switches the Agency map in a hidden test launch)"
+    "2026-11-24-f (Calculate on Android and Mac no longer stalls: the menu and its tick keep going during a run)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
