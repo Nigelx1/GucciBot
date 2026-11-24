@@ -121,6 +121,16 @@ namespace gucci::ui {
     bool explicitContent();
     void setExplicitContent(bool on);
 
+    // BIG BRRRR's start time for your own song (Nigel, 2026-11-23): the
+    // card's row, and Assistant Access's brrr_song_start. It sets the start
+    // of the song that would play now if it's yours (BigBrrrManager::pick):
+    // the BIG BRRRR folder's first file, saved for its file name, or else the
+    // custom theme in use's own track, saved in that theme as its "Drop
+    // starts at" (through themes::saveCustom, as its editor saves it). A
+    // playing drop starts over there. "" when it's set, else why not (a
+    // theme's bundled song keeps its coded drop).
+    std::string setBrrrSongStart(double sec);
+
     // ---- the GBot disguise
     //
     // GBot is a plain look with a plain name (Nigel, 2026-10-31): while it is

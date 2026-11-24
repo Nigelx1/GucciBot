@@ -527,6 +527,41 @@ namespace gucci::ui {
         }
     }
 
+    std::string setBrrrSongStart(double sec) {
+        using Source = BigBrrrManager::Source;
+        // To the millisecond, as FMOD seeks: the card's box is a float, and
+        // 12.3 would otherwise be saved as 12.300000190734863.
+        sec = std::isfinite(sec) ? std::round(std::clamp(sec, 0.0, BigBrrrManager::kMaxSongStart) * 1000.0) / 1000.0
+                                 : 0.0;
+        auto* brrr = BigBrrrManager::get();
+        auto const song = brrr->pick();
+        // The same time again (the box's - at 0, Enter with nothing typed):
+        // nothing to save, and a playing song plays on.
+        if (BigBrrrManager::ownSong(song.source) && std::abs(song.dropSec - sec) < 0.0005)
+            return {};
+        if (song.source == Source::Folder) {
+            BigBrrrManager::setSongStart(gucci::pathToString(song.path.filename()), sec);
+        } else if (song.source == Source::CustomTheme) {
+            // The theme as saved, never the editor's live preview of a draft
+            // (themes::active() while the editor is open). A copy: saveCustom
+            // reloads the list, and nothing in it survives that.
+            themes::Theme const* saved =
+                themes::activeId() == kCustomThemeId ? themes::findCustom(themes::activeCustomName()) : nullptr;
+            if (!saved || !saved->custom)
+                return "No custom theme of yours is in use";
+            themes::Theme theme = *saved;
+            theme.dropOffsetSec = sec;
+            std::string const name = theme.name;
+            if (std::string why = themes::saveCustom(theme, name); !why.empty())
+                return why;
+        } else {
+            return "The song that plays isn't one of yours: a theme's own song starts at its drop";
+        }
+        if (brrr->enabled && brrr->startAtDrop)
+            brrr->setEnabled(true);  // a playing drop starts over at the new time
+        return {};
+    }
+
     namespace detail {
         int* captureTarget() {
             return g_captureTarget;
@@ -3513,22 +3548,62 @@ namespace gucci::ui {
                                    &brrrOn))
                     brrr->setEnabled(brrrOn);
                 // Start at the drop (Nigel, 2026-11-23), on by default and saved
-                // like Shake and Flicker. It seeks whatever plays to the active
-                // theme's drop, a track in the BIG BRRRR folder too (bigbrrr.cpp
-                // start), so the hint says how far in that is. A drop that's
-                // playing starts over, from the drop or from the start.
+                // like Shake and Flicker: a theme's bundled song starts at its
+                // drop, your own song at its start time (the row below). A drop
+                // that's playing starts over, from there or from the start.
                 {
+                    using Source = BigBrrrManager::Source;
+                    // What would play (BigBrrrManager::pick lists the BIG BRRRR
+                    // folder), looked up twice a second, not every frame.
+                    static BigBrrrManager::Song s_song;
+                    static double s_songAt = -1.0;
+                    static std::string s_startError;
+                    double const now = ImGui::GetTime();
+                    if (s_songAt < 0.0 || now < s_songAt || now - s_songAt >= 0.5) {
+                        s_song = brrr->pick();
+                        s_songAt = now;
+                    }
+                    bool const own = BigBrrrManager::ownSong(s_song.source);
                     double const drop = activeThemeAudio().dropOffsetSec;
                     std::string const dropHint =
-                        drop > 0.0 ? fmt::format("Off, songs play from the start. On, a track in the BIG BRRRR folder "
-                                                 "starts {:.1f} s in too, where this theme's drop is",
-                                                 drop)
-                                   : std::string("This theme's drop is at the start of its song, so songs play from "
-                                                 "the start either way");
+                        own ? std::string("On, your song starts at its start time. Off, from the start")
+                        : s_song.source != Source::Theme
+                            ? std::string("On, a theme's song starts at its drop, and your own song at its start "
+                                          "time. Off, every song plays from the start")
+                        : drop > 0.0 ? fmt::format("On, this theme's song starts {:.1f} s in, at its drop. Off, from "
+                                                   "the start",
+                                                   drop)
+                                     : std::string("This theme's drop is at the start of its song, so it plays from "
+                                                   "the start either way");
                     if (kit::SwitchRow("Start at the drop", dropHint.c_str(), &brrr->startAtDrop)) {
                         saveEngineSwitch("brrr_start_at_drop", brrr->startAtDrop);
                         if (brrr->enabled)
                             brrr->setEnabled(true);
+                    }
+                    // Your own song's start time (Nigel, 2026-11-23: it starts
+                    // from its beginning, "but you should be able to set an
+                    // offset"), for the song that would play, in playback's
+                    // order: the folder's file (saved for its name), else a
+                    // custom theme's own track (its "Drop starts at"). Read
+                    // fresh each frame; typed values count once the box lets go.
+                    if (own) {
+                        bool const folder = s_song.source == Source::Folder;
+                        std::string const file = gucci::pathToString(s_song.path.filename());
+                        float start = static_cast<float>(folder ? BigBrrrManager::songStart(file) : drop);
+                        std::string const startHint =
+                            !brrr->startAtDrop ? std::string("Used with Start at the drop on")
+                            : folder           ? fmt::format("Where your song starts (saved for {})", file)
+                                               : std::string("Where your song starts (saved in this theme)");
+                        ImGui::BeginDisabled(!brrr->startAtDrop);
+                        kit::RowBegin("Start time (seconds)", startHint.c_str());
+                        if (kit::InputFloatCommit("brrr_start", &start, 1.f, "%.1f"))
+                            s_startError = setBrrrSongStart(start);
+                        kit::RowEnd();
+                        ImGui::EndDisabled();
+                        if (!s_startError.empty())
+                            kit::Note(s_startError.c_str(), Tone::Bad);
+                    } else {
+                        s_startError.clear();
                     }
                 }
                 // GucciBot (2026-10-23): Shake and Flicker are saved (they reset at
@@ -4064,7 +4139,7 @@ namespace gucci::ui {
                     // starts there, or (Start at the drop off) the drop's
                     // time before it, at the song's start.
                     constexpr double kPi = 3.14159265358979323846;
-                    double const sinceDrop = (t - g_brrrStart) + brrr->startedAtSec() - BigBrrrManager::kStartOffsetSec();
+                    double const sinceDrop = (t - g_brrrStart) + brrr->startedAtSec() - brrr->dropAtSec();
                     double const beats = sinceDrop * BigBrrrManager::kBpm() / 60.0;
                     offset.y -= (10.f + 8.f * bass) * static_cast<float>(std::abs(std::sin(kPi * beats)));
                 }

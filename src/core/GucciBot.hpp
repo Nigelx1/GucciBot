@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-x (Macro path's Only up to your best goes off once for everyone (D11))"
+    "2026-11-24-y (BIG BRRRR plays your own song from a start time you set, 0 until you do)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

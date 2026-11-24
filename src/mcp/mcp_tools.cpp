@@ -468,6 +468,15 @@ namespace gucci::mcp {
                     big["start_at_drop"] = brrr->startAtDrop;
                     big["started_at_sec"] = brrr->startedAtSec();
                     big["position_sec"] = brrr->songSeconds();
+                    // Where the playing song came from, and its drop (a
+                    // bundled song's coded one, your own song's start time).
+                    using Source = BigBrrrManager::Source;
+                    auto const from = brrr->source();
+                    big["source"] = from == Source::Folder        ? "folder"
+                                    : from == Source::CustomTheme ? "custom theme"
+                                    : from == Source::Theme       ? "theme"
+                                                                  : "none";
+                    big["drop_sec"] = brrr->dropAtSec();
                     audio["bigbrrr"] = big;
                     // GucciBot (2026-11-24): Juice's song, from his name on the
                     // Credits page (audio/juice_song.hpp).

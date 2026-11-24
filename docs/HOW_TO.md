@@ -306,6 +306,7 @@ GucciBot comes with 24 themes, and you can make your own.
 - **New custom theme** makes your own: colors, corners, snow, its own music and more.
 - **Settings > Look** has **Text size**, **Cycle the accent color** and **Animations** (switch it off to keep the menu still).
 - **Explicit content (new in 2.0):** some themes come with songs that have explicit lyrics, plus jokes and quotes to match. All of it stays off until you turn on **Settings > Look > Explicit content**. It's suggestive lyrics and material, nothing graphic. While it's off, **BIG BRRRR** (Settings) plays only a track you added yourself: one in the BIG BRRRR folder, or a custom theme's own.
+- **BIG BRRRR** (Settings) plays the theme's song from its drop. Your own song (a track in the BIG BRRRR folder, or a custom theme's own) starts from its beginning; to start it later, set its **Start time** in the BIG BRRRR card. Switch **Start at the drop** off to play every song from its start.
 - **GBot** is a disguise **(new in 2.0)**: it takes the Themes page out of the menu. To switch back, pick another theme in **Settings > Look > Theme**.
 
 ---

@@ -21,6 +21,7 @@
 #include "mcp/mcp_server.hpp"
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
+#include "ui/ui.hpp"
 #if !GB_NATIVE_ENGINE
 #include "core/portable_tps.hpp"
 #endif
@@ -674,6 +675,41 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  BigBrrrManager::get()->setEnabled(wantBool("bigbrrr", val));
                              }});
+                // BIG BRRRR's saved rows (2026-11-23): Start at the drop, and
+                // the start time of your own song that would play now (the
+                // card's row, ui::setBrrrSongStart): null when the song is a
+                // theme's own. The folder's times are saved as one list
+                // (brrr_song_starts), shielded with it; a custom theme's goes
+                // into its theme file, as the card puts it, and reset writes
+                // the one from before back.
+                v.push_back({"brrr_start_at_drop", "bool", Store::Field,
+                             [] { return matjson::Value(BigBrrrManager::get()->startAtDrop); },
+                             [](matjson::Value const& val, bool) {
+                                 auto* brrr = BigBrrrManager::get();
+                                 brrr->startAtDrop = wantBool("brrr_start_at_drop", val);
+                                 Mod::get()->setSavedValue("brrr_start_at_drop", brrr->startAtDrop);
+                                 if (brrr->enabled)
+                                     brrr->setEnabled(true);
+                             }});
+                {
+                    Key songStart{"brrr_song_start", "number", Store::Field,
+                                  [] {
+                                      auto const song = BigBrrrManager::get()->pick();
+                                      return BigBrrrManager::ownSong(song.source) ? matjson::Value(song.dropSec)
+                                                                                  : matjson::Value(nullptr);
+                                  },
+                                  [](matjson::Value const& val, bool restoring) {
+                                      if (restoring && !val.isNumber())
+                                          return;
+                                      double const sec =
+                                          wantNumber("brrr_song_start", val, 0.0, BigBrrrManager::kMaxSongStart);
+                                      // Restoring, the list's own put-back covers the folder.
+                                      if (auto why = ui::setBrrrSongStart(sec); !why.empty() && !restoring)
+                                          throw ToolError("brrr_song_start: " + why);
+                                  }};
+                    songStart.alsoShield = {BigBrrrManager::kSongStartsKey};
+                    v.push_back(std::move(songStart));
+                }
                 v.push_back({"test_mute", "bool", Store::Memory, [] { return matjson::Value(g_muted); },
                              [](matjson::Value const& val, bool) {
                                  bool const on = wantBool("test_mute", val);

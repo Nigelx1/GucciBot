@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <utility>
 
 using namespace geode::prelude;
 
@@ -82,6 +83,78 @@ namespace gucci {
         return !findFirstAudioFile(getBrrrDir()).empty();
     }
 
+    BigBrrrManager::Song BigBrrrManager::pick() const {
+        Song song;
+        // A theme with no BIG BRRRR (SolarBot, JupiterBot, GBot) has no track
+        // (ui.hpp) and plays nothing, not even a file in the brrr folder,
+        // which otherwise wins over every theme's.
+        auto const audio = ui::activeThemeAudio();
+        if (audio.file.empty())
+            return song;
+        if (auto folder = findFirstAudioFile(getBrrrDir()); !folder.empty()) {
+            song.source = Source::Folder;
+            song.dropSec = songStart(gucci::pathToString(folder.filename()));
+            song.path = std::move(folder);
+            return song;
+        }
+        std::error_code ec;
+        if (!ui::activeCustomThemeExtension().empty()) {
+            auto customPath = ui::customThemesDir() / (ui::activeCustomThemeExtension().substr(1) + "_brrr.mp3");
+            if (std::filesystem::exists(customPath, ec)) {
+                // Its own "Drop starts at" (0 for a new theme), as it always
+                // started.
+                song.source = Source::CustomTheme;
+                song.path = std::move(customPath);
+                song.dropSec = kStartOffsetSec();
+                return song;
+            }
+        }
+        // The active theme's own track, as its Themes page shows it. Every
+        // bundled song has explicit lyrics (Nigel, 2026-11-22), so none
+        // plays while Explicit content is off; a track the user added (the
+        // folder above, a custom theme's own) still does.
+        if (ui::explicitContent()) {
+            std::string themeTrack = audio.file;
+            if (themeTrack.empty())
+                themeTrack = "big_brrr.mp3";
+            auto bundled = gucci::stdPath(Mod::get()->getResourcesDir()) / themeTrack;
+            if (std::filesystem::exists(bundled, ec)) {
+                song.source = Source::Theme;
+                song.path = std::move(bundled);
+                song.dropSec = kStartOffsetSec();
+            }
+        }
+        return song;
+    }
+
+    double BigBrrrManager::songStart(std::string const& fileName) {
+        // Read where it's used, never written here: getSavedValue would put
+        // an empty list into everyone's save.
+        auto const& saved = Mod::get()->getSaveContainerConst();
+        if (!saved.contains(kSongStartsKey))
+            return 0.0;
+        auto const& starts = saved[kSongStartsKey];
+        if (!starts.isObject() || !starts.contains(fileName))
+            return 0.0;
+        double const sec = starts[fileName].asDouble().unwrapOr(0.0);
+        return std::isfinite(sec) ? std::clamp(sec, 0.0, kMaxSongStart) : 0.0;
+    }
+
+    void BigBrrrManager::setSongStart(std::string const& fileName, double sec) {
+        sec = std::isfinite(sec) ? std::clamp(sec, 0.0, kMaxSongStart) : 0.0;
+        auto& saved = Mod::get()->getSaveContainer();
+        matjson::Value starts = matjson::Value::object();
+        if (saved.contains(kSongStartsKey) && std::as_const(saved)[kSongStartsKey].isObject())
+            starts = std::as_const(saved)[kSongStartsKey];
+        if (sec > 0.0)
+            starts[fileName] = sec;
+        else if (starts.contains(fileName))
+            starts.erase(fileName);
+        else
+            return;  // 0 already: nothing to save
+        saved[kSongStartsKey] = starts;
+    }
+
     void BigBrrrManager::setEnabled(bool on) {
         // The flag first: start() switches it back off when no track can be
         // found or opened, and setting it after used to undo that, leaving
@@ -98,38 +171,12 @@ namespace gucci {
 
     void BigBrrrManager::start() {
         stop();
-        // A theme with no BIG BRRRR (SolarBot, JupiterBot, GBot) has no track
-        // (ui.hpp) and plays nothing, not even a file in the brrr folder,
-        // which otherwise wins over every theme's.
-        if (ui::activeThemeAudio().file.empty()) {
+        Song const song = pick();
+        if (song.source == Source::None) {
             enabled = false;
             return;
         }
-        auto path = findFirstAudioFile(getBrrrDir());
-        if (path.empty()) {
-            std::error_code ec;
-            if (!ui::activeCustomThemeExtension().empty()) {
-                auto customPath = ui::customThemesDir() / (ui::activeCustomThemeExtension().substr(1) + "_brrr.mp3");
-                if (std::filesystem::exists(customPath, ec))
-                    path = customPath;
-            }
-            // The active theme's own track, as its Themes page shows it. Every
-            // bundled song has explicit lyrics (Nigel, 2026-11-22), so none
-            // plays while Explicit content is off; a track the user added (the
-            // folder above, a custom theme's own) still does.
-            if (path.empty() && ui::explicitContent()) {
-                std::string themeTrack = ui::activeThemeAudio().file;
-                if (themeTrack.empty())
-                    themeTrack = "big_brrr.mp3";
-                auto bundled = gucci::stdPath(Mod::get()->getResourcesDir()) / themeTrack;
-                if (std::filesystem::exists(bundled, ec))
-                    path = bundled;
-            }
-        }
-        if (path.empty()) {
-            enabled = false;
-            return;
-        }
+        auto const& path = song.path;
 
         auto* system = FMODAudioEngine::sharedEngine()->m_system;
         if (!system) {
@@ -152,14 +199,16 @@ namespace gucci {
         if (channel) {
             track = gucci::pathToString(path.filename());
             channel->setVolume(1.f);
-            // From the theme's drop, or with Start at the drop off from the
-            // song's start. FMOD refuses a place past the track's end, and it
-            // plays from the start then.
+            // From its drop (a bundled song's coded one, your own song's start
+            // time), or with Start at the drop off from the song's start.
+            // FMOD refuses a place past the track's end, and it plays from the
+            // start then.
+            playingFrom = song.source;
+            dropAt = song.dropSec;
             startedAt = 0.0;
-            double const drop = kStartOffsetSec();
-            if (startAtDrop && drop > 0.0 &&
-                channel->setPosition((unsigned int)(drop * 1000.0), FMOD_TIMEUNIT_MS) == FMOD_OK)
-                startedAt = drop;
+            if (startAtDrop && dropAt > 0.0 &&
+                channel->setPosition((unsigned int)(dropAt * 1000.0), FMOD_TIMEUNIT_MS) == FMOD_OK)
+                startedAt = dropAt;
             ++startCount;
             GameAudioMute::acquire();
             audioMuteHeld = true;
@@ -199,6 +248,8 @@ namespace gucci {
             audioMuteHeld = false;
         }
         track.clear();
+        playingFrom = Source::None;
+        dropAt = 0.0;
     }
 
     bool BigBrrrManager::playing() const {
