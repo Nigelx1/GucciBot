@@ -8,12 +8,16 @@
 // has the same note).
 //
 // Once per launch, when the main menu first shows, if "Check for updates" is
-// on (Settings). The newest release on GitHub decides; pre-releases count when
-// this build is one, or when the setting allows them. Found mid-level, the news
-// waits for the main menu: a popup there could cost an attempt.
+// on (Settings). The newest release on GitHub that has a file for this build's
+// GD decides (core/update_files.hpp: a GD 2.2081 install looks for the 2208
+// file, a GD 2.2091 install for the 2209 one), so a release this install can't
+// use is never announced; pre-releases count when this build is one, or when
+// the setting allows them. Found mid-level, the news waits for the main menu: a
+// popup there could cost an attempt.
 
 #include "core/GucciBot.hpp"
 #include "core/geode_compat.hpp" // gucci::webTimeout
+#include "core/update_files.hpp"
 #include "hacks/safemode.hpp"
 #include "ui/ui.hpp"
 
@@ -32,6 +36,15 @@ namespace gucci::updates {
 
     namespace {
         constexpr const char* kReleasesApi = "https://api.github.com/repos/Nigelx1/GucciBot/releases?per_page=10";
+
+        // The GD this build runs on, as its release file names it.
+#if GB_GEODE6
+        constexpr updatefiles::GdKeys kMyGd = updatefiles::kGd2091;
+        constexpr const char* kMyGdName = "GD 2.2091";
+#else
+        constexpr updatefiles::GdKeys kMyGd = updatefiles::kGd2081;
+        constexpr const char* kMyGdName = "GD 2.2081";
+#endif
 
         bool g_checked = false;
 
@@ -87,6 +100,16 @@ namespace gucci::updates {
                 auto const ver = VersionInfo::parse(tag);
                 if (!ver)
                     continue;  // a tag Geode can't read (2.alpha.3): the next one decides
+                // Only a release with a file for this GD counts: once a release
+                // is for one GD only, the other GD's installs look further back.
+                std::vector<std::string> files;
+                if (auto const& assets = rel["assets"]; assets.isArray())
+                    for (auto const& a : assets)
+                        files.push_back(a["name"].asString().unwrapOr(""));
+                if (!updatefiles::releaseHasFileFor(files, kMyGd)) {
+                    log::info("[GucciBot] update check: {} has no file for {}; looking further back", tag, kMyGdName);
+                    continue;
+                }
                 if (mine < ver.unwrap()) {
                     g_news = News{ver.unwrap().toVString(),
                                   rel["html_url"].asString().unwrapOr("https://github.com/Nigelx1/GucciBot/releases")};
@@ -97,6 +120,7 @@ namespace gucci::updates {
                 }
                 return;
             }
+            log::info("[GucciBot] update check: no recent release has a file for {}", kMyGdName);
         }
         arc::Future<int> checkTask() {
             web::WebRequest req;
