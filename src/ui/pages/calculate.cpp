@@ -619,7 +619,7 @@ namespace gucci::ui::pages {
                 bool lookFlipped = false;
                 if (kit::FeatureBegin("Default Look",
                                       "Draws the windows like the counter in NaN GD's videos: a plain ring per input in "
-                                      "his colors, the number on its left, and his 9-10 / 7-8 / 5-6 / 4 / 3 / 2 / 1 "
+                                      "the same colors, the number on its left, and the same 9-10 / 7-8 / 5-6 / 4 / 3 / 2 / 1 "
                                       "legend. Your bands, shapes, images, pulses and Circle skin are kept, just not used "
                                       "while it's on",
                                       &gb->fwDefaultLook, nullptr, &lookFlipped)) {
@@ -865,10 +865,10 @@ namespace gucci::ui::pages {
             kit::BeginCard("Bands", "Colors, labels, shapes, images, pulses and sounds by window size. Hidden bands draw no markers.");
             if (GucciEngine::get()->fwDefaultLook)
                 kit::Hint(disguised() ? "Default Look is on, so the level uses NaN GD's colors and legend, with the "
-                                        "Default sound or his bells. These bands are kept, and still decide which "
+                                        "Default sound or NaN GD's bells. These bands are kept, and still decide which "
                                         "inputs L* and Copy info count."
                                       : "Default Look is on, so the level uses NaN GD's colors and legend, with the "
-                                        "Brrr or his bells. These bands are kept, and still decide which inputs L* "
+                                        "Brrr or NaN GD's bells. These bands are kept, and still decide which inputs L* "
                                         "and Copy info count.");
 
             int removeAt = -1;

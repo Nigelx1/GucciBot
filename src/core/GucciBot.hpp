@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-22-f (Calculate keeps the level name when you leave mid-run)"
+    "2026-11-24-a (In-game text: the Credits page, Calculate and the Hitborders card name anticroom, Absent and NaN GD instead of he or his)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

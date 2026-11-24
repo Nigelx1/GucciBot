@@ -3478,12 +3478,12 @@ namespace gucci::ui {
                 {"Nigelx1", "Creator and owner of GucciBot; every idea, every theme, every decision is his call."},
                 {"Claude", "Wrote the code. Essentially the whole codebase, not a euphemism."},
                 {"Juice", "Designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8, and his Alignment-Independent method is back as Calculate's suggestion; lead co-tester."},
-                {"anticroom", "Calculate is his analyzer, ported in near-verbatim; sub-tick CBF recording and the render intro card too."},
+                {"anticroom", "Calculate is anticroom's analyzer, ported in near-verbatim; sub-tick CBF recording and the render intro card too."},
                 {"dihmaster500", "Tester; asked for auto safe mode and the Disable bot switch, and his testing "
                                  "caught safe mode breaking start positions."},
                 {"DashBlaze", "Promo help."},
                 {"Isaiah", "Promo help."},
-                {"Absent", "Absense; the Pathfinder's default engine is his."},
+                {"Absent", "Absense; the Pathfinder's default engine is Absent's."},
                 {"Bogdaner09", "Made click indicators free and open source after a paid one turned out to be an exit "
                                "scam; ours are built around his."},
                 {"GWDdoS", "Optimization help, and the cleanup that got the repo public-ready; also built Astral."},

@@ -25,7 +25,7 @@ namespace gucci::ui::pages {
         kit::BeginCard("Hitborders",
                        "Every hitbox grown by the size of yours, so you can think of yourself as a point. The gaps "
                        "you see are the room your center really has. Hitborders and their possible-positions band "
-                       "were NaN GD's ideas; he isn't involved.");
+                       "were NaN GD's ideas; NaN GD isn't involved.");
 
         {
             kit::LegitGate gate;  // shown while you play: a cheat (Show on death isn't)
@@ -75,7 +75,7 @@ namespace gucci::ui::pages {
                 "timings land you in the same spot again. It's an estimate: hidden copies of your player "
                 "run each timing, not the real game, and moving objects are only approximated (more so off "
                 "Windows). Player 1 only, and not in platformer yet. It shows the way, so it counts as a cheat "
-                "while it's on. Possible positions were NaN GD's idea too; he isn't involved",
+                "while it's on. Possible positions were NaN GD's idea too; NaN GD isn't involved",
                 &set.positions);
         }
 
