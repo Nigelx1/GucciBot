@@ -22,6 +22,7 @@
 #include "ai/job.hpp"
 #include "audio/bigbrrr.hpp"
 #include "audio/clicks.hpp"
+#include "audio/juice_song.hpp"
 #include "mcp/events.hpp"
 #include "mcp/scene.hpp"
 #include "mcp/screenshot.hpp"
@@ -397,6 +398,8 @@ namespace gucci::mcp {
             "something on right now counts as a cheat; tainted: this attempt had "
             "one on). Also level.completed (the level's end reached this "
             "attempt), audio (BIG BRRRR enabled/playing/track/holds_game_audio, "
+            "juice_song: Juice's song from the Credits page {playing, plays, last, "
+            "holds_game_audio, format, length_ms, and while it plays position_ms and volume}, "
             "FMOD's master volume and pitch, the game's music and sfx volumes, "
             "test_mute, and clicks: the click sounds' switches, packs, background "
             "noise and the last 20 clicks played) and test_settings (the keys "
@@ -466,6 +469,9 @@ namespace gucci::mcp {
                     big["started_at_sec"] = brrr->startedAtSec();
                     big["position_sec"] = brrr->songSeconds();
                     audio["bigbrrr"] = big;
+                    // GucciBot (2026-11-24): Juice's song, from his name on the
+                    // Credits page (audio/juice_song.hpp).
+                    audio["juice_song"] = juicesong::state();
                     if (auto* fmod = FMODAudioEngine::sharedEngine()) {
                         FMOD::ChannelGroup* master = nullptr;
                         if (fmod->m_system && fmod->m_system->getMasterChannelGroup(&master) == FMOD_OK && master) {

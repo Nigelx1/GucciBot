@@ -31,6 +31,7 @@
 #include "analysis/ac/shim.hpp"
 #include "analysis/pathfinder.hpp"
 #include "audio/bigbrrr.hpp"
+#include "audio/juice_song.hpp"
 #include "core/GucciBot.hpp"
 #include "core/bot_switch.hpp"
 #include "core/mcp_only.hpp"
@@ -3508,18 +3509,47 @@ namespace gucci::ui {
             kit::EndCard();
         }
 
+        // Juice's name plays his song (audio/juice_song.hpp; Nigel, 2026-11-23):
+        // a button the size of the name just drawn at `at`, over it, so the page
+        // looks as it did. The hand cursor and a short tooltip say it can be
+        // clicked. A tap does it on a phone.
+        void songName(ImVec2 at, ImVec2 size) {
+            if (size.x <= 0.f || size.y <= 0.f)
+                return;
+            ImGui::SetCursorScreenPos(at);
+            bool const clicked = ImGui::InvisibleButton("##juice_song", size);
+            // For Assistant Access's gucci_ui and gucci_ui_press: a button named Juice.
+            if (probe::on())
+                probe::button("Juice", Tone::Plain);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+#if defined(GEODE_IS_MOBILE)
+                ImGui::SetTooltip("%s", juicesong::playing() ? "Tap to stop Juice's song" : "Juice made a song: tap to play");
+#else
+                ImGui::SetTooltip("%s", juicesong::playing() ? "Click to stop Juice's song" : "Juice made a song: click to play");
+#endif
+            }
+            if (clicked)
+                juicesong::toggle();
+        }
+
         void pageCredits() {
+            // Juice's song plays only while this page is up (not the search's
+            // hidden pass over every page).
+            if (!search::indexing())
+                juicesong::shown();
             kit::BeginCard("Credits", nullptr);
             if (auto const& badge = themes::active().badge; !badge.empty())
                 kit::Chip(badge.c_str(), Tone::Accent);
             struct Line {
                 const char* who;
                 const char* what;
+                bool song = false;  // the name plays Juice's song (songName)
             };
             const Line lines[] = {
                 {"Nigelx1", "Creator and owner of GucciBot; every idea, every theme, every decision is his call."},
                 {"Claude", "Wrote the code. Essentially the whole codebase, not a euphemism."},
-                {"Juice", "Designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8, and his Alignment-Independent method is back as Calculate's suggestion; lead co-tester."},
+                {"Juice", "Designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8, and his Alignment-Independent method is back as Calculate's suggestion; lead co-tester.", true},
                 {"anticroom", "Calculate is anticroom's analyzer, ported in near-verbatim; sub-tick CBF recording and the render intro card too."},
                 {"dihmaster500", "Tester; asked for auto safe mode and the Disable bot switch, and his testing "
                                  "caught safe mode breaking start positions."},
@@ -3536,7 +3566,10 @@ namespace gucci::ui {
             for (auto const& l : lines) {
                 {
                     UseFont f(Font::Strong);
+                    ImVec2 const at = ImGui::GetCursorScreenPos();
                     ImGui::TextUnformatted(l.who);
+                    if (l.song && !search::indexing())
+                        songName(at, ImGui::CalcTextSize(l.who));
                 }
                 kit::Hint(l.what);
                 kit::Gap(0.25f);
@@ -4573,6 +4606,14 @@ namespace gucci::ui {
                 setOpen(false);
         }
 
+        // Juice's song (audio/juice_song.hpp) as the frame ends, on every way
+        // out of frame(): it stops the first frame the Credits page isn't drawn.
+        struct SongFrameEnd {
+            ~SongFrameEnd() {
+                juicesong::frameEnd();
+            }
+        };
+
         void frame() {
             // No Assistant Access tool runs inside the menu's frame: Calculate's
             // tick below steps and resets the level (mcp::Server::Hold).
@@ -4581,6 +4622,7 @@ namespace gucci::ui {
             // Assistant Access's menu probe (ui/probe.hpp): a frame a tool asked
             // for is captured from here to every return below. Nothing otherwise.
             probe::FrameGuard probeFrame;
+            SongFrameEnd songFrameEnd;
             // A press asked for by Assistant Access (ui/press.hpp) moves on a
             // step, before anything is drawn.
             press::step();
