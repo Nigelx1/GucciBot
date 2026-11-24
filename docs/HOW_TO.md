@@ -164,7 +164,7 @@ Go to **Macro > Saved macros**, to the part called **From other bots**. Then eit
 
 **Import one file from anywhere**
 1. Press **Import a macro** and pick the file.
-2. GucciBot converts it right away, and it shows in **Saved macros**. Click its name to load it, then play it like any other macro.
+2. GucciBot converts it right away and loads it, and it shows in **Saved macros**. Play it like any other macro. (While you're recording, or while Calculate or the Pathfinder runs, it isn't loaded: click its name in **Saved macros** after.)
 
 The file you picked stays where it was. A dated copy is kept in `replays/imported`. **Import a macro** also takes GucciBot macros, and the `.zip` that **Share my windows** saves (see section 6) **(new in 2.0)**.
 

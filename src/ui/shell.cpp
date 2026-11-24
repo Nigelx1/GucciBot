@@ -1218,13 +1218,26 @@ namespace gucci::ui {
             // A shared macro with its windows (Share my windows' .zip).
             bool const shared = !ours && bundle::looksLikeShare(bytes);
             std::error_code ec;
+            // What keeps an import from selecting its macro, said for the note:
+            // a recording, or what keeps a click on its row from loading it
+            // (Calculate or a Pathfinder run, pages::macroLoadLock). Empty
+            // when nothing does. GucciBot (2026-11-23): one rule for every
+            // import; a re-import and a shared macro looked only at a
+            // recording and Calculate's own run, so they loaded mid-Pathfinder.
+            auto const selectLock = [gb]() -> std::string {
+                if (gb->isRecording())
+                    return "Not selected while you're recording: pick it in Saved macros after.";
+                if (char const* const why = pages::macroLoadLock())
+                    return fmt::format("Not selected. {}", why);
+                return {};
+            };
             // A macro that's already here is selected (loaded, as a click on
             // its row does), unless it already is (loading it again would drop
             // unsaved changes) or a run is on.
-            auto const selectNote = [gb](std::string const& name) -> std::string {
+            auto const selectNote = [gb, &selectLock](std::string const& name) -> std::string {
                 if (gb->replayName == name)
                     return ", already selected";
-                if (gb->isRecording() || gb->analyzerOwnsRun())
+                if (!selectLock().empty())
                     return "";
                 loadMacroByName(name);
                 return ", now selected";
@@ -1356,15 +1369,26 @@ namespace gucci::ui {
                 msg += fmt::format("\nCouldn't update imported/index.json ({}), so importing it again makes a "
                                    "second macro.",
                                    written.unwrapErr());
-            // A shared macro is there to be looked at: selected (loaded, as a
-            // click on its row does, windows and all), unless a run is on.
-            if (shared) {
-                if (gb->isRecording() || gb->analyzerOwnsRun()) {
-                    msg += "\nNot selected while recording or while Calculate runs: pick it in Saved macros after.";
-                } else {
-                    loadMacroByName(name);
-                    msg += withWindows ? "\nIt's selected: open its level to see the windows." : "\nIt's selected.";
-                }
+            // Selected (loaded, as a click on its row does; a shared macro
+            // windows and all), unless a run is on. GucciBot (2026-11-23,
+            // Nigel's D1): a first import of any kind, as a re-import and a
+            // shared macro already were; it used to wait for a click on its
+            // row.
+            if (auto const why = selectLock(); !why.empty()) {
+                msg += "\n" + why;
+            } else if (gb->replayName == name) {
+                // The macro in memory goes by this name but has no file (a new
+                // recording not saved yet): loading would throw it away.
+                msg += fmt::format("\nNot selected: the macro you have open is also called \"{}\" and isn't saved. "
+                                   "Save it under another name, then pick this one in Saved macros.",
+                                   name);
+            } else {
+                loadMacroByName(name);
+                if (gb->replayName != name)
+                    msg += "\nCouldn't select it: pick it in Saved macros.";
+                else
+                    msg += shared && withWindows ? "\nIt's selected: open its level to see the windows."
+                                                 : "\nIt's selected.";
             }
             return {true, msg};
         }

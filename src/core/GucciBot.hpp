@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-u (Macro path's Only up to your best starts off for a new install (D11))"
+    "2026-11-24-v (A first import of a macro loads it too (D1))"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
