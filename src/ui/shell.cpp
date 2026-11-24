@@ -203,6 +203,18 @@ namespace gucci::ui {
             auto* gb = GucciEngine::get();
             for (auto const& s : kUiLoadedSwitches)
                 gb->*(s.field) = mod->getSavedValue<bool>(s.key, gb->*(s.field));
+            // GucciBot 2.0.1 (Nigel, 2026-11-23): Macro path's "Only up to your
+            // best" (trainer_reveal) goes off once for everyone. Its default is
+            // off since 2.0.1, but every install that ran 2.0 holds 2.0's
+            // default, true (getSavedValue saves the default of a missing key).
+            // The first launch with this turns it off and saves
+            // trainer_reveal_off_once, so it never runs again and a choice made
+            // after it stays. Nothing else is touched.
+            if (!mod->getSaveContainerConst().contains("trainer_reveal_off_once")) {
+                gb->trainerRevealEnabled = false;
+                mod->setSavedValue("trainer_reveal", false);
+                mod->setSavedValue("trainer_reveal_off_once", true);
+            }
             for (auto const& f : kUiLoadedFloats)
                 gb->*(f.field) = static_cast<float>(mod->getSavedValue<double>(f.key, gb->*(f.field)));
             gb->rngSeedVal = static_cast<uint32_t>(mod->getSavedValue<int64_t>("hack_rng_seed", gb->rngSeedVal));

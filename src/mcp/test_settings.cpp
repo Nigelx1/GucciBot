@@ -280,6 +280,10 @@ namespace gucci::testset {
                 v.push_back(engineBool("trainer_reveal", [e]() -> bool& { return e()->trainerRevealEnabled; }));
                 v.push_back(engineFloat("trainer_reveal_ahead", 0.0, 600.0,
                                         [e]() -> float& { return e()->trainerRevealBuffer; }));
+                // What the one-time switch-off of Only up to your best leaves
+                // behind (ui/shell.cpp loadSettings, 2.0.1): null until it ran.
+                // Only read at launch, so it's here to be read.
+                v.push_back(live("trainer_reveal_off_once", LiveType::Bool));
                 // The Speed card's row: the rate, its saved value, and while
                 // recording a TPS change in the macro on this tick.
                 v.push_back({"eng_tick_rate", "number", Store::Field,

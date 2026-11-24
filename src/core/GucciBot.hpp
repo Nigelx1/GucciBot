@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-w (The AI engine's result after a Stop says how far it got)"
+    "2026-11-24-x (Macro path's Only up to your best goes off once for everyone (D11))"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
