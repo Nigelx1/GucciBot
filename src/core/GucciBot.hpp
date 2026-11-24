@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-v (A first import of a macro loads it too (D1))"
+    "2026-11-24-w (The AI engine's result after a Stop says how far it got)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

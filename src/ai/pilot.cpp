@@ -1702,8 +1702,14 @@ namespace gucci::ai::pilot {
                 return out;
             }
 
+            // What a run that stopped early had got to (a Stop, the level
+            // left). matjson's Value() is an empty object, not null, so a
+            // result nothing has set yet is {}: checking isNull() alone kept a
+            // stopped run's result empty (2026-11-24, found in the quickwins
+            // lane's in-game test: gucci_ai_status had no best_percent or
+            // attempts after a Stop). A result finish() set is kept.
             void partialResult(char const* stopped) {
-                if (!result.isNull()) return;
+                if (!result.isNull() && !(result.isObject() && result.size() == 0)) return;
                 result = baseResult(stopped);
             }
 
