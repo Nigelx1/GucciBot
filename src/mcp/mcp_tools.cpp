@@ -3723,6 +3723,7 @@ namespace gucci::mcp {
         registerShareTools(server);
         registerBandsTools(server);
         registerLayoutTools(server);
+        registerLayoutCensusTools(server);
         registerKeysTools(server);
     }
 

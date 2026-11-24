@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-aa (A test-only key, hack_layout_mode, turns Layout mode on or off in a hidden test)"
+    "2026-11-24-ab (A test-only tool, gucci_layout_census, says what Layout mode did to the open level)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

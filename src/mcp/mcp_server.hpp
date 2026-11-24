@@ -227,6 +227,8 @@ namespace gucci::mcp {
     void registerBandsTools(Server& server);
     // gucci_layout: the menu's Windows layout, for tests (layout_tool.cpp).
     void registerLayoutTools(Server& server);
+    // gucci_layout_census: what Layout mode did to the open level (layout_census_tool.cpp).
+    void registerLayoutCensusTools(Server& server);
     // gucci_key (a key the way Geode hands one on) and gucci_editor (the Frame Editor), keys_tool.cpp.
     void registerKeysTools(Server& server);
 
