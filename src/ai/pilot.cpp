@@ -1542,47 +1542,66 @@ namespace gucci::ai::pilot {
                 m_bestD = m_d;
             }
 
+            // A line saved as a macro, for a finished run and a furthest one
+            // alike: in the theme's macro format (its extension), so the Saved
+            // macros list shows it, named `base`, or "<base> 2", "<base> 3"...
+            // past a name a saved macro has already (any theme's extension), so
+            // an earlier run's file is never replaced. ok false: the file couldn't
+            // be written, and nothing is left behind.
+            struct SavedLine {
+                std::string name;
+                fs::path path;
+                size_t inputs = 0;
+                bool ok = false;
+            };
+            SavedLine saveLine(std::vector<uint8_t> const& d, std::string const& base) const {
+                SavedLine s;
+                auto* gb = GucciEngine::get();
+                s.name = base;
+                for (int n = 2; !gb->findMacroFile(s.name).empty(); n++) s.name = fmt::format("{} {}", base, n);
+                convert::Macro const m = lineMacro(d, s.name);
+                s.inputs = m.inputs.size();
+                auto const bytes = convert::toGucciBot(m);
+                s.path = gb->getReplayDir() / u8path(s.name + gucci::ui::macroExtension());
+                std::error_code ec;
+                fs::create_directories(s.path.parent_path(), ec);
+                {
+                    std::ofstream f(s.path, std::ios::binary | std::ios::trunc);
+                    f.write(reinterpret_cast<char const*>(bytes.data()), (std::streamsize)bytes.size());
+                    s.ok = (bool)f;
+                }
+                if (!s.ok) {
+                    fs::remove(s.path, ec);
+                    return s;
+                }
+                gb->reloadMacroList();  // in Saved macros now, not at the next Refresh
+                return s;
+            }
+
             // GucciBot (2026-11-23, Juice's ask 11-22): a run that stops without
             // beating the level saves its furthest run as a macro, as the Search
             // saves "<level name> furthest" (absense/pathfinder/pathfinder.cpp,
             // saveFurthest): "AI - <level name> furthest", numbered past a name a
             // saved macro has already ("... furthest 2"), so an earlier run's file
-            // is never replaced. The file is the best attempt's own line, kept when
-            // it ended (m_bestD), not the last attempt's. It's in the theme's macro
-            // format, so the Saved macros list shows it. Once a run; its words for
-            // the stop's line, "" when nothing was saved.
+            // is never replaced (saveLine). The file is the best attempt's own
+            // line, kept when it ended (m_bestD), not the last attempt's. Once a
+            // run; its words for the stop's line, "" when nothing was saved.
             std::string saveFurthest(matjson::Value& out) {
                 if (!opt.saveFurthest || m_furthestSaved || m_completed || m_bestD.empty()) return {};
                 m_furthestSaved = true;
-                auto* gb = GucciEngine::get();
-                std::string const base = fileSafe(macroBase()) + " furthest";
-                std::string name = base;
-                for (int n = 2; !gb->findMacroFile(name).empty(); n++) name = fmt::format("{} {}", base, n);
-                std::string const ext = gucci::ui::macroExtension();
-                convert::Macro const m = lineMacro(m_bestD, name);
-                auto const bytes = convert::toGucciBot(m);
-                auto const path = gb->getReplayDir() / u8path(name + ext);
-                std::error_code ec;
-                fs::create_directories(path.parent_path(), ec);
-                bool written;
-                {
-                    std::ofstream f(path, std::ios::binary | std::ios::trunc);
-                    f.write(reinterpret_cast<char const*>(bytes.data()), (std::streamsize)bytes.size());
-                    written = (bool)f;
+                SavedLine const s = saveLine(m_bestD, fileSafe(macroBase()) + " furthest");
+                if (!s.ok) {
+                    out["furthest_macro_error"] = "could not write " + utf8(s.path);
+                    return fmt::format(" Its furthest run couldn't be saved ({} couldn't be written).",
+                                       utf8(s.path.filename()));
                 }
-                if (!written) {
-                    fs::remove(path, ec);
-                    out["furthest_macro_error"] = "could not write " + utf8(path);
-                    return fmt::format(" Its furthest run couldn't be saved ({} couldn't be written).", name + ext);
-                }
-                gb->reloadMacroList();  // in Saved macros now, not at the next Refresh
-                out["furthest_macro"] = name;
-                out["furthest_macro_file"] = utf8(path);
-                out["furthest_macro_inputs"] = (int64_t)m.inputs.size();
+                out["furthest_macro"] = s.name;
+                out["furthest_macro_file"] = utf8(s.path);
+                out["furthest_macro_inputs"] = (int64_t)s.inputs;
                 out["furthest_macro_ticks"] = (int64_t)m_bestD.size();
                 out["furthest_macro_attempt"] = m_bestAttempt;
                 out["furthest_macro_percent"] = (double)m_bestPercent;
-                return fmt::format(" Its furthest run ({:.1f}%) is saved as \"{}\".", m_bestPercent, name);
+                return fmt::format(" Its furthest run ({:.1f}%) is saved as \"{}\".", m_bestPercent, s.name);
             }
 
             bool onComplete(sim::State const&) {
@@ -1606,21 +1625,22 @@ namespace gucci::ai::pilot {
                 }
                 sim::end();
                 auto out = baseResult("completed");
-                // Saved as a GucciBot macro (frame labels: tick t is frame F + 1 + t).
+                // Saved as a GucciBot macro (frame labels: tick t is frame F + 1 + t),
+                // the way the furthest run is (saveLine; Nigel, 2026-11-23): in the
+                // theme's macro format, so Saved macros lists it (it was a .gbr6 the
+                // list didn't show), as "AI - <level name>" (or save_macro), numbered
+                // past a name that's taken instead of writing over that file.
                 {
-                    auto* gb = GucciEngine::get();
-                    convert::Macro const m = lineMacro(m_d, macroBase());
-                    auto const bytes = convert::toGucciBot(m);
-                    auto const path = gb->getReplayDir() / u8path(fileSafe(m.name) + ".gbr6");
-                    std::error_code ec;
-                    fs::create_directories(path.parent_path(), ec);
-                    std::ofstream f(path, std::ios::binary | std::ios::trunc);
-                    f.write(reinterpret_cast<char const*>(bytes.data()), (std::streamsize)bytes.size());
-                    if (f) {
-                        out["macro_file"] = utf8(path);
-                        out["macro_inputs"] = (int64_t)m.inputs.size();
+                    SavedLine const s = saveLine(m_d, fileSafe(macroBase()));
+                    if (s.ok) {
+                        out["macro"] = s.name;
+                        out["macro_file"] = utf8(s.path);
+                        out["macro_inputs"] = (int64_t)s.inputs;
+                        say(fmt::format("Saved as the macro \"{}\".", s.name));
                     } else {
-                        out["macro_error"] = "could not write " + utf8(path);
+                        out["macro_error"] = "could not write " + utf8(s.path);
+                        say(fmt::format("It couldn't be saved as a macro ({} couldn't be written).",
+                                        utf8(s.path.filename())));
                     }
                 }
                 // Played in the real game from the same start.

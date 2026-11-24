@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-y (BIG BRRRR plays your own song from a start time you set, 0 until you do)"
+    "2026-11-24-z (The AI engine saves a finished run in the theme's macro format, so Saved macros lists it)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
