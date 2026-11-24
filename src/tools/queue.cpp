@@ -999,7 +999,7 @@ namespace gucci::queue {
         if (r.running)
             return "";
         if (k == Kind::Pathfinder && !pathfinderAvailable())
-            return "The Pathfinder queue isn't available on this platform yet.";
+            return "The Pathfinder queue isn't available on " GB_HERE " yet.";
         if (legit::on())
             return "Turn off Legit only first: a queue plays the Pathfinder and Calculate, which count as cheats.";
         if (R(k == Kind::Pathfinder ? Kind::FrameWindows : Kind::Pathfinder).running)

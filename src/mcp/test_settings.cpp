@@ -288,7 +288,7 @@ namespace gucci::testset {
                                  double const tps = wantNumber("eng_tick_rate", val, 1.0, 100000.0);
 #if !GB_NATIVE_ENGINE
                                  if (!gucci::portable_tps::runnable(tps))
-                                     throw ToolError("eng_tick_rate: GD can't run that rate on this platform");
+                                     throw ToolError("eng_tick_rate: GD can't run that rate on " GB_HERE);
 #endif
                                  auto* g = gb();
                                  g->updater.setTps(static_cast<float>(tps));

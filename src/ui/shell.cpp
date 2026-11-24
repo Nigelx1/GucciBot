@@ -2932,9 +2932,11 @@ namespace gucci::ui {
             }
             if (!sl->isRecording() && !sl->m_lastError.empty())
                 kit::Note(fmt::format("The last render didn't start: {}", sl->m_lastError).c_str(), Tone::Bad);
-#if GB_NATIVE_ENGINE
+#if defined(GEODE_IS_WINDOWS)
             // Without FFmpeg nothing renders; the mod puts its files back in
-            // this folder at launch when they go missing.
+            // this folder at launch when they go missing (main.cpp, on every
+            // Windows build: GD 2.2081 and 2.2091 alike, so this is gated on
+            // Windows, not on the engine).
             if (!sl->isFFmpegLoaded()) {
                 kit::Note("FFmpeg isn't loaded, so nothing can render. Its files belong in the folder below; "
                           "restarting the game puts them back.",

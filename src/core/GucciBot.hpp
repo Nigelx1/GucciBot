@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-h (Settings gets a Center the menu button)"
+    "2026-11-24-i (GD 2.2091: the Render page says why FFmpeg can't render, and two texts name GD 2.2091)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
