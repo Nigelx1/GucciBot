@@ -111,6 +111,15 @@ struct GB7RandTriggerGameObject
         if (remapKeys)
             keys = *remapKeys;
 
+        // GD 2.2091's spawn-abuse skip (m_spawnAbuse) needs nothing here:
+        // GD's own spawnGroup (win 0x322370) returns without spawning while
+        // the flag is set, and sets the flag itself after 10000 repeated
+        // spawns; spawnObject checks it again. Every layer's spawnGroup is
+        // that function (the TriggerEffectDelegate vtables of GJBaseGameLayer,
+        // PlayLayer and LevelEditorLayer, read from the 2.2091 executable).
+        // GD's own triggerObject also checks the flag before calling it
+        // (Silicate 1.1.2 copies that check), so the seeded pick is skipped
+        // exactly when GD's would be, after the roll.
         layer->spawnGroup(groupID, false, 0.0, keys, m_uniqueID, m_controlID);
     }
 };

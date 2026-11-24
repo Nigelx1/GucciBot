@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-j (GD 2.2091: the frame-window queue downloads a macro's level as on GD 2.2081)"
+    "2026-11-24-k (GD 2.2091: a comment says why seeded Advanced Random triggers need no spawn-abuse check)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
