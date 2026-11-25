@@ -7,6 +7,7 @@
 #include "analysis/trajectory.hpp"
 #include "hooks/respawn.hpp"
 #include "hooks/level_exit.hpp"
+#include "hooks/gd_checkpoints.hpp"
 #include "analysis/pathfinder.hpp"
 #include "analysis/ac/cbf.hpp"
 #include "analysis/ac/framewindow.hpp"
@@ -224,11 +225,132 @@ namespace gucci::levelexit {
         gb->practiceFix.clearStoredFrames();
         gb->practiceFix.clearPlatformer(true);
         gb->practiceFix.removeAll();  // the level's objects are gone (see init)
+#if GB_GD_CHECKPOINT_POLL
+        gucci::gdcheckpoints::clear();
+#endif
         gb->replay.onExit();
         Autoclicker::get()->reset();
     }
 
 } // namespace gucci::levelexit
+
+#if GB_GD_CHECKPOINT_POLL
+// Practice checkpoints GD placed with its own code (hooks/gd_checkpoints.hpp):
+// the 2.0.1 stopgap, not tick-exact (GB_GD_CHECKPOINT_POLL, core/platform.hpp).
+namespace gucci::gdcheckpoints {
+
+#if defined(GB_FORCE_PORTABLE)
+    int g_bypass = 0;
+#endif
+
+    namespace {
+        // The ones GucciBot took from GD's list, in the order it found them.
+        // Each holds a reference of GucciBot's own, as storeCheckpoint's
+        // retain does; GD's list keeps its own.
+        std::vector<CheckpointObject*> s_adopted;
+        bool s_loggedAdopt = false;
+        bool s_loggedDrop = false;
+
+        bool adopted(CheckpointObject* cp) {
+            return std::find(s_adopted.begin(), s_adopted.end(), cp) != s_adopted.end();
+        }
+
+        // On one of GucciBot's lists already: its own checkpoints, and the
+        // ones its resets hand GD for a moment (handleResetWithCheckpoints).
+        bool known(GucciPracticeFix const& pf, CheckpointObject* cp) {
+            if (adopted(cp))
+                return true;
+            if (pf.m_forcedState && pf.m_forcedState->m_checkpoint == cp)
+                return true;
+            for (auto const& s : pf.m_savedCheckpoints)
+                if (s.m_checkpoint == cp)
+                    return true;
+            for (auto const& p : pf.m_platformerCheckpoints)
+                if (p.first == cp)
+                    return true;
+            for (auto const& f : pf.m_storedFrames)
+                if (f.state.m_checkpoint == cp)
+                    return true;
+            return false;
+        }
+    } // namespace
+
+    void sync(PlayLayer* pl) {
+        auto* gb = GucciEngine::get();
+        if (!gb->enabled || !pl || !pl->m_checkpointArray)
+            return;
+        auto& pf = gb->practiceFix;
+        auto* gdList = pl->m_checkpointArray;
+
+        // One GD took out of its own list itself: out of GucciBot's too, so
+        // no respawn goes back to it. Its object went with GD's delete; the
+        // entry the backstep store keeps for it doesn't own it (saveCurrent),
+        // and goes before GucciBot's reference does, as in removeCheckpoint.
+        for (size_t i = s_adopted.size(); i-- > 0;) {
+            auto* cp = s_adopted[i];
+            if (gdList->containsObject(cp))
+                continue;
+            s_adopted.erase(s_adopted.begin() + static_cast<std::ptrdiff_t>(i));
+            std::erase_if(pf.m_storedFrames,
+                          [cp](StoredFrame const& f) { return !f.owned && f.state.m_checkpoint == cp; });
+            std::erase_if(pf.m_savedCheckpoints,
+                          [cp](SavedCheckpointState const& s) { return s.m_checkpoint == cp; });
+            cp->release();
+            if (!s_loggedDrop) {
+                s_loggedDrop = true;
+                log::info("[GucciBot] Checkpoint: GD removed one of its own checkpoints, so GucciBot did too. "
+                          "Logged once.");
+            }
+        }
+
+        // One GD placed with its own code: saved the way storeCheckpoint
+        // saves the ones the hooks see, under the frame it's saved at, in the
+        // frozen tick (between two updates, where the hooks' own checkpoints
+        // are placed). GD places it inside its update; saved there, a respawn
+        // to it came out a tick late in a hidden test (the first tick after
+        // it didn't move the player), and saved after the next tick too.
+        if (!pl->m_isPracticeMode || gdList->count() == 0)
+            return;
+        for (unsigned i = 0; i < gdList->count(); ++i) {
+            auto* cp = static_cast<CheckpointObject*>(gdList->objectAtIndex(i));
+            if (!cp || known(pf, cp))
+                continue;
+            cp->retain();
+            s_adopted.push_back(cp);
+            gb->updater.scheduleFrozenFunction([cp](float) {
+                // Still GD's, and still in a level: gone since (a reset to
+                // the start, a delete, the level left), it isn't saved.
+                auto* gb = GucciEngine::get();
+                if (!adopted(cp) || !PlayLayer::get())
+                    return;
+                uint32_t const frame = gb->updater.getFrame();
+                gb->practiceFix.saveCurrent(cp, frame);
+                if (!s_loggedAdopt) {
+                    s_loggedAdopt = true;
+                    log::warn("[GucciBot] Checkpoint: GD placed one with its own code, past GucciBot's "
+                              "checkpoint hooks: saved it from GD's list instead (frame {}), so respawns keep the "
+                              "frame. Logged once.",
+                              frame);
+                }
+            });
+        }
+    }
+
+    void forget(PlayLayer* pl, CheckpointObject* cp) {
+        auto const it = std::find(s_adopted.begin(), s_adopted.end(), cp);
+        if (it == s_adopted.end())
+            return;
+        s_adopted.erase(it);
+        if (pl && pl->m_checkpointArray)
+            pl->m_checkpointArray->removeObject(cp); // GD's own reference goes with it
+    }
+
+    void clear() {
+        s_adopted.clear();
+    }
+
+} // namespace gucci::gdcheckpoints
+#endif // GB_GD_CHECKPOINT_POLL
 
 class $modify(GB7PlayLayer, PlayLayer) {
     struct Fields {
@@ -241,7 +363,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
     };
 
     CheckpointObject* markCheckpoint() {
-        if (!GucciEngine::get()->enabled)
+        if (!GucciEngine::get()->enabled || gucci::gdcheckpoints::bypassPlacing())
             return PlayLayer::markCheckpoint();
         // Silicate's guards: no checkpoint for a player who is already dead,
         // and the checkpoint's own object is activated like GD's would be.
@@ -255,7 +377,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
     }
 
     void storeCheckpoint(CheckpointObject* obj) {
-        if (!GucciEngine::get()->enabled)
+        if (!GucciEngine::get()->enabled || gucci::gdcheckpoints::bypassPlacing())
             return PlayLayer::storeCheckpoint(obj);
         auto* gb = GucciEngine::get();
         obj->retain();
@@ -326,7 +448,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
     }
 
     void removeCheckpoint(bool p0) {
-        if (!GucciEngine::get()->enabled)
+        if (!GucciEngine::get()->enabled || gucci::gdcheckpoints::bypassRemoving())
             return PlayLayer::removeCheckpoint(p0);
         auto& pf = GucciEngine::get()->practiceFix;
         if (pf.m_savedCheckpoints.empty())
@@ -353,12 +475,17 @@ class $modify(GB7PlayLayer, PlayLayer) {
         }
         obj->removeMeAndCleanup();
 
+#if GB_GD_CHECKPOINT_POLL
+        // One GucciBot took from GD's own list comes out of it too
+        // (hooks/gd_checkpoints.hpp).
+        gucci::gdcheckpoints::forget(this, gone);
+#endif
         gone->release();
         pf.m_savedCheckpoints.pop_back();
     }
 
     void removeAllCheckpoints() {
-        if (!GucciEngine::get()->enabled)
+        if (!GucciEngine::get()->enabled || gucci::gdcheckpoints::bypassRemoving())
             return PlayLayer::removeAllCheckpoints();
         if (GucciEngine::get()->updater.m_fullReset)
             return;
@@ -378,6 +505,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // crash. Before the enabled check: the triggers add themselves either
         // way.
         gb->practiceFix.removeAll();
+#if GB_GD_CHECKPOINT_POLL
+        gucci::gdcheckpoints::clear();
+#endif
         gucci::SLRenderer::get()->m_quittingLayer = nullptr;  // a new level (see onQuit)
         ++gucci::SLRenderer::get()->m_levelGen;  // and a new one for drawScene's check
         if (!gb->enabled)
@@ -1431,7 +1561,7 @@ namespace {
 
 class $modify(GBPortableCheckKey, UILayer) {
     void onCheck(CCObject* sender) {
-        if (!GucciEngine::get()->enabled)
+        if (!GucciEngine::get()->enabled || gucci::gdcheckpoints::bypassPlacing())
             return UILayer::onCheck(sender);
         static bool logged = false;
         if (queueFrozenCheckpoint(PlayLayer::get()))
@@ -1453,7 +1583,7 @@ class $modify(GBPortableCheckpoint, PlayLayer) {
 #endif
 
     void processCheckpoints() {
-        if (GucciEngine::get()->enabled && m_tryPlaceCheckpoint) {
+        if (GucciEngine::get()->enabled && !gucci::gdcheckpoints::bypassPlacing() && m_tryPlaceCheckpoint) {
             m_tryPlaceCheckpoint = false;
             static bool logged = false;
             if (queueFrozenCheckpoint(this) && !logged) {
@@ -1464,6 +1594,12 @@ class $modify(GBPortableCheckpoint, PlayLayer) {
             }
         }
         PlayLayer::processCheckpoints();
+#if GB_GD_CHECKPOINT_POLL
+        // A checkpoint GD's own processCheckpoints just placed past the
+        // hooks is found here first (hooks/gd_checkpoints.hpp); the check
+        // after every tick is the net for a GD that never comes here.
+        gucci::gdcheckpoints::sync(this);
+#endif
     }
 };
 

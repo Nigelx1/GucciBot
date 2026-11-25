@@ -7,6 +7,7 @@
 #include "analysis/ac/framewindow.hpp"
 #include "core/bot_switch.hpp"
 #include "core/mcp_only.hpp"
+#include "hooks/gd_checkpoints.hpp"
 #include "hooks/util_midhook.hpp"
 #include "core/gd_addresses.hpp"
 #include "render/renderer.hpp"
@@ -1466,6 +1467,11 @@ class $modify(GBPortableTick, GJBaseGameLayer) {
         tickStartWork();
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
         tickSettledWork();
+#if GB_GD_CHECKPOINT_POLL
+        // A practice checkpoint GD placed with its own code, past GucciBot's
+        // hooks (hooks/gd_checkpoints.hpp; 2.0.1, the iPhone's checkpoints).
+        gucci::gdcheckpoints::sync(PlayLayer::get());
+#endif
     }
 };
 #endif

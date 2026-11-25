@@ -103,6 +103,27 @@
 #define GB_IMGUI_FROM_DRAWSCENE 0
 #endif
 
+// GB_GD_CHECKPOINT_POLL: the 2.0.1 STOPGAP for practice checkpoints GD places
+// past GucciBot's checkpoint hooks, as on an iPhone (the Geode iOS app, iOS
+// 27), where every death restarted the recording at frame 0. After every tick
+// GucciBot looks at GD's own checkpoint list and saves one it missed
+// (hooks/gd_checkpoints.hpp, hooks/hook_playlayer.cpp, and the GBPortableTick
+// hook in core/engine_updater.cpp). NOT TICK-EXACT: the save waits for the
+// frozen tick at the end of the drawn frame, up to 3 ticks after GD made the
+// checkpoint at 240 TPS and 60 FPS. So on a level with moving objects a
+// respawn there can bring the level and the player back a few ticks apart,
+// and a death later in that same drawn frame can save the dead player.
+// Off Windows only (on Windows the hooks see every checkpoint, in both files),
+// plus GB_FORCE_PORTABLE test builds. TO RIP IT OUT: set this to 0, which
+// turns all of it off (the test-only bypass checks left in the hooks are
+// constexpr false outside GB_FORCE_PORTABLE), or revert the commit that added
+// it (git log -S GB_GD_CHECKPOINT_POLL), which takes it out entirely.
+#if !GB_NATIVE_ENGINE && (!defined(GEODE_IS_WINDOWS) || defined(GB_FORCE_PORTABLE))
+#define GB_GD_CHECKPOINT_POLL 1
+#else
+#define GB_GD_CHECKPOINT_POLL 0
+#endif
+
 // Geode's gnustl (GD's standard library on Android) has no move assignment for
 // gd::map, so a struct holding one, or a GJGameState, must not get an implicit
 // move assignment there: declaring the copy assignment makes moves copy. Other

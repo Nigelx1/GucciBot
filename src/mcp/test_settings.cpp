@@ -19,6 +19,7 @@
 #include "hacks/safemode.hpp"
 #include "hacks/safemode_2209.hpp"  // GB_SAFETY_2209
 #include "mcp/mcp_server.hpp"
+#include "hooks/gd_checkpoints.hpp"
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
 #include "ui/ui.hpp"
@@ -714,6 +715,19 @@ namespace gucci::testset {
                     songStart.alsoShield = {BigBrrrManager::kSongStartsKey};
                     v.push_back(std::move(songStart));
                 }
+#if defined(GB_FORCE_PORTABLE)
+                // TEST ONLY, GB_FORCE_PORTABLE builds (never shipped): 0, or 1
+                // for GucciBot's checkpoint-placing hooks stepping aside so GD
+                // places a practice checkpoint with its own code, as its iOS
+                // build seems to, or 2 for the removing ones too
+                // (hooks/gd_checkpoints.hpp). Not saved.
+                v.push_back({"test_gd_checkpoints", "int", Store::Memory,
+                             [] { return matjson::Value(gucci::gdcheckpoints::g_bypass); },
+                             [](matjson::Value const& val, bool) {
+                                 gucci::gdcheckpoints::g_bypass =
+                                     static_cast<int>(wantInt("test_gd_checkpoints", val, 0, 2));
+                             }});
+#endif
                 v.push_back({"test_mute", "bool", Store::Memory, [] { return matjson::Value(g_muted); },
                              [](matjson::Value const& val, bool) {
                                  bool const on = wantBool("test_mute", val);
