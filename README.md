@@ -10,7 +10,7 @@ It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.o
 
 ## Get it
 
-The newest release is **2.0.0**. It comes as **two files on the same release**, one for each Geometry Dash version. Download only the one for your game.
+The newest release is **2.0.1**. It comes as **two files on the same release**, one for each Geometry Dash version. Download only the one for your game.
 
 | Your game | Your Geode | Download | Runs on |
 |---|---|---|---|
@@ -19,10 +19,12 @@ The newest release is **2.0.0**. It comes as **two files on the same release**, 
 
 The number in each name is the GD version it's for: **2208** is GD 2.2081, **2209** is GD 2.2091. The 2208 file is about 227 MB and the 2209 file about 228 MB, since the renderer, the music and the JMF Trainer's video ride along.
 
-| File | SHA-256 | VirusTotal |
-|---|---|---|
-| `nigelx1.guccibot2208.geode` | `acb0b0c145bde82f6d45068bad6cd1b702fed93b041666cfd3d42fb6f3d9a586` | [0 of 62 engines](https://www.virustotal.com/gui/file/acb0b0c145bde82f6d45068bad6cd1b702fed93b041666cfd3d42fb6f3d9a586) |
-| `nigelx1.guccibot2209.geode` | `3bd29a9afc4fd905ad6a6c31695154e3231bea0b9f65ea02c333001523aeed64` | [0 of 65 engines](https://www.virustotal.com/gui/file/3bd29a9afc4fd905ad6a6c31695154e3231bea0b9f65ea02c333001523aeed64) |
+| File | SHA-256 |
+|---|---|
+| `nigelx1.guccibot2208.geode` | `7fb64a81bc191523b5877426a483839f8cee85acf3d52c3d541779e47f5dbb14` |
+| `nigelx1.guccibot2209.geode` | `35f952eedaeb607b3f37a0048c97ba5210f1768c02df2d7db02b25608646ef50` |
+
+VirusTotal: the scans were done for 2.0.0's files ([the 2.0.0 release](https://github.com/Nigelx1/GucciBot/releases/tag/v2.0.0)). Patch releases like 2.0.1 aren't scanned separately.
 
 Check your copy: `certutil -hashfile nigelx1.guccibot2208.geode SHA256` on Windows, `shasum -a 256 nigelx1.guccibot2208.geode` on a Mac (use the other file's name for the 2209 file).
 
@@ -162,7 +164,7 @@ The themes' songs play with **Explicit content** on (Settings > Look), and a tra
 
 ## Status
 
-**2.0.0** is the newest release: two files, one for GD 2.2081 on every platform and a Windows preview for GD 2.2091 ([which one?](#get-it)). Work after it lands on `master`, where every push builds both files.
+**2.0.1** is the newest release: two files, one for GD 2.2081 on every platform and a Windows preview for GD 2.2091 ([which one?](#get-it)). Work after it lands on `master`, where every push builds both files.
 
 What's tested and what isn't, plainly:
 
