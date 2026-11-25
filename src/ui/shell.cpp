@@ -1278,14 +1278,22 @@ namespace gucci::ui {
                     return fmt::format("Not selected. {}", why);
                 return {};
             };
+            // GucciBot (2026-11-24, 2.0.1, Nigel): an import never replaces a
+            // macro that isn't saved (a recording just made, or carried on and
+            // not saved since): loading would throw it away. A click on the
+            // new macro's row still loads it.
+            static constexpr char kUnsavedNote[] =
+                "Not selected: the macro you have open isn't saved yet. Save it, then pick this one in Saved macros";
             // A macro that's already here is selected (loaded, as a click on
             // its row does), unless it already is (loading it again would drop
-            // unsaved changes) or a run is on.
+            // unsaved changes), a run is on, or the macro open isn't saved.
             auto const selectNote = [gb, &selectLock](std::string const& name) -> std::string {
                 if (gb->replayName == name)
                     return ", already selected";
                 if (!selectLock().empty())
                     return "";
+                if (gb->replay.hasUnsavedInputs())
+                    return fmt::format(". {}", kUnsavedNote);
                 loadMacroByName(name);
                 return ", now selected";
             };
@@ -1417,7 +1425,8 @@ namespace gucci::ui {
                                    "second macro.",
                                    written.unwrapErr());
             // Selected (loaded, as a click on its row does; a shared macro
-            // windows and all), unless a run is on. GucciBot (2026-11-23,
+            // windows and all), unless a run is on or the macro open isn't
+            // saved (kUnsavedNote). GucciBot (2026-11-23,
             // Nigel's D1): a first import of any kind, as a re-import and a
             // shared macro already were; it used to wait for a click on its
             // row.
@@ -1429,6 +1438,8 @@ namespace gucci::ui {
                 msg += fmt::format("\nNot selected: the macro you have open is also called \"{}\" and isn't saved. "
                                    "Save it under another name, then pick this one in Saved macros.",
                                    name);
+            } else if (gb->replay.hasUnsavedInputs()) {
+                msg += fmt::format("\n{}.", kUnsavedNote);
             } else {
                 loadMacroByName(name);
                 if (gb->replayName != name)

@@ -1431,6 +1431,7 @@ namespace gucci {
                 m_loadedPath = path;
                 m_savedFrom = path;
                 m_savedFromLevel = hdr.levelName;
+                m_madeSinceSave = false;
             }
         }
         saveFwMarks(path);
@@ -1452,6 +1453,7 @@ namespace gucci {
     }
 
     void GucciReplaySystem::stampMadeHere() {
+        m_madeSinceSave = true;
         if (m_madeOnGd != currentGdVersion())
             m_madeOnGd = currentGdVersion();
         if (m_madeWithGb != MOD_VERSION)
@@ -1539,6 +1541,7 @@ namespace gucci {
             m_loadedPath = path;
             m_savedFrom = path;
             m_savedFromLevel = f.header.levelName;
+            m_madeSinceSave = false;
             for (auto& inp : f.p1Inputs)
                 m_actionAtom.addAction(
                     inp.frame, static_cast<gb::ActionType>(inp.button), inp.pressed, false);

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-ad (code comments name anticroom, Absent and NaN GD instead of he or his; comments only, nothing else changes)"
+    "2026-11-24-ae (an import never selects its macro over one you have not saved yet, and its note says why)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
@@ -328,6 +328,16 @@ namespace gucci {
         std::string m_madeOnGd;
         std::string m_madeWithGb;
         void stampMadeHere();
+        // GucciBot (2026-11-24, 2.0.1): something was recorded into the macro
+        // in memory, or a pathfinder made it (both stampMadeHere), since it
+        // was last loaded or saved to its own file (m_savedFrom).
+        bool m_madeSinceSave = false;
+        // The macro in memory holds inputs no saved file has: a fresh
+        // recording not saved yet, or one carried on from a saved macro and
+        // not saved since. An import doesn't select over it (ui/shell.cpp).
+        bool hasUnsavedInputs() const {
+            return !m_actionAtom.empty() && (m_savedFrom.empty() || m_madeSinceSave);
+        }
         // The Macro card's note when the macro was made on another GD
         // version; "" when it wasn't, or nobody knows.
         std::string gdVersionWarning() const;
