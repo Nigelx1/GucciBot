@@ -6,6 +6,7 @@
 #include "tools/macro_convert.hpp"
 #include "tools/share_bundle.hpp"
 #include "core/platform.hpp"
+#include "core/gd_version.hpp"
 #include "core/setup_check.hpp"
 #include "hacks/keybinds.hpp"
 #include "hacks/legit.hpp"
@@ -3298,6 +3299,9 @@ namespace gucci::ui {
                         mod->setSavedValue("update_prereleases", pre);
                 }
             }
+            // GucciBot (2026-11-24, 2.0.1): which GD and Geode this file is
+            // for, for the move from GD 2.2081 to 2.2091 (core/gd_version.hpp).
+            kit::Hint(branded(gucci::buildLabel()).c_str());
             kit::EndCard();
 
             // Auto safe mode and the cheat dot (hacks/safemode.hpp), dihmaster500's ask.

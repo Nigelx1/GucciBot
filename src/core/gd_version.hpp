@@ -32,4 +32,17 @@ namespace gucci {
         return version;
     }
 
+#if !defined(GB_GEODE_MAJOR)
+#error "GB_GEODE_MAJOR is not defined: build GucciBot through its CMakeLists.txt"
+#endif
+
+    // GucciBot (2026-11-24, 2.0.1): which GD and Geode this file is built
+    // for, from the build itself, so the 2.2081 and the 2.2091 file each say
+    // their own: "GucciBot 2.0.1 for GD 2.2091 (Geode 6)". The Settings page
+    // shows it, and the setup check logs it at launch.
+    inline std::string buildLabel() {
+        return std::string("GucciBot ") + MOD_VERSION + " for GD " + GEODE_GD_VERSION_STRING + " (Geode " +
+               std::to_string(GB_GEODE_MAJOR) + ")";
+    }
+
 } // namespace gucci

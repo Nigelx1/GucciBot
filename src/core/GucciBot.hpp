@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-ag (frame advance holds a level only, never the editor)"
+    "2026-11-24-ah (Settings and the setup check say which GD and Geode this file is for)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

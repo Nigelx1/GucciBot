@@ -1,5 +1,6 @@
 #include "core/setup_check.hpp"
 #include "core/geode_compat.hpp" // gucci::pathToString
+#include "core/gd_version.hpp"
 
 #include "core/GucciBot.hpp"
 #include "core/bot_switch.hpp"
@@ -271,7 +272,10 @@ namespace gucci::setupcheck {
             };
             auto* self = Mod::get();
             std::string const ours = quoted(gucci::stdPath(self->getPackagePath()));
-            std::string const ourVersion = self->getVersion().toVString();
+            // With the GD it's for (2.0.1): a GD 2.2081 and a 2.2091 file can
+            // share a version number.
+            std::string const ourVersion =
+                fmt::format("{} for GD {}", self->getVersion().toVString(), GEODE_GD_VERSION_STRING);
             if (extras.size() == 1) {
                 auto const& extra = extras.front();
                 if (!extra.version)
@@ -470,7 +474,7 @@ namespace gucci::setupcheck {
         for (auto const& extra : extraCopies())
             copies += fmt::format("{}{} ({})", copies.empty() ? "" : ", ", gucci::pathToString(extra.path),
                                   extra.version ? extra.version->toVString() : std::string("can't be opened"));
-        log::info("[SETUP-CHECK] GucciBot runs from {}; other GucciBot files in the mods folder: {}",
+        log::info("[SETUP-CHECK] {} runs from {}; other GucciBot files in the mods folder: {}", gucci::buildLabel(),
                   gucci::pathToString(gucci::stdPath(Mod::get()->getPackagePath())), copies.empty() ? "none" : copies);
 
         g_dirty = true;

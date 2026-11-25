@@ -165,6 +165,10 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     MOD_VERSION="2.0.0"
+    # The Geode major this file is built for (5 or 6, from the SDK's VERSION
+    # file above): the Settings page's "for GD ... (Geode ...)" line
+    # (src/core/gd_version.hpp buildLabel).
+    GB_GEODE_MAJOR=${GB_GEODE_MAJOR}
     NOMINMAX
     _HAS_ITERATOR_DEBUGGING=0
     # ImGui's test-engine hooks, for Assistant Access's menu probe
