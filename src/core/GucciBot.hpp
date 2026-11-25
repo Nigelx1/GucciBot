@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-ah (Settings and the setup check say which GD and Geode this file is for)"
+    "2026-11-24-ai (GucciBot 2.0.1: the version number, and the docs say Geode 6.0.0 for the 2209 file and 2.1 for what comes next)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

@@ -4,6 +4,44 @@
 
 ---
 
+## 2.0.1
+
+A small update to 2.0: fixes, a few quick additions, and the GD 2.2091 file built for Geode 6.0.0, the first stable Geode 6. It's two files on one release, as 2.0 was.
+
+### Fixes
+
+- **No more crash after an Edit exit on iPhone, iPad and Mac.** Taking a level to the editor with Edit (the pause menu's or the end screen's) skips GD's quit, so GucciBot's level overlays (the macro path, the trainers' ghosts, Practice Range) kept pointers to parts of the level that were already gone, and quitting the next level could crash. On Windows it didn't crash, but the next level lost those overlays. Now the overlays hold on to what they draw and make it again in the next level, and Edit exits run GucciBot's whole quit cleanup, as Silicate's do. *Checked in a test game on Windows; not tested on an Apple device yet.*
+- **The editor no longer opens frozen.** Pressing Edit while Calculate was running, or while it walked back to where you were, could leave the editor stuck in its fade. Leaving a level now stops Calculate's walk back. Frame advance now holds only a level, never the editor, so the editor's Save and Exit works with it on. *Checked in a test game.*
+- **Calculate on Android and Mac no longer stalls** during a run: the menu, the Calculate box and the count keep going. *Not tested on a device yet.*
+- **Importing a macro never replaces one you haven't saved.** A first import selects the new macro, unless you're recording, the macro you have open isn't saved yet, or Calculate or the Pathfinder is running. Then it isn't selected, and the note says why. *Checked in a test game.*
+- **Leave the level when the render is done** no longer quits a level that's already leaving. *Checked in a test game.*
+- **Calculate** counts a sub-tick value that falls in a gap between two bands in the band below it. *Checked in a test game.*
+- **The sub-tick counter** in the Recording card counts clicks, not releases. *Checked in a test game.*
+- **The update check** tells you about a release only if it has a file for your GD. *Checked by the offline tests.*
+
+### New
+
+- **Center the menu** (Settings, under Layout) puts the menu back in the middle of the game's window. Pages layout; not on phones. *Checked in a test game.*
+- **BIG BRRRR: Start at the drop** (on by default) starts a theme's song at its drop. Your own song (a track in the BIG BRRRR folder, or a custom theme's own) starts at the **Start time** you set for it in the card, 0 until you set one. Switch it off to start every song from the beginning. *Checked in a test game, muted.*
+- **The AI engine keeps its best try.** When a run stops without beating the level, its furthest attempt is saved as **"AI - Level name furthest"**, and a finished run is saved in your theme's macro format, so Saved macros lists both. After a Stop, the result says how far it got. *Checked in a test game.*
+- **Which GD is this file for?** Settings' first card ends with a line like "GucciBot 2.0.1 for GD 2.2081 (Geode 5)". The setup check writes the same line to the log at launch, and its note about a second GucciBot file names the GD this one is for. *Checked in a test game on GD 2.2081.*
+- **Juice left something on the Credits page.**
+
+### Changed
+
+- **Macro path's "Only up to your best"** is off for a new install, and turns off once for everyone coming from 2.0. Turn it back on and it stays on. *Checked in a test game.*
+- **Calculate's Ring thickness** tops out at 5. *Checked in a test game.*
+
+### GD 2.2091 file
+
+- **Built for Geode 6.0.0.** It needs Geode 6.0.0 or a later Geode 6, and no longer loads on the Geode 6 betas. *Tested by Nigel on GD 2.2091 with Geode 6.0.0, on an earlier build of this file.*
+- **No level flip in an editor playtest.** GD 2.2091 does one of the checks GucciBot's editor guard hooks without calling the hooked function, so a mirror portal could still flip the level there. *Not tested in a game yet.*
+- **The Render page says why** when FFmpeg can't load, instead of graying out its buttons with no reason. *Checked in a test game.*
+- **Calculate's queue downloads a macro's level** as it does on GD 2.2081. *Not tested in a game yet.*
+- **Coming in 2.1:** the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro and High TPS precision on GD 2.2091, and Mac and Android files for GD 2.2091.
+
+---
+
 ## Coming from 1.8?
 
 1.8 was the stable release before this one, and 2.0 is a big jump from it. In short:
@@ -268,7 +306,7 @@ One download covers Windows, macOS, iOS and Android (32 and 64-bit). Windows is 
 - **A macro from the other GD version gets a gentler notice.** Loading, checking or merging one now says it should play the same, and to double-check frame-perfect slope parts. It's still only a notice. *Checked in test games on both versions (the load notice, the Macro card, Check macro); the merge note by the offline tests.*
 - **Safe mode covers 2.209's new systems.** When the bot or a cheat was on, deaths stay out of GD's death tracker and its upload, and playtime and practice attempts don't count. GD's own speed setting and its Ignore Damage both count as cheats. *Checked in a test game.* A platformer attempt with the bot or a cheat on saves no progress and sends no leaderboard time. A full restart with every cheat off saves again; a respawn at a checkpoint doesn't, and neither does a restart with a cheat still on. A checkpoint reached while the bot or a cheat was on is never saved. *Checked in a test game on The Tower: when the save is held and when it goes through. GD keeps no platformer save for RobTop's own levels, so a save to disk wasn't tried, and no test got as far as a leaderboard time to hold back.*
 - **Calculate warns when GD's Ignore Damage was on** while it counted (Ignore Damage only exists in editor levels). Deaths don't count then, so those windows aren't legit. The Calculate page and its box over the level say so, and Share my windows marks its picture "NOT LEGIT". The mark stays with the windows until a whole Calculate run counts every input again with it off. *Checked in a test game on GD 2.2091: set by a run, kept through a canceled run, cleared by a clean whole run; the page, the box and the picture seen.*
-- **Not in the preview yet:** the Pathfinder (and its AI engine), tick rates under 162 TPS, TPS changes inside a macro, High TPS precision, and macOS and Android on 2.2091. They're planned for 2.0.1. iOS on 2.2091 comes later, once Geode's iOS bindings for 2.2091 have what GucciBot needs. Geode 6 itself is still in beta. The look-aheads (Show Trajectory, Frame extrapolation, Prevent death's look-ahead, Best tick, the Survival Indicator, Possible positions and the sub-tick preview) run without the trigger model in the preview, as they do on a Mac: moving objects keep their current speed.
+- **Not in the preview yet:** the Pathfinder (and its AI engine), tick rates under 162 TPS, TPS changes inside a macro, High TPS precision, and macOS and Android on 2.2091. They're planned for 2.1. iOS on 2.2091 comes later, once Geode's iOS bindings for 2.2091 have what GucciBot needs. Geode 6 itself is still in beta. The look-aheads (Show Trajectory, Frame extrapolation, Prevent death's look-ahead, Best tick, the Survival Indicator, Possible positions and the sub-tick preview) run without the trigger model in the preview, as they do on a Mac: moving objects keep their current speed.
 - *Checked on those earlier builds, in a signed-out test copy of GD 2.2091, on main levels only. Not tested by players yet, apart from Nigel's keyboard checks above.*
 
 ### Credits

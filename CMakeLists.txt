@@ -12,7 +12,7 @@ else()
 endif()
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
-project(GucciBot VERSION 2.0.0 LANGUAGES CXX)
+project(GucciBot VERSION 2.0.1 LANGUAGES CXX)
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
 
@@ -164,7 +164,7 @@ if (WIN32)
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    MOD_VERSION="2.0.0"
+    MOD_VERSION="2.0.1"
     # The Geode major this file is built for (5 or 6, from the SDK's VERSION
     # file above): the Settings page's "for GD ... (Geode ...)" line
     # (src/core/gd_version.hpp buildLabel).
@@ -232,7 +232,7 @@ if(GB_GEODE6)
     file(READ "${CMAKE_CURRENT_SOURCE_DIR}/about.md" GB_ABOUT)
     string(REPLACE
         "- Geometry Dash 2.2081 on Windows, macOS, iOS or Android, Geode 5.10.1+ (macOS, iOS and Android are experimental: see Platforms)"
-        "- Geometry Dash ${GEODE_GD_VERSION} on Windows, with Geode ${GEODE_VERSION_FULL}. This file is a preview of GucciBot on GD ${GEODE_GD_VERSION}: everything except the Pathfinder. 240 TPS and any tick rate from 162 TPS up work; tick rates under 162 TPS, a TPS change inside a macro and High TPS precision don't yet. Those, and macOS and Android on GD ${GEODE_GD_VERSION}, come in 2.0.1. For another GD version or platform, use the GucciBot file made for it.\n- Keep only one GucciBot file in your mods folder."
+        "- Geometry Dash ${GEODE_GD_VERSION} on Windows, with Geode ${GEODE_VERSION_FULL}. This file is a preview of GucciBot on GD ${GEODE_GD_VERSION}: everything except the Pathfinder. 240 TPS and any tick rate from 162 TPS up work; tick rates under 162 TPS, a TPS change inside a macro and High TPS precision don't yet. Those, and macOS and Android on GD ${GEODE_GD_VERSION}, come in 2.1. For another GD version or platform, use the GucciBot file made for it.\n- Keep only one GucciBot file in your mods folder."
         GB_ABOUT "${GB_ABOUT}")
     string(REPLACE
         "- Silicate's full physics engine — exact GD 2.2081 offsets, proper TPS bypass,"
@@ -243,7 +243,7 @@ if(GB_GEODE6)
     # again below.)
     set(GB_ABOUT "\n${GB_ABOUT}")
     string(REGEX REPLACE "\n- Geometry Dash 2[.]2081[^\n]*"
-        "\n- Geometry Dash ${GEODE_GD_VERSION} on Windows, with Geode ${GEODE_VERSION_FULL}. This file is a preview of GucciBot on GD ${GEODE_GD_VERSION}: everything except the Pathfinder. 240 TPS and any tick rate from 162 TPS up work; tick rates under 162 TPS, a TPS change inside a macro and High TPS precision don't yet. Those, and macOS and Android on GD ${GEODE_GD_VERSION}, come in 2.0.1. For another GD version or platform, use the GucciBot file made for it.\n- Keep only one GucciBot file in your mods folder."
+        "\n- Geometry Dash ${GEODE_GD_VERSION} on Windows, with Geode ${GEODE_VERSION_FULL}. This file is a preview of GucciBot on GD ${GEODE_GD_VERSION}: everything except the Pathfinder. 240 TPS and any tick rate from 162 TPS up work; tick rates under 162 TPS, a TPS change inside a macro and High TPS precision don't yet. Those, and macOS and Android on GD ${GEODE_GD_VERSION}, come in 2.1. For another GD version or platform, use the GucciBot file made for it.\n- Keep only one GucciBot file in your mods folder."
         GB_ABOUT "${GB_ABOUT}")
     string(SUBSTRING "${GB_ABOUT}" 1 -1 GB_ABOUT)
     # Anything else that still names 2.2081: the version number is swapped and

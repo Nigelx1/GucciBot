@@ -4,7 +4,7 @@ name: GD 2.2091 build (Geode 6, Windows preview)
 # commit as the GD 2.2081 package (multi-platform.yml), which it never touches.
 # A .geode loads on only one Geode major, so each GD version gets its own file
 # (docs/PORT_2209_ASSESSMENT.md). Windows only for now: Mac and Android on
-# 2.2091 come in 2.0.1, iOS waits for Geode's bindings (CMakeLists.txt stops
+# 2.2091 come in 2.1, iOS waits for Geode's bindings (CMakeLists.txt stops
 # any other platform on Geode 6).
 #
 # Kept apart from multi-platform.yml on purpose:

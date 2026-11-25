@@ -2607,10 +2607,10 @@ namespace gucci::ui {
             // GucciBot (2026-11-17): Nigel's call for 2.0 (11-16): the GD 2.2091
             // file ships every feature but the Pathfinder, tick rates under 162
             // TPS, TPS changes inside a macro and High TPS Precision (240 and 162
-            // and up work, proven in game 11-17); those come in 2.0.1. The page
+            // and up work, proven in game 11-17); those come in 2.1. The page
             // says so and offers nothing to start.
             kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
-            kit::Note("The Pathfinder isn't available on GD 2.2091 yet. It's coming in GucciBot 2.0.1. "
+            kit::Note("The Pathfinder isn't available on GD 2.2091 yet. It's coming in GucciBot 2.1. "
                       "On GD 2.2081 it works as before.",
                       Tone::Warn);
             kit::EndCard();

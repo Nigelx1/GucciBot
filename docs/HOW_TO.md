@@ -25,11 +25,11 @@ This guide is for GucciBot 2.0. Things that are new since 2.0.0-beta.5 say **(ne
 
 ## 1. Install
 
-You need **Geometry Dash 2.2081** with **[Geode](https://geode-sdk.org/) 5.10.1 or a later 5.x**, or **Geometry Dash 2.2091** with **Geode 6.0.0-beta.1 or a later Geode 6** (Windows only for now).
+You need **Geometry Dash 2.2081** with **[Geode](https://geode-sdk.org/) 5.10.1 or a later 5.x**, or **Geometry Dash 2.2091** with **Geode 6.0.0 or a later Geode 6** (Windows only for now).
 The release has **two files**, one for each GD version **(new in 2.0)**. Take the one for your game, and keep only that one in your mods folder:
 
 - **GD 2.2081** (Geode 5): `nigelx1.guccibot2208.geode`, for Windows, Mac, iPhone, iPad and Android.
-- **GD 2.2091** (Geode 6.0.0-beta.1 or later): `nigelx1.guccibot2209.geode`, a preview for Windows. It has everything except the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro and High TPS precision. Those are coming in 2.0.1.
+- **GD 2.2091** (Geode 6.0.0 or later): `nigelx1.guccibot2209.geode`, a preview for Windows. It has everything except the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro and High TPS precision. Those are coming in 2.1.
 
 Not sure which you have? Open Geode's mod list: Geode itself is listed there with its version. Geode 5 means GD 2.2081, Geode 6 means GD 2.2091 ([more in the README](../README.md#which-gd-and-geode-do-i-have)). Each file is over 200 MB, because the renderer, the music and the JMF Trainer's video come with it.
 

@@ -15,7 +15,7 @@ The newest release is **2.0.0**. It comes as **two files on the same release**, 
 | Your game | Your Geode | Download | Runs on |
 |---|---|---|---|
 | **GD 2.2081** | **Geode 5.10.1** or a later 5.x | `nigelx1.guccibot2208.geode` | Windows, Mac (Apple silicon and Intel), iPhone, iPad and Android (32- and 64-bit) |
-| **GD 2.2091** | **Geode 6.0.0-beta.1** or a later Geode 6 | `nigelx1.guccibot2209.geode` (preview) | Windows only, for now |
+| **GD 2.2091** | **Geode 6.0.0** or a later Geode 6 | `nigelx1.guccibot2209.geode` (preview) | Windows only, for now |
 
 The number in each name is the GD version it's for: **2208** is GD 2.2081, **2209** is GD 2.2091. The 2208 file is about 227 MB and the 2209 file about 228 MB, since the renderer, the music and the JMF Trainer's video ride along.
 
@@ -32,10 +32,10 @@ Geode tells you both.
 
 - **Your Geode:** open Geode's mod list. Geode itself is in the list of installed mods, with its version under its name.
   - **Geode 5** (5.10.1 or later) means GD 2.2081: take the **2208** file (`nigelx1.guccibot2208.geode`).
-  - **Geode 6** (6.0.0-beta.1 or later) means GD 2.2091: take the **2209** file (`nigelx1.guccibot2209.geode`). Geode 6.0.0-beta.2 passes Geode's own version check for it, but we haven't run the preview on beta.2 yet.
-  - A Geode 6 alpha: the preview won't load on it. Update Geode to 6.0.0-beta.1 or later first.
+  - **Geode 6** (6.0.0 or later) means GD 2.2091: take the **2209** file (`nigelx1.guccibot2209.geode`).
+  - A Geode 6 beta or alpha: the preview won't load on it. Update Geode to 6.0.0 or later first.
 - **Your GD:** open the `geode/logs` folder in the game's folder (next to `geode/mods`) and open the newest log. Near the top, Geode writes a line like `Running Geode v5.10.1 in Geometry Dash v2.2081 on Windows`. The number after "Geometry Dash v" is your GD version.
-- **If that line says "forward compatibility mode"**, your game updated to 2.2091 but your Geode is still Geode 5. Neither GucciBot file loads like that. Install [Geode 6](https://github.com/geode-sdk/geode/releases) (6.0.0-beta.1 or newer; the Windows installer is on its release page) and take the 2209 file, or play on GD 2.2081 with Geode 5 and take the 2208 file.
+- **If that line says "forward compatibility mode"**, your game updated to 2.2091 but your Geode is still Geode 5. Neither GucciBot file loads like that. Install [Geode 6](https://github.com/geode-sdk/geode/releases) (6.0.0 or newer; the Windows installer is on its release page) and take the 2209 file, or play on GD 2.2081 with Geode 5 and take the 2208 file.
 
 ### Install
 
@@ -68,10 +68,10 @@ Windows is home, and gets the most testing. macOS, iOS and Android are newer: th
 
 The preview is the same GucciBot, built from the same code for GD 2.2091 and Geode 6. It's **Windows only** for now, and it has everything in 2.0 except:
 
-- **The Pathfinder.** Its page says it isn't on GD 2.2091 yet. It comes in **2.0.1**.
-- **Some tick rates.** 240 TPS and any rate from 162 TPS up work: in our tests on earlier builds of the preview, they recorded and replayed to exactly the same end. Tick rates under 162 TPS, TPS changes inside a macro, and High TPS precision come in **2.0.1**. A macro made under 162 TPS plays at 240 instead, with a notice, so it won't play back the same.
+- **The Pathfinder.** Its page says it isn't on GD 2.2091 yet. It comes in **2.1**.
+- **Some tick rates.** 240 TPS and any rate from 162 TPS up work: in our tests on earlier builds of the preview, they recorded and replayed to exactly the same end. Tick rates under 162 TPS, TPS changes inside a macro, and High TPS precision come in **2.1**. A macro made under 162 TPS plays at 240 instead, with a notice, so it won't play back the same.
 - **The trigger model behind the look-aheads.** Show Trajectory, Frame extrapolation, Prevent death's look-ahead, Best tick, the Survival Indicator, Possible positions and the sub-tick preview work as they do on a Mac: moving objects keep their current speed.
-- **Mac, Android, iPhone and iPad on 2.2091.** Mac and Android come in **2.0.1**. iPhone and iPad come later, once Geode's iOS bindings for 2.2091 have what GucciBot needs. Until then, those platforms have GucciBot on GD 2.2081 only.
+- **Mac, Android, iPhone and iPad on 2.2091.** Mac and Android come in **2.1**. iPhone and iPad come later, once Geode's iOS bindings for 2.2091 have what GucciBot needs. Until then, those platforms have GucciBot on GD 2.2081 only.
 
 Macros use the same file format on both versions, and in our tests on earlier builds of the preview they carried over: 13 macros, across every game mode, ended the same way on GD 2.2081 and on 2.2091. On slopes the two can differ by far less than a pixel, so a frame-perfect slope part is worth one check. A macro made on the other GD version says so when you load it.
 
@@ -168,10 +168,10 @@ What's tested and what isn't, plainly:
 
 - **Windows on GD 2.2081** is home and gets the most testing.
 - **Mac, iPhone and iPad** have had little testing, and **Android** has run on a phone. The Mac build runs on Intel Macs too, but nobody has run it on one yet. Rendering and Video Mode on a Mac, and the Pathfinder off Windows, haven't been tried on a device.
-- **The GD 2.2091 preview** is Windows only, without the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro or High TPS precision until 2.0.1 ([the details](#gd-22091-the-windows-preview)).
+- **The GD 2.2091 preview** is Windows only, without the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro or High TPS precision until 2.1 ([the details](#gd-22091-the-windows-preview)).
 - **The Pathfinder's AI engine** is early and weak: a small network that comes with the mod and beats very few levels. The search engine, the default, is the strong one.
 
-Next up is **2.0.1**: the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro and High TPS precision on the 2.2091 preview, and Mac and Android files for GD 2.2091. Anything on `master` still waiting on its in-game test says so in its commit message.
+Next up is **2.1**: the Pathfinder, tick rates under 162 TPS, TPS changes inside a macro and High TPS precision on the 2.2091 preview, and Mac and Android files for GD 2.2091. Anything on `master` still waiting on its in-game test says so in its commit message.
 
 ## Help and contact
 
