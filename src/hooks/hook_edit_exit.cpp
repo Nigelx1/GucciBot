@@ -8,8 +8,9 @@
 // GJGameLoadingLayer::transitionToLoadingLayer instead. The buttons show on
 // your own levels, and Eclipse's Level Edit puts the pause menu's on every
 // level. So none of what GucciBot does as a level quits ran: the quit's stop
-// for a render, Calculate and the pathfinders; emptying the practice lists and
-// putting the replay's input position back; the Autoclicker's reset; the
+// for a render, Calculate (and its walk back, 2.0.1) and the pathfinders;
+// emptying the practice lists and putting the replay's input position back;
+// the Autoclicker's reset; the
 // calibration's cancel; stopping the JMF or Trainer music, under which GD's
 // own sound stayed muted; and the overlays' nodes, which the level freed (the
 // iPhone crash of 2026-11-23).
@@ -65,7 +66,8 @@ namespace {
         // playtest starts. Last here, where Silicate has it first: stopping a
         // Calculate run or Absense's pathfinder (beforeQuit) puts back the
         // frame advance it found when it started (FrameWindowAnalyzer::finish,
-        // AbsensePathfinder::stop), which turned it on again.
+        // AbsensePathfinder::stop), which turned it on again, and stopping
+        // Calculate's walk back (stopReturn) leaves it on.
         GucciEngine::get()->updater.setPaused(false);
     }
 

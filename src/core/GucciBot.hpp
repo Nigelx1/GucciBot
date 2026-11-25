@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-ae (an import never selects its macro over one you have not saved yet, and its note says why)"
+    "2026-11-24-af (leaving a level stops Calculate's walk back, so the editor can't open frozen)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

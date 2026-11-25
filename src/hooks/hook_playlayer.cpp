@@ -197,6 +197,17 @@ namespace gucci::levelexit {
             Pathfinder::get()->cancel();
         else if (gb->fwAnalyzing)
             gb->cancelAnalysis();
+        // GucciBot (2026-11-24, 2.0.1): Calculate's walk back to where you
+        // were stops here too, while the level is still current, as the
+        // Calculate page's Stop does it (stopReturn): left in playback so the
+        // macro isn't cut, with the prediction, the mute and the trail put
+        // back. Left going, it ended on the next drawn frame with no level
+        // (stepTrip), which put recording back on (an editor playtest then
+        // started the recording over) and frame advance with it. A Calculate
+        // run cancelled just above starts the walk back it had queued: that
+        // one stops here as well.
+        if (auto& fw = ::Bot::get()->frameWindow(); fw.returning())
+            fw.stopReturn();
         if (gucci::SLRenderer::get()->isRecording())
             gucci::SLRenderer::get()->flushAndStop("the level was closed");
         // GD keeps this layer as PlayLayer::get() through the quit's fade: a
