@@ -281,7 +281,7 @@ Render records gameplay straight to a video file. No screen recorder needed. It 
    Not in a level yet? **Render the next level I open** waits for one.
 4. Press **Stop** when you want it to end. With **Seconds after the end** set, it also stops by itself a few seconds after the level ends.
 
-**The Showcase preset:** under **Presets**, **Showcase: 8K60 lossless** sets everything up in one press: 7680x4320 at 60 FPS, lossless x264 in yuv444p (full color detail), FLAC audio with the music at 100% and the game's sounds off (the level's own trigger sounds stay), in an .mp4 file. It's slow, and the files are big: about 3.5 GB a minute for a simple level, 11 for one as busy as Phobos.
+**The Showcase preset:** under **Presets**, **Showcase: 8K60 lossless** sets everything up in one press: 7680x4320 at 60 FPS, lossless RGB x264 (libx264rgb, rgb24), so every pixel is exactly what the game drew, FLAC audio with the music at 100% and the game's sounds off (the level's own trigger sounds stay), in an .mp4 file. It's slow, and the files are big. Some players, Windows' own among them, may not play it; VLC does.
 
 **The Basic preset:** **Basic: 1080p60** sets up an everyday render: 1920x1080 at 60 FPS, x264 with the bitrate at 0 (x264 picks the quality), AAC audio, no fades, in an .mp4 file.
 

@@ -2867,12 +2867,15 @@ namespace gucci::ui {
             return "";
         }
 
-        // One press for a showcase render: Nigel's TCBot setup (2026-11-15).
-        // 8K at 60, libx264 lossless (-qp 0) in yuv444p (full-size color,
-        // BT.709 like every render here), -preset ultrafast, FLAC in MKV, the
-        // music at full and the level's own sounds (its SFX triggers) but not
-        // the game's, nothing after the end. -vf isn't in it: the shaders
-        // already convert to BT.709.
+        // One press for a showcase render (Nigel's TCBot setup, 2026-11-15,
+        // made bit-exact 2026-11-25). 8K at 60, lossless RGB: libx264rgb at
+        // -qp 0 takes rgb24, the game's own pixels, so nothing converts them
+        // to YUV and every pixel is what the game drew ("lossless gotta
+        // lossless", Nigel). It was yuv444p at qp 0, lossless only after the
+        // RGB-to-YUV step, which rounds. The stream is tagged RGB, full range
+        // (renderer.cpp). -preset ultrafast, FLAC, the music at full and the
+        // level's own sounds (its SFX triggers) but not the game's, nothing
+        // after the end.
         //
         // -threads is this PC's thread count, as he sets it in TCBot: the
         // setup he knows works at 8K. Left out, x264 would pick 1.5 times as
@@ -2884,8 +2887,8 @@ namespace gucci::ui {
             mod->setSavedValue<int64_t>("render_width", 7680);
             mod->setSavedValue<int64_t>("render_height", 4320);
             mod->setSavedValue<int64_t>("render_fps", 60);
-            mod->setSavedValue<std::string>("render_codec", "libx264");
-            mod->setSavedValue<std::string>("render_pix_fmt", "yuv444p");
+            mod->setSavedValue<std::string>("render_codec", "libx264rgb");
+            mod->setSavedValue<std::string>("render_pix_fmt", "rgb24");
             mod->setSavedValue<std::string>("render_video_args",
                                             fmt::format("-preset ultrafast -qp 0 -threads {}", threads));
             // .mp4 since 2026-11-20 (Nigel); it was .mkv. FLAC in MP4 needs the
@@ -2930,9 +2933,9 @@ namespace gucci::ui {
             kit::BeginCard("Presets", "Every render setting at once, saved under a name.");
             if (kit::Button("Showcase: 8K60 lossless", Tone::Accent)) {
                 applyShowcasePreset();
-                s_note = "Showcase set: 7680x4320 at 60, lossless x264 in yuv444p (ultrafast), FLAC in MP4, the music "
-                         "and the level's own sounds, nothing after the end. It's slow, and the files are big: "
-                         "about 3.5 GB a minute for a simple level, 11 for one as busy as Phobos.";
+                s_note = "Showcase set: 7680x4320 at 60, lossless RGB x264 (libx264rgb, rgb24, ultrafast): the game's "
+                         "own pixels, bit for bit. FLAC in MP4, the music and the level's own sounds, nothing after "
+                         "the end. It's slow, and the files are big.";
             }
             if (kit::Button("Basic: 1080p60")) {
                 applyBasicPreset();
@@ -3121,7 +3124,8 @@ namespace gucci::ui {
             {
                 // Read when a render starts (renderer.cpp): a format the codec
                 // doesn't take falls back to the first one it does.
-                // yuv444p keeps full-size color (Showcase uses it, with x264 at qp 0).
+                // yuv444p keeps full-size color; rgb24 keeps the game's own
+                // pixels (Showcase uses it, with libx264rgb at qp 0).
                 static const char* const kPixFmts[] = {"Auto", "yuv420p", "yuv444p", "nv12", "rgb0", "rgb24"};
                 static const char* const kPixKeys[] = {"auto", "yuv420p", "yuv444p", "nv12", "rgb0", "rgb24"};
                 constexpr int kPixCount = (int)(sizeof(kPixKeys) / sizeof(kPixKeys[0]));
