@@ -59,15 +59,16 @@ namespace {
         HitboxOverlay::get()->destroy();
         HitborderOverlay::get()->destroy();
         CalibrationService::get().cancel();
-        // Frame advance off, as Silicate's goEdit does. Frame advance holds
-        // the whole cocos scheduler while a level or the editor is open
-        // (GucciUpdater::runUpdates), so the editor would open with nothing
-        // in it moving; GucciBot's playtest hook only lets go of it once a
-        // playtest starts. Last here, where Silicate has it first: stopping a
-        // Calculate run or Absense's pathfinder (beforeQuit) puts back the
-        // frame advance it found when it started (FrameWindowAnalyzer::finish,
-        // AbsensePathfinder::stop), which turned it on again, and stopping
-        // Calculate's walk back (stopReturn) leaves it on.
+        // Frame advance off, as Silicate's goEdit does. Until 2.0.1 it held
+        // the whole cocos scheduler in the editor too, so the editor opened
+        // with nothing in it moving; it holds a level only now
+        // (GucciUpdater::runUpdates), and this keeps it from holding the
+        // level the editor's Save and Play opens. Last here, where Silicate
+        // has it first: stopping a Calculate run or Absense's pathfinder
+        // (beforeQuit) puts back the frame advance it found when it started
+        // (FrameWindowAnalyzer::finish, AbsensePathfinder::stop), which turned
+        // it on again, and stopping Calculate's walk back (stopReturn) leaves
+        // it on.
         GucciEngine::get()->updater.setPaused(false);
     }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-24-af (leaving a level stops Calculate's walk back, so the editor can't open frozen)"
+    "2026-11-24-ag (frame advance holds a level only, never the editor)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

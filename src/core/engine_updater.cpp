@@ -275,12 +275,13 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
         }
     }
 
-    if (m_paused && !rendering) {
+    // Frame advance: one tick at a time, in a level only (runUpdates holds
+    // the rest); in the editor it does nothing (2.0.1).
+    if (auto* pl = PlayLayer::get(); m_paused && !rendering && pl) {
         steps = 1;
         m_tpsOverflow = 0;
         m_shouldRender = true;
-        if (auto* pl = PlayLayer::get())
-            pl->m_extraDelta = 0.0f;
+        pl->m_extraDelta = 0.0f;
     }
 
     totalStepCount = steps;
@@ -488,8 +489,15 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
     // never got here, it comes through the m_isPaused branch above).
     // m_quittingLayer is set by the onQuit hook and cleared by the next
     // level's init.
-    if (m_paused && !SLRenderer::get()->isRecording() &&
-        !(isPlayLayer && pl == SLRenderer::get()->m_quittingLayer)) {
+    // GucciBot (2026-11-24, 2.0.1; Nigel: "ur call"): nor the editor. GD runs
+    // the editor through this same update, so frame advance held the whole
+    // scheduler there: an editor opened while it was on (a level's Edit, or
+    // from the menus after a level left it on) had nothing in it moving, its
+    // fade-in included. It holds a level only, and stays on for the next one.
+    // (Its key and buttons work only in a level, and an editor playtest turns
+    // it off as it starts, so nothing in the editor used it.)
+    if (m_paused && isPlayLayer && !SLRenderer::get()->isRecording() &&
+        pl != SLRenderer::get()->m_quittingLayer) {
         m_tpsOverflow = 0.0;
         m_respawnTimer = 0;
         if (consumeStep())
