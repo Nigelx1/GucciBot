@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-25-a (the Showcase render preset is lossless RGB: libx264rgb and rgb24 at qp 0, so every pixel is what the game drew)"
+    "2026-11-25-b (8K lossless RGB renders no longer crash on the first frame: the readback buffer keeps a page of spare room for x264)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

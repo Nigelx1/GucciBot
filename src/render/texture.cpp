@@ -46,11 +46,19 @@ namespace gucci {
             pass.initialize();
         }
 
+        // A page of spare room after the frame. The RGB formats (rgb24, rgb0)
+        // hand the encoder this mapped buffer as the frame itself, and x264
+        // reads a few bytes past the last pixel of packed RGB. At 8K rgb24 the
+        // frame is exactly 24,300 pages, so the buffer ended on a page and
+        // that read crashed the game on the first frame (Nigel, 2026-11-25:
+        // avcodec_send_frame, an access violation at the next page). The YUV
+        // formats copy into FFmpeg's own padded frame and never read here.
+        constexpr size_t kReadSlack = 4096;
         glGenBuffers(RING_SIZE, m_pbo);
         for (int i = 0; i < RING_SIZE; i++) {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, m_pbo[i]);
-            glBufferData(
-                GL_PIXEL_PACK_BUFFER, m_colorspace->getBufferSize(), nullptr, GL_STREAM_READ);
+            glBufferData(GL_PIXEL_PACK_BUFFER, m_colorspace->getBufferSize() + kReadSlack, nullptr,
+                         GL_STREAM_READ);
         }
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         m_issued = 0;
